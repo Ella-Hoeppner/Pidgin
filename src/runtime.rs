@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ordered_float::OrderedFloat;
 
 const U16_CAPCITY: usize = u16::MAX as usize + 1;
@@ -126,6 +128,7 @@ impl Value {
 }
 
 pub enum Instruction {
+  Clear(u16),
   Const(Value, u16),
   Add(u16, u16, u16),
   Multiply(u16, u16, u16),
@@ -160,6 +163,9 @@ pub fn evaluate(instructions: Vec<Instruction>) -> Result<()> {
   let mut state = EvaluationState::new();
   for instruction in instructions {
     match instruction {
+      Instruction::Clear(register) => {
+        state.registers[register as usize] = std::ptr::null()
+      }
       Instruction::Const(value, register) => {
         state.memory.push(value);
         let x = &state.memory[state.memory.len() - 1] as *const Value;
