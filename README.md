@@ -1,0 +1,1 @@
+Early WIP programming language. Intended to be a Clojure-like Lisp with a more powerful metaprogramming system, compiling to a register-based VM. Following up on [Quoot](https://github.com/Ella-Hoeppner/Quoot).
