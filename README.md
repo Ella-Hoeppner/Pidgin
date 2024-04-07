@@ -3,9 +3,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 
 VM stuff:
-* bools
-* symbols (secretly just u32s!! the compiler will keep track of which symbols match to which u32s)
-* environment
 * lists (secretly vectors, but I'm gunna call them lists to make Lisp people mad >:D)
   * need to decide which persistent vector lib to use
     * maybe make my own?? The structure of RRB vectors feels overly restrictive, wanna try out some ideas of my own here
@@ -21,7 +18,7 @@ VM stuff:
         * Or it could assign them 1-by-1 to the smallest unused registers. Seems like that would involve more computation tho, and might be worse for cache locality (??)
 
 Language stuff:
-* Finish GSE (in it's repo)
+* Finish GSE (in its repo)
 * Specify a default parser
 * Start on a compiler
   * start with just arithmetic stuff
