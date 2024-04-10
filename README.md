@@ -1,19 +1,11 @@
 Early WIP programming language. Intended to be a Clojure-like Lisp with a more powerful metaprogramming system, compiling to a register-based VM. Intended to be radically extensible, easily integrable with the Rust ecosystem, and ideal for creating DSLs (both DSLs hosted on it's own runtime, and DSLs that compile to entirely separate languages/runtimes). Following up on [Quoot](https://github.com/Ella-Hoeppner/Quoot).
 
 # to-do
-
 VM stuff:
-* `Apply` instruction
-  * takes 3 registers
-    * target
-    * function
-    * list of arguments
-  * functions will all start with n `Instruction::Argument` instructions, that provide symbol indexes to which the arguments passed to the function should will be bound. `Apply` will bind those arguments, then proceed through the rest of the instructions, until a `Return` instruction is reached, at which point it will copy the register referenced by the `Return` instruction into the `target` register.
-  * oh, I guess we technically need lists before we can do this, to have something to pack the arguments into
-    * can just make them naive CoW vectors for now
 * lists (secretly vectors, but I'm gunna call them lists to make Lisp people mad >:D)
   * need to decide which persistent vector lib to use
     * maybe make my own?? The structure of RRB vectors feels overly restrictive, wanna try out some ideas of my own here
+* multi-argument functions
 * strings
   * maybe implement as `Rc<&str>` rather than `String`?
 * hashmaps

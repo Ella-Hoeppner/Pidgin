@@ -12,6 +12,7 @@ type ConstIndex = u16;
 pub enum Error {
   NotYetImplemented,
   CantCastToNum,
+  CantApply,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -138,9 +139,10 @@ impl<I: SmolIndex, T: Default + Clone + Debug> SmolVec<I, T> {
     )))
   }
 }
-impl<I: SmolIndex, T: Default + Clone + Debug> Into<Vec<T>> for SmolVec<I, T> {
-  fn into(self) -> Vec<T> {
-    self.0 .1.to_vec()
+impl<I: SmolIndex, T: Default + Clone + Debug> From<SmolVec<I, T>> for Vec<T> {
+  fn from(v: SmolVec<I, T>) -> Self {
+    let (len, values) = *v.0;
+    values.into_iter().take(len.as_usize()).collect()
   }
 }
 impl<I: SmolIndex, T: Default + Clone + Debug> From<Vec<T>> for SmolVec<I, T> {
@@ -225,18 +227,13 @@ pub enum Instruction {
   Multiply(RegisterIndex, RegisterIndex, RegisterIndex),
   Lookup(RegisterIndex, SymbolIndex),
   Bind(SymbolIndex, RegisterIndex),
+  Apply(RegisterIndex, RegisterIndex, RegisterIndex),
   DebugPrint(u8),
 }
 impl Default for Instruction {
   fn default() -> Self {
     Instruction::NoOp
   }
-}
-
-struct EvaluationState {
-  stack: [Value; U16_CAPCITY],
-  stack_consumption: u16,
-  environment: HashMap<SymbolIndex, Value>,
 }
 
 pub struct Program {
@@ -252,11 +249,24 @@ impl Program {
   }
 }
 
+struct StackFrame {
+  stack_start: u16,
+  result_register: RegisterIndex,
+}
+
+struct EvaluationState {
+  stack: [Value; U16_CAPCITY],
+  stack_frames: Vec<StackFrame>,
+  stack_consumption: u16,
+  environment: HashMap<SymbolIndex, Value>,
+}
+
 impl EvaluationState {
   fn new() -> Self {
     const NIL: Value = Value::Nil;
     Self {
       stack: [NIL; U16_CAPCITY],
+      stack_frames: vec![],
       stack_consumption: 0,
       environment: HashMap::new(),
     }
@@ -286,22 +296,40 @@ impl EvaluationState {
       .reduce(|a, b| a + "\n" + &b)
       .unwrap_or("".to_string())
   }
+  fn stack_index(&self, register: RegisterIndex) -> u16 {
+    *self
+      .stack_frames
+      .last()
+      .map(|stack_frame| &stack_frame.stack_start)
+      .unwrap_or(&0)
+      + register as u16
+  }
   fn set_register(&mut self, register: RegisterIndex, value: Value) {
-    self.stack[register as usize] = value;
-    self.stack_consumption = self.stack_consumption.max(register as u16 + 1);
+    let stack_index = self.stack_index(register);
+    self.stack[stack_index as usize] = value;
+    self.stack_consumption = self.stack_consumption.max(stack_index + 1);
   }
   fn get_register(&self, register: RegisterIndex) -> &Value {
     //debug
     if register as usize >= self.stack_consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
-    &self.stack[register as usize]
+    &self.stack[self.stack_index(register) as usize]
+  }
+  fn get_register_mut(&mut self, register: RegisterIndex) -> &mut Value {
+    //debug
+    if register as usize >= self.stack_consumption as usize {
+      panic!("trying to access register that hasn't been set yet")
+    }
+    &mut self.stack[self.stack_index(register) as usize]
   }
 }
 
 pub fn evaluate(program: Program) -> Result<()> {
   let mut state = EvaluationState::new();
-  for instruction in program.instructions {
+  let mut instruction_stack = program.instructions.clone();
+  instruction_stack.reverse();
+  while let Some(instruction) = instruction_stack.pop() {
     use Instruction::*;
     match instruction {
       NoOp => {
@@ -311,9 +339,6 @@ pub fn evaluate(program: Program) -> Result<()> {
       }
       Argument(_) => {
         panic!("Instruction::Argument called, this should never happen")
-      }
-      Return(_) => {
-        panic!("Instruction::Return called, this should never happen")
       }
       Clear(register_index) => state.set_register(register_index, Value::Nil),
       Const(register_index, const_index) => {
@@ -350,6 +375,39 @@ pub fn evaluate(program: Program) -> Result<()> {
       }
       Lookup(register, symbol_index) => {
         state.set_register(register, state.environment[&symbol_index].clone());
+      }
+      Apply(result_register, fn_register, args_register) => {
+        let f = state.get_register(fn_register).clone();
+        let arg = state.get_register(args_register).clone();
+        state.stack_frames.push(StackFrame {
+          stack_start: state.stack_consumption,
+          result_register,
+        });
+        match f {
+          Value::Fn(function) => {
+            let instructions: Vec<Instruction> = function.instructions.into();
+            let mut x = instructions.into_iter().peekable();
+            while let Some(Argument(symbol_index)) = x.peek() {
+              state.environment.insert(*symbol_index, arg.clone());
+              x.next();
+            }
+            for instruction in x.rev() {
+              instruction_stack.push(instruction);
+            }
+          }
+          _ => {
+            return Err(Error::CantApply);
+          }
+        }
+      }
+      Return(return_value_register) => {
+        let return_value = state.get_register(return_value_register).clone();
+        let stack_frame = state.stack_frames.pop().unwrap();
+        for i in stack_frame.stack_start..state.stack_consumption {
+          state.stack[i as usize] = Value::Nil;
+        }
+        state.stack_consumption = stack_frame.stack_start;
+        state.set_register(stack_frame.result_register, return_value);
       }
       DebugPrint(id) => {
         println!("DEBUG {}", id);
