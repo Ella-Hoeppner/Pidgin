@@ -3,12 +3,10 @@ use std::{collections::HashMap, fmt::Debug, ops::Index, rc::Rc};
 use ordered_float::OrderedFloat;
 
 const U16_CAPCITY: usize = u16::MAX as usize + 1;
-const DEFAULT_MEMORY_SIZE: usize = 1000;
 
 type RegisterIndex = u8;
 type SymbolIndex = u16;
 type ConstIndex = u16;
-type ArgIndex = u8;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Error {
@@ -236,73 +234,9 @@ impl Default for Instruction {
 }
 
 struct EvaluationState {
-  memory: Vec<Value>,
-  registers: [*const Value; U16_CAPCITY],
-  environment: HashMap<SymbolIndex, *const Value>,
-}
-
-impl EvaluationState {
-  fn new() -> Self {
-    const NIL: Value = Value::Nil;
-    Self {
-      memory: Vec::with_capacity(DEFAULT_MEMORY_SIZE),
-      registers: [std::ptr::null(); U16_CAPCITY],
-      environment: HashMap::new(),
-    }
-  }
-  fn display_memory(&self) -> String {
-    self
-      .memory
-      .iter()
-      .enumerate()
-      .map(|(i, value)| format!("{}: {}", i, value.description()))
-      .reduce(|a, b| a + "\n" + &b)
-      .unwrap_or("".to_string())
-  }
-  fn display_environment(&self) -> String {
-    let mut bindings: Vec<_> = self.environment.iter().collect();
-    bindings.sort_by_key(|(symbol_index, _value_pointer)| **symbol_index);
-    bindings
-      .into_iter()
-      .map(|(symbol_index, value_pointer)| {
-        let value = unsafe { &**value_pointer };
-        format!(
-          "symbol_index: {}, value: {}",
-          symbol_index,
-          value.description()
-        )
-      })
-      .reduce(|a, b| a + "\n" + &b)
-      .unwrap_or("".to_string())
-  }
-  fn display_registers(&self) -> String {
-    let memory_pointer = self.memory.as_ptr();
-    (0..U16_CAPCITY)
-      .into_iter()
-      .filter_map(|i| {
-        let value_pointer = self.registers[i];
-        if !value_pointer.is_null() {
-          let value = unsafe { &*value_pointer };
-          Some(format!(
-            "{}: ({}) {}",
-            i,
-            unsafe { value_pointer.offset_from(memory_pointer) },
-            value.description()
-          ))
-        } else {
-          None
-        }
-      })
-      .reduce(|a, b| a + "\n" + &b)
-      .unwrap_or("".to_string())
-  }
-  fn store_value(&mut self, value: Value) -> *const Value {
-    if self.memory.len() == self.memory.capacity() {
-      panic!("out of memory!!");
-    }
-    self.memory.push(value);
-    self.memory.last().unwrap() as *const Value
-  }
+  stack: [Value; U16_CAPCITY],
+  stack_consumption: u16,
+  environment: HashMap<SymbolIndex, Value>,
 }
 
 pub struct Program {
@@ -315,6 +249,53 @@ impl Program {
       instructions,
       constants,
     }
+  }
+}
+
+impl EvaluationState {
+  fn new() -> Self {
+    const NIL: Value = Value::Nil;
+    Self {
+      stack: [NIL; U16_CAPCITY],
+      stack_consumption: 0,
+      environment: HashMap::new(),
+    }
+  }
+  fn display_stack(&self) -> String {
+    self
+      .stack
+      .iter()
+      .take(self.stack_consumption as usize)
+      .enumerate()
+      .map(|(i, value)| format!("{}: {}", i, value.description()))
+      .reduce(|a, b| a + "\n" + &b)
+      .unwrap_or("".to_string())
+  }
+  fn display_environment(&self) -> String {
+    let mut bindings: Vec<_> = self.environment.iter().collect();
+    bindings.sort_by_key(|(symbol_index, _value_pointer)| **symbol_index);
+    bindings
+      .into_iter()
+      .map(|(symbol_index, value)| {
+        format!(
+          "symbol_index: {}, value: {}",
+          symbol_index,
+          value.description()
+        )
+      })
+      .reduce(|a, b| a + "\n" + &b)
+      .unwrap_or("".to_string())
+  }
+  fn set_register(&mut self, register: RegisterIndex, value: Value) {
+    self.stack[register as usize] = value;
+    self.stack_consumption = self.stack_consumption.max(register as u16 + 1);
+  }
+  fn get_register(&self, register: RegisterIndex) -> &Value {
+    //debug
+    if register as usize >= self.stack_consumption as usize {
+      panic!("trying to access register that hasn't been set yet")
+    }
+    &self.stack[register as usize]
   }
 }
 
@@ -334,55 +315,50 @@ pub fn evaluate(program: Program) -> Result<()> {
       Return(_) => {
         panic!("Instruction::Return called, this should never happen")
       }
-      Clear(register_index) => {
-        state.registers[register_index as usize] = std::ptr::null()
-      }
-      Const(register_index, index) => {
-        state.registers[register_index as usize] =
-          state.store_value(program.constants[index as usize].clone());
+      Clear(register_index) => state.set_register(register_index, Value::Nil),
+      Const(register_index, const_index) => {
+        state.set_register(
+          register_index,
+          program.constants[const_index as usize].clone(),
+        );
       }
       Add(
         sum_register_index,
         input_register_index_1,
         input_register_index_2,
       ) => {
-        let addend_1 =
-          unsafe { &*state.registers[input_register_index_1 as usize] };
-        let addend_2 =
-          unsafe { &*state.registers[input_register_index_2 as usize] };
+        let addend_1 = state.get_register(input_register_index_1);
+        let addend_2 = state.get_register(input_register_index_2);
         let sum = Num::add(addend_1.as_num()?, &addend_2.as_num()?);
-        state.registers[sum_register_index as usize] =
-          state.store_value(Value::Num(sum));
+        state.set_register(sum_register_index, Value::Num(sum));
       }
       Multiply(
         product_register_index,
         input_register_index_1,
         input_register_index_2,
-      ) => unsafe {
-        let multiplicand_1 = &*state.registers[input_register_index_1 as usize];
-        let multiplicand_2 = &*state.registers[input_register_index_2 as usize];
+      ) => {
+        let multiplicand_1 = state.get_register(input_register_index_1);
+        let multiplicand_2 = state.get_register(input_register_index_2);
         let product =
           Num::multiply(multiplicand_1.as_num()?, &multiplicand_2.as_num()?);
-        state.registers[product_register_index as usize] =
-          state.store_value(Value::Num(product));
-      },
+        state.set_register(product_register_index, Value::Num(product));
+      }
       Bind(symbol_index, register) => {
         state
           .environment
-          .insert(symbol_index, state.registers[register as usize].clone());
+          .insert(symbol_index, state.get_register(register).clone());
       }
       Lookup(register, symbol_index) => {
-        state.registers[register as usize] = state.environment[&symbol_index];
+        state.set_register(register, state.environment[&symbol_index].clone());
       }
       DebugPrint(id) => {
         println!("DEBUG {}", id);
         println!("--------------------");
         println!(
-          "memory ({}):\n{}\n",
-          state.memory.len(),
-          state.display_memory()
+          "stack ({}):\n{}\n",
+          state.stack_consumption,
+          state.display_stack()
         );
-        println!("registers:\n{}\n", state.display_registers());
         println!("environment:\n{}", state.display_environment());
         println!("--------------------\n");
       }
