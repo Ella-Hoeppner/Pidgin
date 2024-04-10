@@ -3,19 +3,21 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 
 VM stuff:
+* `Apply` instruction
+  * takes 3 registers
+    * target
+    * function
+    * list of arguments
+  * functions will all start with n `Instruction::Argument` instructions, that provide symbol indexes to which the arguments passed to the function should will be bound. `Apply` will bind those arguments, then proceed through the rest of the instructions, until a `Return` instruction is reached, at which point it will copy the register referenced by the `Return` instruction into the `target` register.
+  * oh, I guess we technically need lists before we can do this, to have something to pack the arguments into
+    * can just make them naive CoW vectors for now
 * lists (secretly vectors, but I'm gunna call them lists to make Lisp people mad >:D)
   * need to decide which persistent vector lib to use
     * maybe make my own?? The structure of RRB vectors feels overly restrictive, wanna try out some ideas of my own here
 * strings
   * maybe implement as `Rc<&str>` rather than `String`?
-* functions
-  * I guess these can just be a vector of instructions?
-    * but I guess in that case they'll need to decide which registers to use on the fly, that couldn't be fixed by the compiler...
-      * I guess each function could operate on virtual registers numbered 0..n, and the compiler could just assign them to real registers as needed
-        * I suppose the compiler could always keep track of the max used register, and assign the virtual registers 0..n to real registers (m+1)..(m+n+1) where n is the max used register
-          * tail recursion seems easy enough, but I guess with mutually recursive functions this approach would eat up a lot of registers...
-            * I guess maybe just provide some stuff to make trampolining easily? Would be nice if there were a way to do this automatically without having to bother the user...
-        * Or it could assign them 1-by-1 to the smallest unused registers. Seems like that would involve more computation tho, and might be worse for cache locality (??)
+* hashmaps
+  * should test the DiffVec paradigm for hashmaps too
 
 Language stuff:
 * Finish GSE (in its repo)
@@ -26,6 +28,7 @@ Language stuff:
     * can just start with the basic operations for now
       * push, pop, count, concat
   * functions
+    * wanna use CPS and ANF
     * not entirely sure how stack tracing works in register-based VMs
       * is it even strictly necessary? Definitely want to be able to do it for debugging purposes, but it feels like if the compiler keeps good track of the active registers then it feels like you could just do a function application without needing to do the equivalent of pushing a stack frame
   * let bindings
