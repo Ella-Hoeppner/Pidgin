@@ -1,7 +1,5 @@
-use std::{
-  collections::HashMap, fmt::Debug, hash::Hash, ops::Index, ptr::NonNull,
-  rc::Rc,
-};
+use minivec::MiniVec;
+use std::{collections::HashMap, fmt::Debug, hash::Hash, rc::Rc};
 
 use ordered_float::OrderedFloat;
 
@@ -94,82 +92,14 @@ impl Num {
   }
 }
 
-trait SmolIndex {
-  fn as_usize(&self) -> usize;
-  fn from_usize(x: usize) -> Self;
-}
-impl SmolIndex for u8 {
-  fn as_usize(&self) -> usize {
-    *self as usize
-  }
-  fn from_usize(x: usize) -> Self {
-    x as u8
-  }
-}
-impl SmolIndex for u16 {
-  fn as_usize(&self) -> usize {
-    *self as usize
-  }
-  fn from_usize(x: usize) -> Self {
-    x as u16
-  }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SmolVec<I: SmolIndex, T: Default + Clone + Debug>(
-  pub Box<(I, [T; 256])>,
-);
-impl<I: SmolIndex, T: Default + Clone + Debug> Index<u8> for SmolVec<I, T> {
-  type Output = T;
-  fn index(&self, index: u8) -> &Self::Output {
-    &self.0 .1[index as usize]
-  }
-}
-impl<I: SmolIndex, T: Default + Clone + Debug> SmolVec<I, T> {
-  fn new() -> Self {
-    Self(Box::new((
-      I::from_usize(0usize),
-      core::array::from_fn(|_| T::default()),
-    )))
-  }
-}
-impl<I: SmolIndex, T: Default + Clone + Debug> From<SmolVec<I, T>> for Vec<T> {
-  fn from(v: SmolVec<I, T>) -> Self {
-    let (len, values) = *v.0;
-    values.into_iter().take(len.as_usize()).collect()
-  }
-}
-impl<I: SmolIndex, T: Default + Clone + Debug> From<Vec<T>> for SmolVec<I, T> {
-  fn from(v: Vec<T>) -> Self {
-    let len = v.len();
-    let mut values = core::array::from_fn(|_| T::default());
-    for (i, value) in v.into_iter().enumerate() {
-      values[i] = value;
-    }
-    SmolVec(Box::new((I::from_usize(len), values)))
-  }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Function {
-  pub instructions: SmolVec<u16, Instruction>,
-}
-impl Function {
-  pub fn new(instructions: Vec<Instruction>) -> Self {
-    Self {
-      instructions: instructions.into(),
-    }
-  }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
   Nil,
   Bool(bool),
   Num(Num),
   Symbol(SymbolIndex),
-  Fn(Function),
-  List(Vec<Value>),
+  Fn(MiniVec<Instruction>),
+  List(MiniVec<Value>),
   Map(Box<HashMap<Value, Value>>),
   Str(Rc<str>),
 }
@@ -210,8 +140,8 @@ impl Value {
         }
       },
       Value::Symbol(index) => format!("symbol {}", index),
-      Value::Fn(function) => {
-        format!("fn({})", function.instructions.0 .0 as usize)
+      Value::Fn(instructions) => {
+        format!("fn({})", instructions.len())
       }
       Value::Str(s) => format!("\"{}\"", s),
       Value::List(values) => {

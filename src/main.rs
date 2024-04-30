@@ -1,5 +1,6 @@
 mod runtime;
 
+use minivec::mini_vec;
 use ordered_float::OrderedFloat;
 
 use crate::runtime::{data::*, vm::*};
@@ -29,13 +30,13 @@ fn main() {
       Num(Int(1)),
       Num(Float(OrderedFloat(2.))),
       Num(Int(4)),
-      Value::Fn(Function::new(vec![
+      Value::Fn(mini_vec![
         Argument(2),
         Lookup(0, 2),
         Multiply(0, 0, 0),
         Multiply(0, 0, 0),
         Return(0),
-      ])),
+      ]),
     ],
   );
   evaluate(program).unwrap();

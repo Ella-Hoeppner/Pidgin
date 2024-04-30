@@ -173,8 +173,7 @@ pub fn evaluate(program: Program) -> Result<()> {
           result_register,
         });
         match f {
-          Value::Fn(function) => {
-            let instructions: Vec<Instruction> = function.instructions.into();
+          Value::Fn(instructions) => {
             let mut x = instructions.into_iter().peekable();
             while let Some(Argument(symbol_index)) = x.peek() {
               state.environment.insert(*symbol_index, arg.clone());
@@ -209,8 +208,8 @@ pub fn evaluate(program: Program) -> Result<()> {
         println!("environment:\n{}", state.display_environment());
         println!("--------------------\n");
       }
-      PushBack(result_register, list_register, value_register) => {}
-      PopBack(result_register, list_register) => {}
+      PushBack(result_register, list_register, value_register) => todo!(),
+      PopBack(result_register, list_register) => todo!(),
     }
   }
   Ok(())
