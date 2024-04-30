@@ -100,24 +100,26 @@ pub fn evaluate(program: Program) -> Result<()> {
   let mut instruction_stack = program.instructions.clone();
   instruction_stack.reverse();
   while let Some(instruction) = instruction_stack.pop() {
-    use Instruction::*;
+    type I = Instruction;
     match instruction {
-      NoOp => {
+      I::NoOp => {
         println!(
           "Instruction::NoOp called! this probably shouldn't be happening :)"
         )
       }
-      Argument(_) => {
+      I::Argument(_) => {
         panic!("Instruction::Argument called, this should never happen")
       }
-      Clear(register_index) => state.set_register(register_index, Value::Nil),
-      Const(register_index, const_index) => {
+      I::Clear(register_index) => {
+        state.set_register(register_index, Value::Nil)
+      }
+      I::Const(register_index, const_index) => {
         state.set_register(
           register_index,
           program.constants[const_index as usize].clone(),
         );
       }
-      Add(
+      I::Add(
         sum_register_index,
         input_register_index_1,
         input_register_index_2,
@@ -127,7 +129,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         let sum = Num::add(addend_1.as_num()?, &addend_2.as_num()?);
         state.set_register(sum_register_index, Value::Num(sum));
       }
-      Multiply(
+      I::Multiply(
         product_register_index,
         input_register_index_1,
         input_register_index_2,
@@ -138,15 +140,15 @@ pub fn evaluate(program: Program) -> Result<()> {
           Num::multiply(multiplicand_1.as_num()?, &multiplicand_2.as_num()?);
         state.set_register(product_register_index, Value::Num(product));
       }
-      Bind(symbol_index, register) => {
+      I::Bind(symbol_index, register) => {
         state
           .environment
           .insert(symbol_index, state.get_register(register).clone());
       }
-      Lookup(register, symbol_index) => {
+      I::Lookup(register, symbol_index) => {
         state.set_register(register, state.environment[&symbol_index].clone());
       }
-      Apply(result_register, fn_register, args_register) => {
+      I::Apply(result_register, fn_register, args_register) => {
         let f = state.get_register(fn_register).clone();
         let arg = state.get_register(args_register).clone();
         state.stack_frames.push(StackFrame {
@@ -156,7 +158,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         match f {
           Value::Fn(instructions) => {
             let mut x = instructions.into_iter().peekable();
-            while let Some(Argument(symbol_index)) = x.peek() {
+            while let Some(I::Argument(symbol_index)) = x.peek() {
               state.environment.insert(*symbol_index, arg.clone());
               x.next();
             }
@@ -169,7 +171,7 @@ pub fn evaluate(program: Program) -> Result<()> {
           }
         }
       }
-      Return(return_value_register) => {
+      I::Return(return_value_register) => {
         let return_value = state.get_register(return_value_register).clone();
         let stack_frame = state.stack_frames.pop().unwrap();
         for i in stack_frame.stack_start..state.stack_consumption {
@@ -178,7 +180,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         state.stack_consumption = stack_frame.stack_start;
         state.set_register(stack_frame.result_register, return_value);
       }
-      DebugPrint(id) => {
+      I::DebugPrint(id) => {
         println!("DEBUG {}", id);
         println!("--------------------");
         println!(

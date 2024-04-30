@@ -1,5 +1,10 @@
 use minivec::MiniVec;
-use std::{collections::HashMap, fmt::Debug, hash::Hash, rc::Rc};
+use std::{
+  collections::{HashMap, HashSet},
+  fmt::Debug,
+  hash::Hash,
+  rc::Rc,
+};
 
 use ordered_float::OrderedFloat;
 
@@ -120,6 +125,7 @@ pub enum Value {
   Str(Rc<String>),
   List(Rc<Vec<Value>>),
   Map(Rc<HashMap<Value, Value>>),
+  Set(Rc<HashSet<Value>>),
   Fn(MiniVec<Instruction>),
 }
 
@@ -174,6 +180,14 @@ impl Value {
         hashmap
           .iter()
           .map(|(key, value)| key.description() + " " + &value.description())
+          .collect::<Vec<String>>()
+          .join(", ")
+      ),
+      Value::Set(hashset) => format!(
+        "#{{{}}}",
+        hashset
+          .iter()
+          .map(|value| value.description())
           .collect::<Vec<String>>()
           .join(", ")
       ),
