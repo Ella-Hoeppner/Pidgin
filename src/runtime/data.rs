@@ -114,13 +114,13 @@ impl From<i64> for Num {
 pub enum Value {
   Nil,
   Bool(bool),
-  Float(OrderedFloat<f64>),
-  Int(i64),
+  Char(char),
+  Num(Num),
   Symbol(SymbolIndex),
-  Fn(MiniVec<Instruction>),
-  List(MiniVec<Value>),
-  Map(Box<HashMap<Value, Value>>),
   Str(Rc<String>),
+  List(Rc<Vec<Value>>),
+  Map(Rc<HashMap<Value, Value>>),
+  Fn(MiniVec<Instruction>),
 }
 
 impl Hash for Value {
@@ -132,8 +132,7 @@ impl Hash for Value {
 impl Value {
   pub fn as_num(&self) -> Result<Num> {
     match self {
-      Value::Int(i) => Ok((*i).into()),
-      Value::Float(f) => Ok((*f).into()),
+      Value::Num(n) => Ok(*n),
       Value::Nil => Ok(Num::Int(0)),
       _ => Err(Error::CantCastToNum),
     }
@@ -149,19 +148,17 @@ impl Value {
     match self {
       Value::Nil => "nil".to_string(),
       Value::Bool(b) => b.to_string(),
-      Value::Int(i) => i.to_string(),
-      Value::Float(f) => {
-        let mut s = f.to_string();
-        if !s.contains('.') {
-          s += ".";
+      Value::Char(c) => format!("'{}'", c),
+      Value::Num(n) => match n {
+        Num::Int(i) => i.to_string(),
+        Num::Float(f) => {
+          let mut s = f.to_string();
+          if !s.contains('.') {
+            s += ".";
+          }
+          s
         }
-        s
-      }
-      Value::Symbol(index) => format!("symbol {}", index),
-      Value::Fn(instructions) => {
-        format!("fn({})", instructions.len())
-      }
-      Value::Str(s) => format!("\"{}\"", s),
+      },
       Value::List(values) => {
         format!(
           "[{}]",
@@ -180,15 +177,11 @@ impl Value {
           .collect::<Vec<String>>()
           .join(", ")
       ),
-    }
-  }
-}
-
-impl From<Num> for Value {
-  fn from(n: Num) -> Self {
-    match n {
-      Num::Int(i) => Value::Int(i),
-      Num::Float(f) => Value::Float(f),
+      Value::Symbol(index) => format!("symbol {}", index),
+      Value::Str(s) => format!("\"{}\"", s),
+      Value::Fn(instructions) => {
+        format!("fn({})", instructions.len())
+      }
     }
   }
 }

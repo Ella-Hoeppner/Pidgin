@@ -2,35 +2,15 @@ use std::collections::HashMap;
 
 use crate::Value;
 
+use crate::runtime::instructions::Instruction;
+
 use super::{data::Num, Error, Result};
 
 const U16_CAPCITY: usize = u16::MAX as usize + 1;
 
-type RegisterIndex = u8;
+pub type RegisterIndex = u8;
 pub type SymbolIndex = u16;
-type ConstIndex = u16;
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Instruction {
-  NoOp,
-  Argument(SymbolIndex),
-  Return(RegisterIndex),
-  Clear(RegisterIndex),
-  Const(RegisterIndex, ConstIndex),
-  Add(RegisterIndex, RegisterIndex, RegisterIndex),
-  Multiply(RegisterIndex, RegisterIndex, RegisterIndex),
-  Lookup(RegisterIndex, SymbolIndex),
-  Bind(SymbolIndex, RegisterIndex),
-  Apply(RegisterIndex, RegisterIndex, RegisterIndex),
-  PushBack(RegisterIndex, RegisterIndex, RegisterIndex),
-  PopBack(RegisterIndex, RegisterIndex),
-  DebugPrint(u8),
-}
-impl Default for Instruction {
-  fn default() -> Self {
-    Instruction::NoOp
-  }
-}
+pub type ConstIndex = u16;
 
 pub struct Program {
   instructions: Vec<Instruction>,
@@ -110,6 +90,7 @@ impl EvaluationState {
     if register as usize >= self.stack_consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
+    //
     &self.stack[self.stack_index(register) as usize]
   }
 }
@@ -144,7 +125,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         let addend_1 = state.get_register(input_register_index_1);
         let addend_2 = state.get_register(input_register_index_2);
         let sum = Num::add(addend_1.as_num()?, &addend_2.as_num()?);
-        state.set_register(sum_register_index, sum.into());
+        state.set_register(sum_register_index, Value::Num(sum));
       }
       Multiply(
         product_register_index,
@@ -155,7 +136,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         let multiplicand_2 = state.get_register(input_register_index_2);
         let product =
           Num::multiply(multiplicand_1.as_num()?, &multiplicand_2.as_num()?);
-        state.set_register(product_register_index, product.into());
+        state.set_register(product_register_index, Value::Num(product));
       }
       Bind(symbol_index, register) => {
         state
@@ -208,8 +189,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         println!("environment:\n{}", state.display_environment());
         println!("--------------------\n");
       }
-      PushBack(result_register, list_register, value_register) => todo!(),
-      PopBack(result_register, list_register) => todo!(),
+      _ => todo!(),
     }
   }
   Ok(())

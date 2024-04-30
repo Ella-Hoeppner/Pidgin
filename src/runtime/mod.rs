@@ -1,4 +1,5 @@
 pub mod data;
+pub mod instructions;
 pub mod vm;
 
 use std::fmt::Debug;
