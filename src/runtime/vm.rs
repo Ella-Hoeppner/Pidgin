@@ -6,12 +6,13 @@ use crate::runtime::instructions::Instruction;
 
 use super::{data::Num, Error, Result};
 
-const U16_CAPCITY: usize = u16::MAX as usize + 1;
+const STACK_CAPACITY: usize = 30000; //u16::MAX as usize + 1;
 
 pub type RegisterIndex = u8;
 pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
+pub type CoreFnIndex = u8;
 
 pub struct Program {
   instructions: Vec<Instruction>,
@@ -31,18 +32,18 @@ struct StackFrame {
   result_register: RegisterIndex,
 }
 
-struct EvaluationState {
-  stack: [Value; U16_CAPCITY],
+pub struct EvaluationState {
+  stack: [Value; STACK_CAPACITY],
   stack_frames: Vec<StackFrame>,
   stack_consumption: StackIndex,
   environment: HashMap<SymbolIndex, Value>,
 }
 
 impl EvaluationState {
-  fn new() -> Self {
+  pub fn new() -> Self {
     const NIL: Value = Value::Nil;
     Self {
-      stack: [NIL; U16_CAPCITY],
+      stack: [NIL; STACK_CAPACITY],
       stack_frames: vec![],
       stack_consumption: 0,
       environment: HashMap::new(),
@@ -84,9 +85,13 @@ impl EvaluationState {
       .unwrap_or(&0)
       + register as StackIndex
   }
-  fn set_register(&mut self, register: RegisterIndex, value: Value) {
+  fn set_register<T: Into<Value>>(
+    &mut self,
+    register: RegisterIndex,
+    value: T,
+  ) {
     let stack_index = self.stack_index(register);
-    self.stack[stack_index as usize] = value;
+    self.stack[stack_index as usize] = value.into();
     self.stack_consumption = self.stack_consumption.max(stack_index + 1);
   }
   fn get_register(&self, register: RegisterIndex) -> &Value {
@@ -99,8 +104,16 @@ impl EvaluationState {
   }
 }
 
-pub fn evaluate(program: Program) -> Result<()> {
-  let mut state = EvaluationState::new();
+fn test_fn(args: &[Value]) -> Result<Value> {
+  Ok(Value::Nil)
+}
+
+const CORE_FNS: [fn(&[Value]) -> Result<Value>; 1] = [test_fn];
+
+pub fn evaluate(
+  program: Program,
+  mut state: EvaluationState,
+) -> Result<EvaluationState> {
   let mut instruction_stack = program.instructions.clone();
   instruction_stack.reverse();
   while let Some(instruction) = instruction_stack.pop() {
@@ -163,7 +176,10 @@ pub fn evaluate(program: Program) -> Result<()> {
           result_register: result,
         });
         match f_value {
-          Value::Fn(instructions) => {
+          Value::CoreFn(core_fn_index) => {
+            let core_fn = CORE_FNS[core_fn_index as usize];
+          }
+          Value::CompositeFn(instructions) => {
             let mut x = instructions.into_iter().peekable();
             while let Some(I::Argument(symbol_index)) = x.peek() {
               state.environment.insert(*symbol_index, arg_value.clone());
@@ -191,40 +207,47 @@ pub fn evaluate(program: Program) -> Result<()> {
       I::Memoize(result, f) => todo!(),
       I::Constantly(result, value) => todo!(),
       I::NumericalEqual(result, num_1, num_2) => todo!(),
-      I::IsZero(result, value) => todo!(),
-      I::IsNan(result, value) => todo!(),
-      I::IsInf(result, value) => todo!(),
-      I::IsEven(result, value) => todo!(),
-      I::IsPos(result, value) => todo!(),
-      I::IsNeg(result, value) => todo!(),
-      I::Inc(result, value) => todo!(),
-      I::Dec(result, value) => todo!(),
-      I::Abs(result, value) => todo!(),
-      I::Floor(result, value) => todo!(),
-      I::Ceil(result, value) => todo!(),
-      I::Sqrt(result, value) => todo!(),
-      I::Exp(result, value) => todo!(),
-      I::Exp2(result, value) => todo!(),
-      I::Ln(result, value) => todo!(),
-      I::Log2(result, value) => todo!(),
-      I::Add(result, num_1, num_2) => {
+      I::IsZero(result, num) => todo!(),
+      I::IsNan(result, num) => todo!(),
+      I::IsInf(result, num) => todo!(),
+      I::IsEven(result, num) => todo!(),
+      I::IsPos(result, num) => todo!(),
+      I::IsNeg(result, num) => todo!(),
+      I::Inc(result, num) => todo!(),
+      I::Dec(result, num) => todo!(),
+      I::Negate(result, num) => {
+        state.set_register(result, -*state.get_register(num).as_num()?)
+      }
+      I::Abs(result, num) => todo!(),
+      I::Floor(result, num) => todo!(),
+      I::Ceil(result, num) => todo!(),
+      I::Sqrt(result, num) => todo!(),
+      I::Exp(result, num) => todo!(),
+      I::Exp2(result, num) => todo!(),
+      I::Ln(result, num) => todo!(),
+      I::Log2(result, num) => todo!(),
+      I::Add(result, num_1, num_2) => state.set_register(
+        result,
+        *state.get_register(num_1).as_num()?
+          + *state.get_register(num_2).as_num()?,
+      ),
+      I::Subtract(result, num_1, num_2) => state.set_register(
+        result,
+        *state.get_register(num_1).as_num()?
+          - *state.get_register(num_2).as_num()?,
+      ),
+      I::Multiply(result, num_1, num_2) => {
         state.set_register(
           result,
-          Value::Num(Num::add(
-            *state.get_register(num_1).as_num()?,
-            state.get_register(num_2).as_num()?,
-          )),
+          *state.get_register(num_1).as_num()?
+            * *state.get_register(num_2).as_num()?,
         );
       }
-      I::Subtract(result, num_1, num_2) => todo!(),
-      I::Multiply(result, input_1, input_2) => {
-        let product = Num::multiply(
-          *state.get_register(input_1).as_num()?,
-          state.get_register(input_2).as_num()?,
-        );
-        state.set_register(result, Value::Num(product));
-      }
-      I::Divide(result, num_1, num_2) => todo!(),
+      I::Divide(result, num_1, num_2) => state.set_register(
+        result,
+        *state.get_register(num_1).as_num()?
+          / *state.get_register(num_2).as_num()?,
+      ),
       I::Pow(result, num_1, num_2) => todo!(),
       I::Mod(result, num_1, num_2) => todo!(),
       I::Quot(result, num_1, num_2) => todo!(),
@@ -248,7 +271,7 @@ pub fn evaluate(program: Program) -> Result<()> {
       I::IsEmpty(result, collection) => todo!(),
       I::Count(result, collection) => todo!(),
       I::Flatten(result, collection) => todo!(),
-      I::Remove(result, collection, value) => todo!(),
+      I::Remove(result, collection, key) => todo!(),
       I::Set(value_and_result, collection, key) => todo!(),
       I::SetIn(value_and_result, collection, path) => todo!(),
       I::Get(result, collection, key) => todo!(),
@@ -277,7 +300,7 @@ pub fn evaluate(program: Program) -> Result<()> {
       I::Sub(start_index_and_result, list, end_index) => todo!(),
       I::Partition(result, list, size) => todo!(),
       I::SteppedPartition(step_and_return, list, size) => todo!(),
-      I::Pad(padding_value_and_result, list, size) => todo!(),
+      I::Pad(value_and_result, list, size) => todo!(),
       I::EmptyMap(result) => todo!(),
       I::Keys(result, map) => todo!(),
       I::Values(result, map) => todo!(),
@@ -325,5 +348,77 @@ pub fn evaluate(program: Program) -> Result<()> {
       I::ToMap(result, value) => todo!(),
     }
   }
-  Ok(())
+  Ok(state)
+}
+
+#[cfg(test)]
+mod tests {
+  use std::rc::Rc;
+
+  use super::EvaluationState;
+  use crate::{
+    evaluate, ConstIndex, Instruction::*, Num::*, Program, RegisterIndex,
+    Value::*,
+  };
+  use minivec::mini_vec;
+  use ordered_float::OrderedFloat;
+
+  #[test]
+  fn constants() {
+    let constants = vec![
+      Num(Int(1)),
+      Bool(false),
+      Str(Rc::new("Hello!".to_string())),
+      Nil,
+    ];
+    let program = Program::new(
+      (0..constants.len())
+        .map(|i| Const(i as RegisterIndex, i as ConstIndex))
+        .collect(),
+      constants.clone(),
+    );
+    let final_state = evaluate(program, EvaluationState::new()).unwrap();
+    for i in (0..constants.len()) {
+      assert_eq!(*final_state.get_register(i as u8), constants[i]);
+    }
+  }
+
+  #[test]
+  fn arithmetic() {
+    let program = Program::new(
+      vec![
+        Const(0, 0),
+        Const(1, 1),
+        Add(2, 0, 1),
+        Const(3, 2),
+        Multiply(4, 2, 3),
+        Const(5, 3),
+        Subtract(6, 4, 5),
+        Const(7, 4),
+        Divide(8, 4, 7),
+      ],
+      vec![
+        Num(Int(1)),
+        Num(Float(OrderedFloat(2.))),
+        Num(Int(4)),
+        Num(Int(12)),
+        Num(Int(-6)),
+      ],
+    );
+    let final_state = evaluate(program, EvaluationState::new()).unwrap();
+    assert_eq!(final_state.get_register(2), &Num(Float(OrderedFloat(3.))));
+    assert_eq!(final_state.get_register(4), &Num(Float(OrderedFloat(12.))));
+    assert_eq!(final_state.get_register(6), &Num(Float(OrderedFloat(0.))));
+    assert_eq!(final_state.get_register(8), &Num(Float(OrderedFloat(-2.))));
+  }
+
+  #[test]
+  fn environment() {
+    let program = Program::new(
+      vec![Const(0, 0), Bind(0, 0), Lookup(1, 0)],
+      vec![Num(Int(100))],
+    );
+    let final_state = evaluate(program, EvaluationState::new()).unwrap();
+    assert_eq!(final_state.get_register(1), &Num(Int(100)));
+  }
 }

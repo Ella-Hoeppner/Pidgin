@@ -51,6 +51,7 @@ pub enum Instruction {
   IsNeg(R, R),
   Inc(R, R),
   Dec(R, R),
+  Negate(R, R),
   Abs(R, R),
   Floor(R, R),
   Ceil(R, R),

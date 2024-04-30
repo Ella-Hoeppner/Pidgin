@@ -3,12 +3,13 @@ use std::{
   collections::{HashMap, HashSet},
   fmt::Debug,
   hash::Hash,
+  ops::{Add, Div, Mul, Neg, Sub},
   rc::Rc,
 };
 
 use ordered_float::OrderedFloat;
 
-use crate::Instruction;
+use crate::{CoreFnIndex, Instruction};
 
 use super::{vm::SymbolIndex, Error, Result};
 
@@ -17,101 +18,141 @@ pub enum Num {
   Int(i64),
   Float(OrderedFloat<f64>),
 }
+use Num::*;
 
 impl Num {
   pub fn floor(&self) -> i64 {
     match self {
-      Num::Int(i) => *i,
-      Num::Float(f) => f64::from(*f) as i64,
+      Int(i) => *i,
+      Float(f) => f.floor() as i64,
     }
   }
-  pub fn add(a: Num, b: &Num) -> Num {
-    match (a, b) {
-      (Num::Int(a), Num::Int(b)) => Num::Int(a + b),
-      (Num::Float(a), Num::Float(b)) => Num::Float(a + b),
-      (Num::Int(a), Num::Float(b)) => {
-        Num::Float(OrderedFloat::from(a as f64) + b)
-      }
-      (Num::Float(a), Num::Int(b)) => Num::Float(a + (*b as f64)),
-    }
-  }
-  pub fn multiply(a: Num, b: &Num) -> Num {
-    match (a, b) {
-      (Num::Int(a), Num::Int(b)) => Num::Int(a * b),
-      (Num::Float(a), Num::Float(b)) => Num::Float(a * b),
-      (Num::Int(a), Num::Float(b)) => {
-        Num::Float(OrderedFloat::from(a as f64) * b)
-      }
-      (Num::Float(a), Num::Int(b)) => Num::Float(a * (*b as f64)),
+  pub fn ceil(&self) -> i64 {
+    match self {
+      Int(i) => *i,
+      Float(f) => f.ceil() as i64,
     }
   }
   pub fn min(a: Num, b: &Num) -> Num {
     match (a, b) {
-      (Num::Int(a), Num::Int(b)) => Num::Int(a.min(*b)),
-      (Num::Float(a), Num::Float(b)) => Num::Float(a.min(*b)),
-      (Num::Int(a), Num::Float(b)) => {
+      (Int(a), Int(b)) => Int(a.min(*b)),
+      (Float(a), Float(b)) => Float(a.min(*b)),
+      (Int(a), Float(b)) => {
         let b_derefed = *b;
         if (a as f64) <= f64::from(b_derefed) {
-          Num::Int(a)
+          Int(a)
         } else {
-          Num::Float(b_derefed)
+          Float(b_derefed)
         }
       }
-      (Num::Float(a), Num::Int(b)) => {
+      (Float(a), Int(b)) => {
         let b_derefed = *b;
         if (b_derefed as f64) <= f64::from(a) {
-          Num::Int(b_derefed)
+          Int(b_derefed)
         } else {
-          Num::Float(a)
+          Float(a)
         }
       }
     }
   }
   pub fn max(a: Num, b: &Num) -> Num {
     match (a, b) {
-      (Num::Int(a), Num::Int(b)) => Num::Int(a.max(*b)),
-      (Num::Float(a), Num::Float(b)) => Num::Float(a.max(*b)),
-      (Num::Int(a), Num::Float(b)) => {
+      (Int(a), Int(b)) => Int(a.max(*b)),
+      (Float(a), Float(b)) => Float(a.max(*b)),
+      (Int(a), Float(b)) => {
         let b_derefed = *b;
         if (a as f64) >= f64::from(b_derefed) {
-          Num::Int(a)
+          Int(a)
         } else {
-          Num::Float(b_derefed)
+          Float(b_derefed)
         }
       }
-      (Num::Float(a), Num::Int(b)) => {
+      (Float(a), Int(b)) => {
         let b_derefed = *b;
         if (b_derefed as f64) >= f64::from(a) {
-          Num::Int(b_derefed)
+          Int(b_derefed)
         } else {
-          Num::Float(a)
+          Float(a)
         }
       }
     }
   }
   pub fn as_float(&self) -> OrderedFloat<f64> {
     match self {
-      Num::Int(i) => OrderedFloat::from(*i as f64),
-      Num::Float(f) => *f,
+      Int(i) => OrderedFloat::from(*i as f64),
+      Float(f) => *f,
     }
+  }
+}
+
+impl Add for Num {
+  type Output = Num;
+  fn add(self, other: Num) -> Num {
+    match (self, other) {
+      (Int(a), Int(b)) => (a + b).into(),
+      (Float(a), Float(b)) => (a + b).into(),
+      (Int(a), Float(b)) => ((a as f64) + *b).into(),
+      (Float(a), Int(b)) => (a + (b as f64)).into(),
+    }
+  }
+}
+
+impl Sub for Num {
+  type Output = Num;
+  fn sub(self, other: Num) -> Num {
+    match (self, other) {
+      (Int(a), Int(b)) => (a - b).into(),
+      (Float(a), Float(b)) => (a - b).into(),
+      (Int(a), Float(b)) => ((a as f64) - *b).into(),
+      (Float(a), Int(b)) => (*a - (b as f64)).into(),
+    }
+  }
+}
+
+impl Neg for Num {
+  type Output = Num;
+  fn neg(self) -> Num {
+    match self {
+      Int(i) => Int(-i),
+      Float(f) => Float(-f),
+    }
+  }
+}
+
+impl Mul for Num {
+  type Output = Num;
+  fn mul(self, other: Num) -> Num {
+    match (self, other) {
+      (Int(a), Int(b)) => (a * b).into(),
+      (Float(a), Float(b)) => (a * b).into(),
+      (Int(a), Float(b)) => ((a as f64) * *b).into(),
+      (Float(a), Int(b)) => (a * (b as f64)).into(),
+    }
+  }
+}
+
+impl Div for Num {
+  type Output = Num;
+  fn div(self, other: Num) -> Num {
+    (self.as_float() / other.as_float()).into()
   }
 }
 
 impl From<f64> for Num {
   fn from(f: f64) -> Self {
-    Num::Float(OrderedFloat::from(f))
+    Float(OrderedFloat::from(f))
   }
 }
 
 impl From<OrderedFloat<f64>> for Num {
   fn from(f: OrderedFloat<f64>) -> Self {
-    Num::Float(f)
+    Float(f)
   }
 }
 
 impl From<i64> for Num {
   fn from(i: i64) -> Self {
-    Num::Int(i)
+    Int(i)
   }
 }
 
@@ -126,7 +167,8 @@ pub enum Value {
   List(Rc<Vec<Value>>),
   Map(Rc<HashMap<Value, Value>>),
   Set(Rc<HashSet<Value>>),
-  Fn(MiniVec<Instruction>),
+  CoreFn(CoreFnIndex),
+  CompositeFn(MiniVec<Instruction>),
 }
 
 impl Hash for Value {
@@ -139,7 +181,7 @@ impl Value {
   pub fn as_num(&self) -> Result<&Num> {
     match self {
       Value::Num(n) => Ok(n),
-      Value::Nil => Ok(&Num::Int(0)),
+      Value::Nil => Ok(&Int(0)),
       _ => Err(Error::CantCastToNum),
     }
   }
@@ -156,8 +198,8 @@ impl Value {
       Value::Bool(b) => b.to_string(),
       Value::Char(c) => format!("'{}'", c),
       Value::Num(n) => match n {
-        Num::Int(i) => i.to_string(),
-        Num::Float(f) => {
+        Int(i) => i.to_string(),
+        Float(f) => {
           let mut s = f.to_string();
           if !s.contains('.') {
             s += ".";
@@ -193,9 +235,46 @@ impl Value {
       ),
       Value::Symbol(index) => format!("symbol {}", index),
       Value::Str(s) => format!("\"{}\"", s),
-      Value::Fn(instructions) => {
+      Value::CompositeFn(instructions) => {
         format!("fn({})", instructions.len())
       }
+      Value::CoreFn(_) => todo!(),
     }
+  }
+}
+
+impl From<Num> for Value {
+  fn from(n: Num) -> Self {
+    Value::Num(n)
+  }
+}
+impl From<i64> for Value {
+  fn from(i: i64) -> Self {
+    Value::Num(i.into())
+  }
+}
+impl From<f64> for Value {
+  fn from(f: f64) -> Self {
+    Value::Num(f.into())
+  }
+}
+impl From<OrderedFloat<f64>> for Value {
+  fn from(f: OrderedFloat<f64>) -> Self {
+    Value::Num(f.into())
+  }
+}
+impl From<bool> for Value {
+  fn from(b: bool) -> Self {
+    Value::Bool(b)
+  }
+}
+impl From<char> for Value {
+  fn from(c: char) -> Self {
+    Value::Char(c)
+  }
+}
+impl From<String> for Value {
+  fn from(s: String) -> Self {
+    Value::Str(Rc::new(s))
   }
 }
