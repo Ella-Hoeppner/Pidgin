@@ -2,6 +2,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 VM stuff:
+* implement instructions and tests
 * support functions having multiple arguments
 * figure out what to do about laziness...
   * unsure of how to represent this.
@@ -14,7 +15,6 @@ VM stuff:
       * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
 * how is `apply` going to work on built-in operations? I guess for each operation there needs a corresponding function that does runtime arity checking and dispatch?
   * This makes sense I guess. This means that there can be slightly different logic for the `apply`d version, which can be good in some cases like `(apply + x)`, where the dynamically dispatched function version of `+` can do a rust-level reduce to sum all the elements of `x`, while expressions that use `+` normally can just be compiled into a bunch of binary `Add` instructions.
-* implement instructions and tests
 * think about representing continuations
 
 Language stuff:

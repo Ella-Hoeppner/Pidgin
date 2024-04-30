@@ -136,10 +136,12 @@ pub fn evaluate(
         )
       }
       I::Clear(register) => state.set_register(register, Value::Nil),
-      I::Copy(result, value) => todo!(),
-      I::Const(register_index, const_index) => {
+      I::Copy(result, value) => {
+        state.set_register(result, state.get_register(value).clone())
+      }
+      I::Const(result, const_index) => {
         state.set_register(
-          register_index,
+          result,
           program.constants[const_index as usize].clone(),
         );
       }
@@ -363,6 +365,31 @@ mod tests {
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
 
+  macro_rules! run {
+    ($program:expr) => {
+      evaluate($program, EvaluationState::new()).unwrap()
+    };
+  }
+  macro_rules! assert_register {
+    ($state:expr, $register:expr, $value:expr) => {
+      assert_eq!($state.get_register($register), &$value.clone().into())
+    };
+  }
+  macro_rules! run_and_check_registers {
+    ($program:expr, $(($register:expr, $value:expr)),*$(,)?) => {
+      let final_state = run!($program);
+      $(assert_register!(final_state, $register, $value);)*
+    };
+  }
+  macro_rules! simple_register_test {
+    ($name:ident, $program:expr, $(($register:expr, $value:expr)),*$(,)?) => {
+      #[test]
+      fn $name() {
+        run_and_check_registers!($program, $(($register, $value)),*);
+      }
+    }
+  }
+
   #[test]
   fn constants() {
     let constants = vec![
@@ -371,21 +398,21 @@ mod tests {
       Str(Rc::new("Hello!".to_string())),
       Nil,
     ];
-    let program = Program::new(
-      (0..constants.len())
-        .map(|i| Const(i as RegisterIndex, i as ConstIndex))
-        .collect(),
-      constants.clone(),
+    run_and_check_registers!(
+      Program::new(
+        vec![Const(0, 0), Const(1, 1), Const(2, 2), Const(3, 3)],
+        constants.clone()
+      ),
+      (0, constants[0]),
+      (1, constants[1]),
+      (2, constants[2]),
+      (3, constants[3])
     );
-    let final_state = evaluate(program, EvaluationState::new()).unwrap();
-    for i in (0..constants.len()) {
-      assert_eq!(*final_state.get_register(i as u8), constants[i]);
-    }
   }
 
-  #[test]
-  fn arithmetic() {
-    let program = Program::new(
+  simple_register_test!(
+    arithmetic,
+    Program::new(
       vec![
         Const(0, 0),
         Const(1, 1),
@@ -403,22 +430,32 @@ mod tests {
         Num(Int(4)),
         Num(Int(12)),
         Num(Int(-6)),
-      ],
-    );
-    let final_state = evaluate(program, EvaluationState::new()).unwrap();
-    assert_eq!(final_state.get_register(2), &Num(Float(OrderedFloat(3.))));
-    assert_eq!(final_state.get_register(4), &Num(Float(OrderedFloat(12.))));
-    assert_eq!(final_state.get_register(6), &Num(Float(OrderedFloat(0.))));
-    assert_eq!(final_state.get_register(8), &Num(Float(OrderedFloat(-2.))));
-  }
+      ]
+    ),
+    (2, 3.),
+    (4, 12.),
+    (6, 0.),
+    (8, -2.)
+  );
 
-  #[test]
-  fn environment() {
-    let program = Program::new(
+  simple_register_test!(
+    environment,
+    Program::new(
       vec![Const(0, 0), Bind(0, 0), Lookup(1, 0)],
-      vec![Num(Int(100))],
-    );
-    let final_state = evaluate(program, EvaluationState::new()).unwrap();
-    assert_eq!(final_state.get_register(1), &Num(Int(100)));
-  }
+      vec![100.into()]
+    ),
+    (1, 100)
+  );
+
+  simple_register_test!(
+    clear,
+    Program::new(vec![Const(0, 0), Clear(0)], vec![100.into()]),
+    (0, Nil)
+  );
+
+  simple_register_test!(
+    copy,
+    Program::new(vec![Const(0, 0), Copy(1, 0)], vec![100.into()]),
+    (1, 100)
+  );
 }
