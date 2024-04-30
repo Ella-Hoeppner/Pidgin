@@ -213,18 +213,25 @@ impl Value {
       Value::Fn(function) => {
         format!("fn({})", function.instructions.0 .0 as usize)
       }
-      _ => todo!(),
-      //Value::Str(s) => format!("\"{}\"", s),
-      //Value::List(values) => todo!(),
-      //Value::Map(hashmap) => todo!(),
-      /*format!(
-        "({})",
-        values
+      Value::Str(s) => format!("\"{}\"", s),
+      Value::List(values) => {
+        format!(
+          "[{}]",
+          values
+            .iter()
+            .map(|v| v.description())
+            .collect::<Vec<String>>()
+            .join(", ")
+        )
+      }
+      Value::Map(hashmap) => format!(
+        "{{{}}}",
+        hashmap
           .iter()
-          .map(|value| value.description())
-          .reduce(|a, b| a + " " + &b)
-          .unwrap_or("".to_string())
-      ),*/
+          .map(|(key, value)| key.description() + " " + &value.description())
+          .collect::<Vec<String>>()
+          .join(", ")
+      ),
     }
   }
 }
