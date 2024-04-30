@@ -22,15 +22,14 @@ fn main() {
     Apply(4, 3, 0),
     DebugPrint(255),
   ];
-  use runtime::data::Num::*;
   use Value::*;
   let program = Program::new(
     instructions,
     vec![
-      Num(Int(1)),
-      Num(Float(OrderedFloat(2.))),
-      Num(Int(4)),
-      Value::Fn(mini_vec![
+      Int(1),
+      Float(OrderedFloat(2.)),
+      Int(4),
+      Fn(mini_vec![
         Argument(2),
         Lookup(0, 2),
         Multiply(0, 0, 0),

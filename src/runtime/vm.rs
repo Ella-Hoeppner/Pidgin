@@ -144,7 +144,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         let addend_1 = state.get_register(input_register_index_1);
         let addend_2 = state.get_register(input_register_index_2);
         let sum = Num::add(addend_1.as_num()?, &addend_2.as_num()?);
-        state.set_register(sum_register_index, Value::Num(sum));
+        state.set_register(sum_register_index, sum.into());
       }
       Multiply(
         product_register_index,
@@ -155,7 +155,7 @@ pub fn evaluate(program: Program) -> Result<()> {
         let multiplicand_2 = state.get_register(input_register_index_2);
         let product =
           Num::multiply(multiplicand_1.as_num()?, &multiplicand_2.as_num()?);
-        state.set_register(product_register_index, Value::Num(product));
+        state.set_register(product_register_index, product.into());
       }
       Bind(symbol_index, register) => {
         state

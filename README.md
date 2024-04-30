@@ -2,7 +2,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 VM stuff:
-* use MiniVec
 * lists (secretly vectors, but I'm gunna call them lists to make Lisp people mad >:D)
   * just use vecs for now and do copy-on-write, replace it with my persistent vector once that's finished
 * multi-argument functions

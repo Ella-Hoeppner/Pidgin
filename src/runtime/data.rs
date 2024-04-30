@@ -92,16 +92,35 @@ impl Num {
   }
 }
 
+impl From<f64> for Num {
+  fn from(f: f64) -> Self {
+    Num::Float(OrderedFloat::from(f))
+  }
+}
+
+impl From<OrderedFloat<f64>> for Num {
+  fn from(f: OrderedFloat<f64>) -> Self {
+    Num::Float(f)
+  }
+}
+
+impl From<i64> for Num {
+  fn from(i: i64) -> Self {
+    Num::Int(i)
+  }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
   Nil,
   Bool(bool),
-  Num(Num),
+  Float(OrderedFloat<f64>),
+  Int(i64),
   Symbol(SymbolIndex),
   Fn(MiniVec<Instruction>),
   List(MiniVec<Value>),
   Map(Box<HashMap<Value, Value>>),
-  Str(Rc<str>),
+  Str(Rc<String>),
 }
 
 impl Hash for Value {
@@ -113,7 +132,8 @@ impl Hash for Value {
 impl Value {
   pub fn as_num(&self) -> Result<Num> {
     match self {
-      Value::Num(n) => Ok(n.clone()),
+      Value::Int(i) => Ok((*i).into()),
+      Value::Float(f) => Ok((*f).into()),
       Value::Nil => Ok(Num::Int(0)),
       _ => Err(Error::CantCastToNum),
     }
@@ -129,16 +149,14 @@ impl Value {
     match self {
       Value::Nil => "nil".to_string(),
       Value::Bool(b) => b.to_string(),
-      Value::Num(n) => match n {
-        Num::Int(i) => i.to_string(),
-        Num::Float(f) => {
-          let mut s = f.to_string();
-          if !s.contains('.') {
-            s += ".";
-          }
-          s
+      Value::Int(i) => i.to_string(),
+      Value::Float(f) => {
+        let mut s = f.to_string();
+        if !s.contains('.') {
+          s += ".";
         }
-      },
+        s
+      }
       Value::Symbol(index) => format!("symbol {}", index),
       Value::Fn(instructions) => {
         format!("fn({})", instructions.len())
@@ -162,6 +180,15 @@ impl Value {
           .collect::<Vec<String>>()
           .join(", ")
       ),
+    }
+  }
+}
+
+impl From<Num> for Value {
+  fn from(n: Num) -> Self {
+    match n {
+      Num::Int(i) => Value::Int(i),
+      Num::Float(f) => Value::Float(f),
     }
   }
 }
