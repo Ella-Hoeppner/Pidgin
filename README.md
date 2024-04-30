@@ -9,7 +9,14 @@ VM stuff:
   * maybe implement as `Rc<str>` rather than `String`?
 * hashmaps
 * figure out what to do about laziness...
-  * unsure of how to represent this. Should I go for the same approach as Quoot? Or maybe rely on Rust's iterator system, potentially with the already consumed values cached in a vec? Not sure yet
+  * unsure of how to represent this.
+    * Should I go for the same approach as Quoot?
+      * i.e. have a `LazyList` type that consists of:
+        * a vec of current values
+        * a function that accepts the vec of current values and the index to produce the next value
+      * this approach felt pretty messy
+    * Maybe I could have an `Iter` type that mostly just wraps rust's iterator system? Though it would probably still need to be composed of both a `vec` of already realized values and an `iter` that can produce the rest of the values
+      * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
 * how is `apply` going to work on built-in operations? I guess for each operation there needs a corresponding function that does runtime arity checking and dispatch?
   * This makes sense I guess. This means that there can be slightly different logic for the `apply`d version, which can be good in some cases like `(apply + x)`, where the dynamically dispatched function version of `+` can do a rust-level reduce to sum all the elements of `x`, while expressions that use `+` normally can just be compiled into a bunch of binary `Add` instructions.
 

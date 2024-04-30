@@ -1,6 +1,6 @@
-use crate::{ConstIndex, RegisterIndex, SymbolIndex};
+use crate::{ConstIndex, RegisterIndex, StackIndex, SymbolIndex};
 
-type R = RegisterIndex;
+type R = RegisterIndex; // for brevity
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Instruction {
   DebugPrint(u8),
@@ -16,7 +16,7 @@ pub enum Instruction {
 
   // Function control flow
   Argument(SymbolIndex),
-  Return(R),
+  Return(StackIndex),
 
   // Environment manipulation
   Lookup(R, SymbolIndex),
@@ -24,7 +24,6 @@ pub enum Instruction {
 
   // Control flow
   When(R, R, R),
-  // first register of If is used both for condition and return value
   If(R, R, R),
 
   // Higher-order functions
@@ -33,20 +32,17 @@ pub enum Instruction {
   Compose(R, R, R),
   Filter(R, R, R),
   Map(R, R, R),
-  Some(R, R, R),
   MultiListMap(R, R, R),
+  Some(R, R, R),
   ReduceWithoutInitialValue(R, R, R),
-  // first register of ReduceWithInitialValue is used for both initial value and
-  // return value
   ReduceWithInitialValue(R, R, R),
-  InfiniteIterate(R, R, R),
   Memoize(R, R),
 
   // Special function constructors
   Constantly(R, R),
 
   // Math
-  NumericalEqual(R, R),
+  NumericalEqual(R, R, R),
   IsZero(R, R),
   IsNan(R, R),
   IsInf(R, R),
@@ -79,6 +75,8 @@ pub enum Instruction {
   Rand(R),
   UpperBoundedRand(R, R),
   LowerUpperBoundedRand(R, R, R),
+  RandInt(R, R),
+  LowerBoundedRandInt(R, R, R),
 
   // Boolean logic
   Equal(R, R, R),
@@ -92,7 +90,7 @@ pub enum Instruction {
   IsEmpty(R, R),
   Count(R, R),
   Flatten(R, R),
-  Remove(R, R),
+  Remove(R, R, R),
 
   // List + Map manipulation
   Set(R, R, R),
@@ -104,11 +102,16 @@ pub enum Instruction {
   MinKey(R, R, R),
   MaxKey(R, R, R),
 
+  // List + Set manipulation
+  First(R, R),
+  Sort(R, R),
+  SortBy(R, R, R),
+
   // List manipulation (most apply to strings as well)
   EmptyList(R),
-  First(R, R),
   Last(R, R),
-  Nth(R, R, R), // `Get` returns nil when index is OOB, but Nth throws
+  Nth(R, R, R),
+  NthFromLast(R, R, R),
   Cons(R, R, R),
   Push(R, R, R),
   Concat(R, R, R),
@@ -116,15 +119,9 @@ pub enum Instruction {
   Drop(R, R, R),
   Reverse(R, R),
   Distinct(R, R),
-  Sort(R, R),
-  SortBy(R, R),
-  // first register of Sub is used both for starting index and return value
   Sub(R, R, R),
   Partition(R, R, R),
-  // first register of SteppedPartition is used for both step and return value
   SteppedPartition(R, R, R),
-  // first register of Pad is used for both padding value and return value
-  // (Pad is invoked like `(pad list length padding-value)`)
   Pad(R, R, R),
 
   // Map manipulation
@@ -134,8 +131,9 @@ pub enum Instruction {
   Zip(R, R, R),
   Invert(R, R),
   Merge(R, R, R),
-  // first register of MergeWith is used for both merging fn and return value
   MergeWith(R, R, R),
+  MapKeys(R, R, R),
+  MapValues(R, R, R),
 
   // Set manipulation
   EmptySet(R),
@@ -151,7 +149,9 @@ pub enum Instruction {
   InfiniteRepeat(R, R),
   BoundedRepeat(R, R, R),
   InfiniteRepeatedly(R, R),
-  BoundedRepeateedly(R, R, R),
+  BoundedRepeatedly(R, R, R),
+  InfiniteIterate(R, R, R),
+  BoundedIterate(R, R, R),
 
   // Type checkers
   IsNil(R, R),
@@ -164,6 +164,8 @@ pub enum Instruction {
   IsString(R, R),
   IsList(R, R),
   IsMap(R, R),
+  IsSet(R, R),
+  IsCollection(R, R),
   IsFn(R, R),
 
   // Type conversions

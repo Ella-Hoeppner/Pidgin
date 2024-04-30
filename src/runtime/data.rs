@@ -136,10 +136,10 @@ impl Hash for Value {
 }
 
 impl Value {
-  pub fn as_num(&self) -> Result<Num> {
+  pub fn as_num(&self) -> Result<&Num> {
     match self {
-      Value::Num(n) => Ok(*n),
-      Value::Nil => Ok(Num::Int(0)),
+      Value::Num(n) => Ok(n),
+      Value::Nil => Ok(&Num::Int(0)),
       _ => Err(Error::CantCastToNum),
     }
   }

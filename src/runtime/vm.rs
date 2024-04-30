@@ -9,6 +9,7 @@ use super::{data::Num, Error, Result};
 const U16_CAPCITY: usize = u16::MAX as usize + 1;
 
 pub type RegisterIndex = u8;
+pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
 
@@ -26,14 +27,14 @@ impl Program {
 }
 
 struct StackFrame {
-  stack_start: u16,
+  stack_start: StackIndex,
   result_register: RegisterIndex,
 }
 
 struct EvaluationState {
   stack: [Value; U16_CAPCITY],
   stack_frames: Vec<StackFrame>,
-  stack_consumption: u16,
+  stack_consumption: StackIndex,
   environment: HashMap<SymbolIndex, Value>,
 }
 
@@ -72,13 +73,16 @@ impl EvaluationState {
       .reduce(|a, b| a + "\n" + &b)
       .unwrap_or("".to_string())
   }
-  fn stack_index(&self, register: RegisterIndex) -> u16 {
+  fn get_stack_value(&self, index: usize) -> &Value {
+    &self.stack[index]
+  }
+  fn stack_index(&self, register: RegisterIndex) -> StackIndex {
     *self
       .stack_frames
       .last()
       .map(|stack_frame| &stack_frame.stack_start)
       .unwrap_or(&0)
-      + register as u16
+      + register as StackIndex
   }
   fn set_register(&mut self, register: RegisterIndex, value: Value) {
     let stack_index = self.stack_index(register);
@@ -91,7 +95,7 @@ impl EvaluationState {
       panic!("trying to access register that hasn't been set yet")
     }
     //
-    &self.stack[self.stack_index(register) as usize]
+    self.get_stack_value(self.stack_index(register) as usize)
   }
 }
 
@@ -102,84 +106,6 @@ pub fn evaluate(program: Program) -> Result<()> {
   while let Some(instruction) = instruction_stack.pop() {
     type I = Instruction;
     match instruction {
-      I::NoOp => {
-        println!(
-          "Instruction::NoOp called! this probably shouldn't be happening :)"
-        )
-      }
-      I::Argument(_) => {
-        panic!("Instruction::Argument called, this should never happen")
-      }
-      I::Clear(register_index) => {
-        state.set_register(register_index, Value::Nil)
-      }
-      I::Const(register_index, const_index) => {
-        state.set_register(
-          register_index,
-          program.constants[const_index as usize].clone(),
-        );
-      }
-      I::Add(
-        sum_register_index,
-        input_register_index_1,
-        input_register_index_2,
-      ) => {
-        let addend_1 = state.get_register(input_register_index_1);
-        let addend_2 = state.get_register(input_register_index_2);
-        let sum = Num::add(addend_1.as_num()?, &addend_2.as_num()?);
-        state.set_register(sum_register_index, Value::Num(sum));
-      }
-      I::Multiply(
-        product_register_index,
-        input_register_index_1,
-        input_register_index_2,
-      ) => {
-        let multiplicand_1 = state.get_register(input_register_index_1);
-        let multiplicand_2 = state.get_register(input_register_index_2);
-        let product =
-          Num::multiply(multiplicand_1.as_num()?, &multiplicand_2.as_num()?);
-        state.set_register(product_register_index, Value::Num(product));
-      }
-      I::Bind(symbol_index, register) => {
-        state
-          .environment
-          .insert(symbol_index, state.get_register(register).clone());
-      }
-      I::Lookup(register, symbol_index) => {
-        state.set_register(register, state.environment[&symbol_index].clone());
-      }
-      I::Apply(result_register, fn_register, args_register) => {
-        let f = state.get_register(fn_register).clone();
-        let arg = state.get_register(args_register).clone();
-        state.stack_frames.push(StackFrame {
-          stack_start: state.stack_consumption,
-          result_register,
-        });
-        match f {
-          Value::Fn(instructions) => {
-            let mut x = instructions.into_iter().peekable();
-            while let Some(I::Argument(symbol_index)) = x.peek() {
-              state.environment.insert(*symbol_index, arg.clone());
-              x.next();
-            }
-            for instruction in x.rev() {
-              instruction_stack.push(instruction);
-            }
-          }
-          _ => {
-            return Err(Error::CantApply);
-          }
-        }
-      }
-      I::Return(return_value_register) => {
-        let return_value = state.get_register(return_value_register).clone();
-        let stack_frame = state.stack_frames.pop().unwrap();
-        for i in stack_frame.stack_start..state.stack_consumption {
-          state.stack[i as usize] = Value::Nil;
-        }
-        state.stack_consumption = stack_frame.stack_start;
-        state.set_register(stack_frame.result_register, return_value);
-      }
       I::DebugPrint(id) => {
         println!("DEBUG {}", id);
         println!("--------------------");
@@ -191,7 +117,212 @@ pub fn evaluate(program: Program) -> Result<()> {
         println!("environment:\n{}", state.display_environment());
         println!("--------------------\n");
       }
-      _ => todo!(),
+      I::NoOp => {
+        println!(
+          "Instruction::NoOp called! this probably shouldn't be happening :)"
+        )
+      }
+      I::Clear(register) => state.set_register(register, Value::Nil),
+      I::Copy(result, value) => todo!(),
+      I::Const(register_index, const_index) => {
+        state.set_register(
+          register_index,
+          program.constants[const_index as usize].clone(),
+        );
+      }
+      I::Print(value) => todo!(),
+      I::Argument(SymbolIndex) => {
+        panic!("Instruction::Argument called, this should never happen")
+      }
+      I::Return(return_value_stack_index) => {
+        let return_value = state
+          .get_stack_value(return_value_stack_index as usize)
+          .clone();
+        let stack_frame = state.stack_frames.pop().unwrap();
+        for i in stack_frame.stack_start..state.stack_consumption {
+          state.stack[i as usize] = Value::Nil;
+        }
+        state.stack_consumption = stack_frame.stack_start;
+        state.set_register(stack_frame.result_register, return_value);
+      }
+      I::Lookup(register, symbol_index) => {
+        state.set_register(register, state.environment[&symbol_index].clone());
+      }
+      I::Bind(symbol_index, register) => {
+        state
+          .environment
+          .insert(symbol_index, state.get_register(register).clone());
+      }
+      I::When(result, condition, thunk) => todo!(),
+      I::If(condition_and_result, thunk_1, thunk_2) => todo!(),
+      I::Apply(result, f, args) => {
+        let f_value = state.get_register(f).clone();
+        let arg_value = state.get_register(args).clone();
+        state.stack_frames.push(StackFrame {
+          stack_start: state.stack_consumption,
+          result_register: result,
+        });
+        match f_value {
+          Value::Fn(instructions) => {
+            let mut x = instructions.into_iter().peekable();
+            while let Some(I::Argument(symbol_index)) = x.peek() {
+              state.environment.insert(*symbol_index, arg_value.clone());
+              x.next();
+            }
+            for instruction in x.rev() {
+              instruction_stack.push(instruction);
+            }
+          }
+          _ => {
+            return Err(Error::CantApply);
+          }
+        }
+      }
+      I::Partial(result, f, arg) => todo!(),
+      I::Compose(result, f_1, f_2) => todo!(),
+      I::Filter(result, f, collection) => todo!(),
+      I::Map(result, f, collection) => todo!(),
+      I::MultiListMap(result, f, collections) => todo!(),
+      I::Some(result, f, collection) => todo!(),
+      I::ReduceWithoutInitialValue(result, f, collection) => todo!(),
+      I::ReduceWithInitialValue(initial_value_and_result, f, collection) => {
+        todo!()
+      }
+      I::Memoize(result, f) => todo!(),
+      I::Constantly(result, value) => todo!(),
+      I::NumericalEqual(result, num_1, num_2) => todo!(),
+      I::IsZero(result, value) => todo!(),
+      I::IsNan(result, value) => todo!(),
+      I::IsInf(result, value) => todo!(),
+      I::IsEven(result, value) => todo!(),
+      I::IsPos(result, value) => todo!(),
+      I::IsNeg(result, value) => todo!(),
+      I::Inc(result, value) => todo!(),
+      I::Dec(result, value) => todo!(),
+      I::Abs(result, value) => todo!(),
+      I::Floor(result, value) => todo!(),
+      I::Ceil(result, value) => todo!(),
+      I::Sqrt(result, value) => todo!(),
+      I::Exp(result, value) => todo!(),
+      I::Exp2(result, value) => todo!(),
+      I::Ln(result, value) => todo!(),
+      I::Log2(result, value) => todo!(),
+      I::Add(result, num_1, num_2) => {
+        state.set_register(
+          result,
+          Value::Num(Num::add(
+            *state.get_register(num_1).as_num()?,
+            state.get_register(num_2).as_num()?,
+          )),
+        );
+      }
+      I::Subtract(result, num_1, num_2) => todo!(),
+      I::Multiply(result, input_1, input_2) => {
+        let product = Num::multiply(
+          *state.get_register(input_1).as_num()?,
+          state.get_register(input_2).as_num()?,
+        );
+        state.set_register(result, Value::Num(product));
+      }
+      I::Divide(result, num_1, num_2) => todo!(),
+      I::Pow(result, num_1, num_2) => todo!(),
+      I::Mod(result, num_1, num_2) => todo!(),
+      I::Quot(result, num_1, num_2) => todo!(),
+      I::Min(result, num_1, num_2) => todo!(),
+      I::Max(result, num_1, num_2) => todo!(),
+      I::GreaterThan(result, num_1, num_2) => todo!(),
+      I::GreaterThanOrEqual(result, num_1, num_2) => todo!(),
+      I::LessThan(result, num_1, num_2) => todo!(),
+      I::LessThanOrEqual(result, num_1, num_2) => todo!(),
+      I::Rand(result) => todo!(),
+      I::UpperBoundedRand(result, upper_bound) => todo!(),
+      I::LowerUpperBoundedRand(result, lower_bound, upper_bound) => todo!(),
+      I::RandInt(result, upper_bound) => todo!(),
+      I::LowerBoundedRandInt(result, lower_bound, upper_bound) => todo!(),
+      I::Equal(result, value_1, value_2) => todo!(),
+      I::NotEqual(result, value_1, value_2) => todo!(),
+      I::Not(result, value) => todo!(),
+      I::And(result, bool_1, bool_2) => todo!(),
+      I::Or(result, bool_1, bool_2) => todo!(),
+      I::Xor(result, bool_1, bool_2) => todo!(),
+      I::IsEmpty(result, collection) => todo!(),
+      I::Count(result, collection) => todo!(),
+      I::Flatten(result, collection) => todo!(),
+      I::Remove(result, collection, value) => todo!(),
+      I::Set(value_and_result, collection, key) => todo!(),
+      I::SetIn(value_and_result, collection, path) => todo!(),
+      I::Get(result, collection, key) => todo!(),
+      I::GetIn(result, collection, path) => todo!(),
+      I::Update(f_and_result, collection, key) => todo!(),
+      I::UpdateIn(f_and_result, collection, path) => todo!(),
+      I::MinKey(result, collection, f) => todo!(),
+      I::MaxKey(result, collection, f) => todo!(),
+      I::First(result, collection) => todo!(),
+      I::Sort(result, collection) => todo!(),
+      I::SortBy(result, collection, f) => todo!(),
+      I::EmptyList(result) => todo!(),
+      I::Last(result, list) => todo!(),
+      I::Nth(result, list, n) => {
+        // While `Get` returns nil for a list when index is OOB, `Nth` throws
+        todo!()
+      }
+      I::NthFromLast(result, list, n) => todo!(),
+      I::Cons(result, list, value) => todo!(),
+      I::Push(result, list, value) => todo!(),
+      I::Concat(result, list_1, list_2) => todo!(),
+      I::Take(result, list, n) => todo!(),
+      I::Drop(result, list, n) => todo!(),
+      I::Reverse(result, list) => todo!(),
+      I::Distinct(result, list) => todo!(),
+      I::Sub(start_index_and_result, list, end_index) => todo!(),
+      I::Partition(result, list, size) => todo!(),
+      I::SteppedPartition(step_and_return, list, size) => todo!(),
+      I::Pad(padding_value_and_result, list, size) => todo!(),
+      I::EmptyMap(result) => todo!(),
+      I::Keys(result, map) => todo!(),
+      I::Values(result, map) => todo!(),
+      I::Zip(result, key_list, value_list) => todo!(),
+      I::Invert(result, map) => todo!(),
+      I::Merge(result, map_1, map_2) => todo!(),
+      I::MergeWith(merge_f_and_result, map_1, map_2) => todo!(),
+      I::MapKeys(result, f, map) => todo!(),
+      I::MapValues(result, f, map) => todo!(),
+      I::EmptySet(result) => todo!(),
+      I::Union(result, set_1, set_2) => todo!(),
+      I::Intersection(result, set_1, set_2) => todo!(),
+      I::Difference(result, set_1, set_2) => todo!(),
+      I::SymmetricDifference(result, set_1, set_2) => todo!(),
+      I::InfiniteRange(result) => todo!(),
+      I::UpperBoundedRange(result, size) => todo!(),
+      I::LowerUpperBoundedRange(result, lower_bound, upper_bound) => todo!(),
+      I::InfiniteRepeat(result, value) => todo!(),
+      I::BoundedRepeat(result, value, count) => todo!(),
+      I::InfiniteRepeatedly(result, f) => todo!(),
+      I::BoundedRepeatedly(result, f, count) => todo!(),
+      I::InfiniteIterate(result, f, initial_value) => todo!(),
+      I::BoundedIterate(bound_and_result, f, initial_value) => todo!(),
+      I::IsNil(result, value) => todo!(),
+      I::IsBool(result, value) => todo!(),
+      I::IsChar(result, value) => todo!(),
+      I::IsNum(result, value) => todo!(),
+      I::IsInt(result, value) => todo!(),
+      I::IsFloat(result, value) => todo!(),
+      I::IsSymbol(result, value) => todo!(),
+      I::IsString(result, value) => todo!(),
+      I::IsList(result, value) => todo!(),
+      I::IsMap(result, value) => todo!(),
+      I::IsSet(result, value) => todo!(),
+      I::IsCollection(result, value) => todo!(),
+      I::IsFn(result, value) => todo!(),
+      I::ToBool(result, value) => todo!(),
+      I::ToChar(result, value) => todo!(),
+      I::ToNum(result, value) => todo!(),
+      I::ToInt(result, value) => todo!(),
+      I::ToFloat(result, value) => todo!(),
+      I::ToSymbol(result, value) => todo!(),
+      I::ToString(result, value) => todo!(),
+      I::ToList(result, value) => todo!(),
+      I::ToMap(result, value) => todo!(),
     }
   }
   Ok(())
