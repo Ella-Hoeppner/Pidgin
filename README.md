@@ -3,11 +3,10 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 VM stuff:
 * lists (secretly vectors, but I'm gunna call them lists to make Lisp people mad >:D)
-  * need to decide which persistent vector lib to use
-    * maybe make my own?? The structure of RRB vectors feels overly restrictive, wanna try out some ideas of my own here
+  * just use vecs for now and do copy-on-write, replace it with my persistent vector once that's finished
 * multi-argument functions
 * strings
-  * maybe implement as `Rc<&str>` rather than `String`?
+  * maybe implement as `Rc<str>` rather than `String`?
 * hashmaps
   * should test the DiffVec paradigm for hashmaps too
 

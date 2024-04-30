@@ -2,7 +2,7 @@ mod runtime;
 
 use ordered_float::OrderedFloat;
 
-use crate::runtime::*;
+use crate::runtime::{data::*, vm::*};
 
 fn main() {
   use Instruction::*;
@@ -17,13 +17,11 @@ fn main() {
     Clear(1),
     Lookup(1, 0),
     Lookup(2, 1),
-    DebugPrint(200),
     Const(3, 3),
-    DebugPrint(210),
-    Apply(5, 3, 0),
+    Apply(4, 3, 0),
     DebugPrint(255),
   ];
-  use crate::runtime::Num::*;
+  use runtime::data::Num::*;
   use Value::*;
   let program = Program::new(
     instructions,
@@ -41,4 +39,5 @@ fn main() {
     ],
   );
   evaluate(program).unwrap();
+  println!("{}", std::mem::size_of::<Value>())
 }
