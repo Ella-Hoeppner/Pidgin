@@ -1,7 +1,7 @@
 use minivec::MiniVec;
 use std::{
   collections::{HashMap, HashSet},
-  fmt::Debug,
+  fmt::{Debug, Display},
   hash::Hash,
   ops::{Add, Div, Mul, Neg, Sub},
   rc::Rc,
@@ -279,6 +279,12 @@ impl Value {
       }
       Value::CoreFn(_) => todo!(),
     }
+  }
+}
+
+impl Display for Value {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.description())
   }
 }
 

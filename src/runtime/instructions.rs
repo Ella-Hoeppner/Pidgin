@@ -16,7 +16,9 @@ pub enum Instruction {
 
   // Function control flow
   Argument(SymbolIndex),
-  Return(StackIndex),
+  Return(R),
+  Apply1(R, R, R),
+  ApplyAndReturn(R, R),
 
   // Environment manipulation
   Lookup(R, SymbolIndex),
@@ -27,7 +29,6 @@ pub enum Instruction {
   If(R, R, R),
 
   // Higher-order functions
-  Apply(R, R, R),
   Partial(R, R, R),
   Compose(R, R, R),
   Filter(R, R, R),

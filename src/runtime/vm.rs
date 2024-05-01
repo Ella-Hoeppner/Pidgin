@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::Value;
+use crate::string_utils::pad;
+use crate::{string_utils::indent_lines, Value};
 
 use crate::runtime::instructions::Instruction;
 
@@ -29,14 +30,22 @@ impl Program {
 }
 
 struct StackFrame {
-  stack_start: StackIndex,
-  result_register: RegisterIndex,
+  beginning: StackIndex,
+  return_stack_index: StackIndex,
+}
+impl StackFrame {
+  fn root() -> Self {
+    Self {
+      beginning: 0,
+      return_stack_index: 0,
+    }
+  }
 }
 
 pub struct EvaluationState {
   stack: [Value; STACK_CAPACITY],
-  stack_frames: Vec<StackFrame>,
-  stack_consumption: StackIndex,
+  frames: Vec<StackFrame>,
+  consumption: StackIndex,
   environment: HashMap<SymbolIndex, Value>,
 }
 
@@ -45,63 +54,136 @@ impl EvaluationState {
     const NIL: Value = Value::Nil;
     Self {
       stack: [NIL; STACK_CAPACITY],
-      stack_frames: vec![],
-      stack_consumption: 0,
+      frames: vec![StackFrame::root()],
+      consumption: 0,
       environment: HashMap::new(),
     }
   }
-  fn display_stack(&self) -> String {
+  fn current_stack_frame_beginning(&self) -> StackIndex {
     self
-      .stack
-      .iter()
-      .take(self.stack_consumption as usize)
-      .enumerate()
-      .map(|(i, value)| format!("{}: {}", i, value.description()))
-      .reduce(|a, b| a + "\n" + &b)
-      .unwrap_or("".to_string())
+      .frames
+      .last()
+      .map(|stack_frame| stack_frame.beginning)
+      .unwrap_or(0)
   }
-  fn display_environment(&self) -> String {
+  fn describe_stack(&self) -> String {
+    self
+      .frames
+      .iter()
+      .map(|frame| Some(frame))
+      .chain(std::iter::once(None))
+      .collect::<Vec<_>>()
+      .windows(2)
+      .enumerate()
+      .map(|(frame_index, window)| {
+        let frame = window[0].unwrap();
+        let maybe_next_frame = window[1];
+        let start = frame.beginning;
+        let end = maybe_next_frame
+          .map(|next_frame| next_frame.beginning)
+          .unwrap_or(self.consumption);
+        format!(
+          "{}\n{}",
+          pad(
+            30,
+            '-',
+            format!(
+              "------ {}: ({} - {}) -> {} ",
+              frame_index, start, end, frame.return_stack_index
+            )
+          ),
+          indent_lines(
+            7,
+            (start..end)
+              .map(|i| format!("{}: {}", i, self.get_stack(i).description()))
+              .collect::<Vec<String>>()
+              .join("\n")
+          ),
+        )
+      })
+      .collect::<Vec<String>>()
+      .join("\n")
+    /*format!(
+      "frame count:              {}\n\
+       current frame beginning:  {}\n\
+       consumption:              {}\n\
+       values:\n\
+       {}",
+      self.frames.len() - 1,
+      self.current_stack_frame_beginning(),
+      self.consumption,
+      self
+        .frames
+        .iter()
+        .map(|frame| frame.beginning)
+        .chain(std::iter::once(self.consumption))
+        .collect::<Vec<StackIndex>>()
+        .windows(2)
+        .enumerate()
+        .map(|(frame_index, window)| {
+          let start = window[0];
+          let end = window[1];
+          format!(
+            "{}\n{}",
+            pad(
+              34,
+              '-',
+              format!("---------- {}: ({} - {}) ", frame_index, start, end,)
+            ),
+            indent_lines(
+              11,
+              (start..end)
+                .map(|i| format!("{}: {}", i, self.get_stack(i).description()))
+                .collect::<Vec<String>>()
+                .join("\n")
+            ),
+          )
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
+    )*/
+  }
+  fn describe_environment(&self) -> String {
     let mut bindings: Vec<_> = self.environment.iter().collect();
     bindings.sort_by_key(|(symbol_index, _value_pointer)| **symbol_index);
     bindings
       .into_iter()
       .map(|(symbol_index, value)| {
-        format!(
-          "symbol_index: {}, value: {}",
-          symbol_index,
-          value.description()
-        )
+        format!("{}: {}", symbol_index, value.description())
       })
-      .reduce(|a, b| a + "\n" + &b)
-      .unwrap_or("".to_string())
+      .collect::<Vec<String>>()
+      .join("\n")
   }
-  fn get_stack_value(&self, index: usize) -> &Value {
+  fn set_stack_usize(&mut self, index: usize, value: Value) {
+    self.stack[index] = value;
+    self.consumption = self.consumption.max(index as u16 + 1);
+  }
+  fn set_stack(&mut self, index: StackIndex, value: Value) {
+    self.set_stack_usize(index as usize, value);
+  }
+  fn get_stack_usize(&self, index: usize) -> &Value {
     &self.stack[index]
   }
-  fn stack_index(&self, register: RegisterIndex) -> StackIndex {
-    *self
-      .stack_frames
-      .last()
-      .map(|stack_frame| &stack_frame.stack_start)
-      .unwrap_or(&0)
-      + register as StackIndex
+  fn get_stack(&self, index: StackIndex) -> &Value {
+    self.get_stack_usize(index as usize)
+  }
+  fn register_stack_index(&self, register: RegisterIndex) -> StackIndex {
+    self.current_stack_frame_beginning() + register as StackIndex
   }
   fn set_register<T: Into<Value>>(
     &mut self,
     register: RegisterIndex,
     value: T,
   ) {
-    let stack_index = self.stack_index(register);
-    self.stack[stack_index as usize] = value.into();
-    self.stack_consumption = self.stack_consumption.max(stack_index + 1);
+    self.set_stack(self.register_stack_index(register), value.into());
   }
   fn get_register(&self, register: RegisterIndex) -> &Value {
     //debug
-    if register as usize >= self.stack_consumption as usize {
+    if register as usize >= self.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
     //
-    self.get_stack_value(self.stack_index(register) as usize)
+    self.get_stack(self.register_stack_index(register))
   }
 }
 
@@ -121,15 +203,15 @@ pub fn evaluate(
     type I = Instruction;
     match instruction {
       I::DebugPrint(id) => {
-        println!("DEBUG {}", id);
-        println!("--------------------");
         println!(
-          "stack ({}):\n{}\n",
-          state.stack_consumption,
-          state.display_stack()
+          "{}\n\
+           stack:\n{}\n\n\n\
+           environment:\n{}\n\
+           ----------------------------------------\n\n\n",
+          pad(40, '-', format!("DEBUG {} ", id)),
+          state.describe_stack(),
+          indent_lines(2, state.describe_environment())
         );
-        println!("environment:\n{}", state.display_environment());
-        println!("--------------------\n");
       }
       I::NoOp => {
         println!(
@@ -152,16 +234,60 @@ pub fn evaluate(
       I::Argument(SymbolIndex) => {
         panic!("Instruction::Argument called, this should never happen")
       }
-      I::Return(return_value_stack_index) => {
-        let return_value = state
-          .get_stack_value(return_value_stack_index as usize)
-          .clone();
-        let stack_frame = state.stack_frames.pop().unwrap();
-        for i in stack_frame.stack_start..state.stack_consumption {
-          state.stack[i as usize] = Value::Nil;
+      I::Return(value) => {
+        let return_value = state.get_register(value).clone();
+        let finished_stack_frame = state.frames.pop().unwrap();
+        for i in finished_stack_frame.beginning..state.consumption {
+          state.set_stack(i, Value::Nil);
         }
-        state.stack_consumption = stack_frame.stack_start;
-        state.set_register(stack_frame.result_register, return_value);
+        state.consumption = finished_stack_frame.beginning;
+        state.set_stack(finished_stack_frame.return_stack_index, return_value);
+      }
+      I::Apply1(result, f, arg) => {
+        // Applies a function of a single argument.
+        let f_value = state.get_register(f).clone();
+        let arg_value = state.get_register(arg).clone();
+        state.frames.push(StackFrame {
+          beginning: state.consumption,
+          return_stack_index: state.register_stack_index(result),
+        });
+        match f_value {
+          Value::CoreFn(core_fn_index) => {
+            let core_fn = CORE_FNS[core_fn_index as usize];
+            todo!();
+          }
+          Value::CompositeFn(instructions) => {
+            let mut remaining_instructions = instructions.into_iter();
+            if let Some(I::Argument(symbol_index)) =
+              remaining_instructions.next()
+            {
+              state.environment.insert(symbol_index, arg_value.clone());
+            } else {
+              panic!(
+                "CompositeFn missing Argument instruction (called from Apply1)"
+              )
+            }
+            for instruction in remaining_instructions.rev() {
+              instruction_stack.push(instruction);
+            }
+          }
+          Value::List(list) => todo!(),
+          Value::Map(list) => todo!(),
+          Value::Set(list) => todo!(),
+          _ => {
+            return Err(Error::CantApply);
+          }
+        }
+      }
+      I::ApplyAndReturn(f, args) => {
+        // This instruction is for supporting tail-call elimination. It takes a
+        // function and its arguments just like `Apply`, but before invoking
+        // the function it cleans up the current stack frame, so tail-call
+        // recursive functions don't consume more space than necessary on the
+        // stack. Any time a `Apply` instruction would be immediately followed
+        // by a `Return` instruction, it should be replaced with this (maybe
+        // that can actually just be done in an optimization pass?)
+        todo!()
       }
       I::Lookup(register, symbol_index) => {
         state.set_register(register, state.environment[&symbol_index].clone());
@@ -173,32 +299,6 @@ pub fn evaluate(
       }
       I::When(result, condition, thunk) => todo!(),
       I::If(condition_and_result, thunk_1, thunk_2) => todo!(),
-      I::Apply(result, f, args) => {
-        let f_value = state.get_register(f).clone();
-        let arg_value = state.get_register(args).clone();
-        state.stack_frames.push(StackFrame {
-          stack_start: state.stack_consumption,
-          result_register: result,
-        });
-        match f_value {
-          Value::CoreFn(core_fn_index) => {
-            let core_fn = CORE_FNS[core_fn_index as usize];
-          }
-          Value::CompositeFn(instructions) => {
-            let mut x = instructions.into_iter().peekable();
-            while let Some(I::Argument(symbol_index)) = x.peek() {
-              state.environment.insert(*symbol_index, arg_value.clone());
-              x.next();
-            }
-            for instruction in x.rev() {
-              instruction_stack.push(instruction);
-            }
-          }
-          _ => {
-            return Err(Error::CantApply);
-          }
-        }
-      }
       I::Partial(result, f, arg) => todo!(),
       I::Compose(result, f_1, f_2) => todo!(),
       I::Filter(result, f, collection) => todo!(),
@@ -514,4 +614,22 @@ mod tests {
   simple_register_test!(clear, program![Const(0, 100), Clear(0)], (0, Nil));
 
   simple_register_test!(copy, program![Const(0, 100), Copy(1, 0)], (1, 100));
+
+  simple_register_test!(
+    apply1_square_function,
+    program![
+      Const(0, 100),
+      Const(
+        1,
+        CompositeFn(mini_vec![
+          Argument(0),
+          Lookup(0, 0),
+          Multiply(0, 0, 0),
+          Return(0)
+        ])
+      ),
+      Apply1(2, 1, 0),
+    ],
+    (2, 10000)
+  );
 }

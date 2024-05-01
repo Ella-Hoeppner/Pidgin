@@ -1,6 +1,7 @@
 #![allow(warnings)]
 
 mod runtime;
+mod string_utils;
 
 use minivec::mini_vec;
 use ordered_float::OrderedFloat;
