@@ -161,6 +161,18 @@ impl EvaluationState {
   fn set_stack(&mut self, index: StackIndex, value: Value) {
     self.set_stack_usize(index as usize, value);
   }
+  fn swap_stack_usize(&mut self, index: usize, value: Value) -> Value {
+    std::mem::replace(&mut self.stack[index], value)
+  }
+  fn swap_stack(&mut self, index: StackIndex, value: Value) -> Value {
+    self.swap_stack_usize(index as usize, value)
+  }
+  fn steal_stack_usize(&mut self, index: usize) -> Value {
+    self.swap_stack_usize(index, Value::Nil)
+  }
+  fn steal_stack(&mut self, index: StackIndex) -> Value {
+    self.steal_stack_usize(index as usize)
+  }
   fn get_stack_usize(&self, index: usize) -> &Value {
     &self.stack[index]
   }
@@ -176,6 +188,16 @@ impl EvaluationState {
     value: T,
   ) {
     self.set_stack(self.register_stack_index(register), value.into());
+  }
+  fn swap_register<T: Into<Value>>(
+    &mut self,
+    register: RegisterIndex,
+    value: T,
+  ) -> Value {
+    self.swap_stack(self.register_stack_index(register), value.into())
+  }
+  fn steal_register(&mut self, register: RegisterIndex) -> Value {
+    self.steal_stack(self.register_stack_index(register))
   }
   fn get_register(&self, register: RegisterIndex) -> &Value {
     //debug
@@ -243,13 +265,13 @@ pub fn evaluate(
         state.consumption = finished_stack_frame.beginning;
         state.set_stack(finished_stack_frame.return_stack_index, return_value);
       }
-      I::Apply1(result, f, arg) => {
+      I::Apply1(arg_and_result, f) => {
         // Applies a function of a single argument.
         let f_value = state.get_register(f).clone();
-        let arg_value = state.get_register(arg).clone();
+        let arg_value = state.steal_register(arg_and_result).clone();
         state.frames.push(StackFrame {
           beginning: state.consumption,
-          return_stack_index: state.register_stack_index(result),
+          return_stack_index: state.register_stack_index(arg_and_result),
         });
         match f_value {
           Value::CoreFn(core_fn_index) => {
@@ -279,7 +301,9 @@ pub fn evaluate(
           }
         }
       }
-      I::ApplyAndReturn(f, args) => {
+      I::Apply2(arg_1_and_result, f, arg_2) => todo!(),
+      I::ApplyN(args_and_result, f) => todo!(),
+      I::Apply1AndReturn(f, args) => {
         // This instruction is for supporting tail-call elimination. It takes a
         // function and its arguments just like `Apply`, but before invoking
         // the function it cleans up the current stack frame, so tail-call
@@ -289,6 +313,8 @@ pub fn evaluate(
         // that can actually just be done in an optimization pass?)
         todo!()
       }
+      I::Apply2AndReturn(arg_1_and_result, f, arg_2) => todo!(),
+      I::ApplyNAndReturn(args_and_result, f) => todo!(),
       I::Lookup(register, symbol_index) => {
         state.set_register(register, state.environment[&symbol_index].clone());
       }
@@ -628,8 +654,8 @@ mod tests {
           Return(0)
         ])
       ),
-      Apply1(2, 1, 0),
+      Apply1(0, 1),
     ],
-    (2, 10000)
+    (0, 10000)
   );
 }
