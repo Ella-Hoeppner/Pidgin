@@ -265,10 +265,11 @@ pub fn evaluate(
         state.consumption = finished_stack_frame.beginning;
         state.set_stack(finished_stack_frame.return_stack_index, return_value);
       }
+      I::Apply0(result, f) => todo!(),
       I::Apply1(arg_and_result, f) => {
         // Applies a function of a single argument.
         let f_value = state.get_register(f).clone();
-        let arg_value = state.steal_register(arg_and_result).clone();
+        let arg_value = state.steal_register(arg_and_result);
         state.frames.push(StackFrame {
           beginning: state.consumption,
           return_stack_index: state.register_stack_index(arg_and_result),
@@ -301,8 +302,60 @@ pub fn evaluate(
           }
         }
       }
-      I::Apply2(arg_1_and_result, f, arg_2) => todo!(),
+      I::Apply2(arg_1_and_result, f, arg_2) => {
+        // Applies a function of 2 arguments.
+        let f_value = state.get_register(f).clone();
+        let arg_1_value = state.steal_register(arg_1_and_result);
+        let arg_2_value = state.get_register(arg_2).clone();
+        state.frames.push(StackFrame {
+          beginning: state.consumption,
+          return_stack_index: state.register_stack_index(arg_1_and_result),
+        });
+        match f_value {
+          Value::CoreFn(core_fn_index) => {
+            let core_fn = CORE_FNS[core_fn_index as usize];
+            todo!();
+          }
+          Value::CompositeFn(instructions) => {
+            let mut remaining_instructions = instructions.into_iter();
+            if let Some(I::Argument(symbol_1_index)) =
+              remaining_instructions.next()
+            {
+              state
+                .environment
+                .insert(symbol_1_index, arg_1_value.clone());
+            } else {
+              panic!(
+                "CompositeFn missing first Argument instruction (called from\
+                 Apply2)"
+              )
+            }
+            if let Some(I::Argument(symbol_2_index)) =
+              remaining_instructions.next()
+            {
+              state
+                .environment
+                .insert(symbol_2_index, arg_2_value.clone());
+            } else {
+              panic!(
+                "CompositeFn missing second Argument instruction (called from\
+                 Apply2)"
+              )
+            }
+            for instruction in remaining_instructions.rev() {
+              instruction_stack.push(instruction);
+            }
+          }
+          Value::List(list) => todo!(),
+          Value::Map(list) => todo!(),
+          Value::Set(list) => todo!(),
+          _ => {
+            return Err(Error::CantApply);
+          }
+        }
+      }
       I::ApplyN(args_and_result, f) => todo!(),
+      I::Apply0AndReturn(f) => todo!(),
       I::Apply1AndReturn(f, args) => {
         // This instruction is for supporting tail-call elimination. It takes a
         // function and its arguments just like `Apply`, but before invoking
@@ -644,7 +697,7 @@ mod tests {
   simple_register_test!(
     apply1_square_function,
     program![
-      Const(0, 100),
+      Const(0, 10),
       Const(
         1,
         CompositeFn(mini_vec![
@@ -656,6 +709,53 @@ mod tests {
       ),
       Apply1(0, 1),
     ],
-    (0, 10000)
+    (0, 100)
+  );
+
+  #[test]
+  fn apply1_double_square_nested_function() {
+    let p = Program::new(
+      vec![Const(0, 0), Const(1, 2), Apply1(0, 1)],
+      vec![
+        10.into(),
+        CompositeFn(mini_vec![
+          Argument(0),
+          Lookup(0, 0),
+          Multiply(0, 0, 0),
+          Return(0)
+        ]),
+        CompositeFn(mini_vec![
+          Argument(0),
+          Lookup(0, 0),
+          Const(1, 1),
+          Apply1(0, 1),
+          Apply1(0, 1),
+          Return(0)
+        ]),
+      ],
+    );
+    run_and_check_registers!(p, (0, 10000));
+  }
+
+  simple_register_test!(
+    apply2_square_product_function,
+    program![
+      Const(0, 2),
+      Const(1, 3),
+      Const(
+        2,
+        CompositeFn(mini_vec![
+          Argument(0),
+          Argument(1),
+          Lookup(0, 0),
+          Lookup(1, 1),
+          Multiply(0, 1, 0),
+          Multiply(0, 0, 0),
+          Return(0)
+        ])
+      ),
+      Apply2(0, 2, 1),
+    ],
+    (0, 36)
   );
 }

@@ -17,9 +17,11 @@ pub enum Instruction {
   // Function control flow
   Argument(SymbolIndex),
   Return(R),
+  Apply0(R, R),
   Apply1(R, R),
   Apply2(R, R, R),
   ApplyN(R, R),
+  Apply0AndReturn(R),
   Apply1AndReturn(R, R),
   Apply2AndReturn(R, R, R),
   ApplyNAndReturn(R, R),
