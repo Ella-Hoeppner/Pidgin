@@ -83,6 +83,45 @@ impl Num {
       Float(f) => *f,
     }
   }
+  pub fn as_int_lossless(&self) -> Result<i64> {
+    match self {
+      Int(i) => Ok(*i),
+      Float(f) => {
+        let i = f.into_inner() as i64;
+        if i as f64 == **f {
+          Ok(i)
+        } else {
+          Err(Error::ArgumentNotInto)
+        }
+      }
+    }
+  }
+  pub fn numerical_equal(&self, other: &Num) -> bool {
+    match (self, other) {
+      (Int(a), Int(b)) => a == b,
+      (Float(a), Float(b)) => a == b,
+      (Int(a), Float(b)) => (*a as f64) == **b,
+      (Float(a), Int(b)) => *a == (*b as f64),
+    }
+  }
+  pub fn inc(&self) -> Num {
+    match self {
+      Int(i) => Int(i + 1),
+      Float(f) => Float(f + 1.0),
+    }
+  }
+  pub fn dec(&self) -> Num {
+    match self {
+      Int(i) => Int(i - 1),
+      Float(f) => Float(f - 1.0),
+    }
+  }
+  pub fn abs(&self) -> Num {
+    match self {
+      Int(i) => Int(i.abs()),
+      Float(f) => Float(f.abs().into()),
+    }
+  }
 }
 
 impl Add for Num {

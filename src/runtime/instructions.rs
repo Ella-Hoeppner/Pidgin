@@ -47,6 +47,7 @@ pub enum Instruction {
   IsNan(R, R),
   IsInf(R, R),
   IsEven(R, R),
+  IsOdd(R, R),
   IsPos(R, R),
   IsNeg(R, R),
   Inc(R, R),

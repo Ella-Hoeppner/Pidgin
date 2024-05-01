@@ -146,7 +146,9 @@ pub fn evaluate(
           program.constants[const_index as usize].clone(),
         );
       }
-      I::Print(value) => todo!(),
+      I::Print(value) => {
+        println!("{}", state.get_register(value).description())
+      }
       I::Argument(SymbolIndex) => {
         panic!("Instruction::Argument called, this should never happen")
       }
@@ -209,26 +211,103 @@ pub fn evaluate(
       }
       I::Memoize(result, f) => todo!(),
       I::Constantly(result, value) => todo!(),
-      I::NumericalEqual(result, num_1, num_2) => todo!(),
-      I::IsZero(result, num) => todo!(),
-      I::IsNan(result, num) => todo!(),
-      I::IsInf(result, num) => todo!(),
-      I::IsEven(result, num) => todo!(),
-      I::IsPos(result, num) => todo!(),
-      I::IsNeg(result, num) => todo!(),
-      I::Inc(result, num) => todo!(),
-      I::Dec(result, num) => todo!(),
+      I::NumericalEqual(result, num_1, num_2) => state.set_register(
+        result,
+        match (state.get_register(num_1), state.get_register(num_2)) {
+          (Value::Num(a), Value::Num(b)) => a.numerical_equal(b),
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::IsZero(result, num) => state.set_register(
+        result,
+        match state.get_register(num) {
+          Value::Num(Num::Float(f)) => *f == 0.,
+          Value::Num(Num::Int(i)) => *i == 0,
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::IsNan(result, num) => state.set_register(
+        result,
+        match state.get_register(num) {
+          Value::Num(Num::Float(f)) => f.is_nan(),
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::IsInf(result, num) => state.set_register(
+        result,
+        match state.get_register(num) {
+          Value::Num(Num::Float(f)) => f.is_infinite(),
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::IsEven(result, num) => state.set_register(
+        result,
+        match state.get_register(num) {
+          Value::Num(n) => n.as_int_lossless()? % 2 == 0,
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::IsOdd(result, num) => state.set_register(
+        result,
+        match state.get_register(num) {
+          Value::Num(n) => n.as_int_lossless()? % 2 == 1,
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::IsPos(result, num) => state.set_register(
+        result,
+        match state.get_register(num) {
+          Value::Num(Num::Float(f)) => **f > 0.,
+          Value::Num(Num::Int(i)) => *i > 0,
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::IsNeg(result, num) => state.set_register(
+        result,
+        match state.get_register(num) {
+          Value::Num(Num::Float(f)) => **f < 0.,
+          Value::Num(Num::Int(i)) => *i < 0,
+          _ => return Err(Error::ArgumentNotNum),
+        },
+      ),
+      I::Inc(result, num) => {
+        state.set_register(result, state.get_register(num).as_num()?.inc())
+      }
+      I::Dec(result, num) => {
+        state.set_register(result, state.get_register(num).as_num()?.dec())
+      }
       I::Negate(result, num) => {
         state.set_register(result, -*state.get_register(num).as_num()?)
       }
-      I::Abs(result, num) => todo!(),
-      I::Floor(result, num) => todo!(),
-      I::Ceil(result, num) => todo!(),
-      I::Sqrt(result, num) => todo!(),
-      I::Exp(result, num) => todo!(),
-      I::Exp2(result, num) => todo!(),
-      I::Ln(result, num) => todo!(),
-      I::Log2(result, num) => todo!(),
+      I::Abs(result, num) => {
+        state.set_register(result, state.get_register(num).as_num()?.abs())
+      }
+      I::Floor(result, num) => {
+        state.set_register(result, state.get_register(num).as_num()?.floor())
+      }
+      I::Ceil(result, num) => {
+        state.set_register(result, state.get_register(num).as_num()?.ceil())
+      }
+      I::Sqrt(result, num) => state.set_register(
+        result,
+        state.get_register(num).as_num()?.as_float().sqrt(),
+      ),
+      I::Exp(result, num) => state.set_register(
+        result,
+        state.get_register(num).as_num()?.as_float().exp(),
+      ),
+      I::Exp2(result, num) => state.set_register(
+        result,
+        state.get_register(num).as_num()?.as_float().exp2(),
+      ),
+      I::Ln(result, num) => state.set_register(
+        result,
+        state.get_register(num).as_num()?.as_float().ln(),
+      ),
+      I::Log2(result, num) => state.set_register(
+        result,
+        state.get_register(num).as_num()?.as_float().log2(),
+      ),
       I::Add(result, num_1, num_2) => state.set_register(
         result,
         *state.get_register(num_1).as_num()?
