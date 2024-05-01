@@ -38,4 +38,9 @@ version = "0.1.0"
 dependencies = [
  "minivec",
  "ordered-float",
+ "program_macro",
 ]
+
+[[package]]
+name = "program_macro"
+version = "0.0.0"

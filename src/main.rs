@@ -16,5 +16,4 @@ fn main() {
     vec![Num(Int(1)), Bool(false), Symbol(0), Nil],
   );
   evaluate(program, EvaluationState::new()).unwrap();
-  println!("{}", std::mem::size_of::<Value>())
 }

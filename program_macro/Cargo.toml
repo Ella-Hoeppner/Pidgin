@@ -1,0 +1,5 @@
+[package]
+name = "program_macro"
+
+[lib]
+proc-macro = true

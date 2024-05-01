@@ -278,3 +278,8 @@ impl From<String> for Value {
     Value::Str(Rc::new(s))
   }
 }
+impl From<&str> for Value {
+  fn from(s: &str) -> Self {
+    Value::Str(Rc::new(s.to_string()))
+  }
+}

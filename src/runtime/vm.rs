@@ -14,6 +14,7 @@ pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
 pub type CoreFnIndex = u8;
 
+#[derive(Debug)]
 pub struct Program {
   instructions: Vec<Instruction>,
   constants: Vec<Value>,
@@ -364,6 +365,7 @@ mod tests {
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
+  use program_macro::program;
 
   macro_rules! run {
     ($program:expr) => {
@@ -392,12 +394,7 @@ mod tests {
 
   #[test]
   fn constants() {
-    let constants = vec![
-      Num(Int(1)),
-      Bool(false),
-      Str(Rc::new("Hello!".to_string())),
-      Nil,
-    ];
+    let constants = vec![1.into(), false.into(), "Hello!".into(), Nil];
     run_and_check_registers!(
       Program::new(
         vec![Const(0, 0), Const(1, 1), Const(2, 2), Const(3, 3)],
@@ -412,26 +409,17 @@ mod tests {
 
   simple_register_test!(
     arithmetic,
-    Program::new(
-      vec![
-        Const(0, 0),
-        Const(1, 1),
-        Add(2, 0, 1),
-        Const(3, 2),
-        Multiply(4, 2, 3),
-        Const(5, 3),
-        Subtract(6, 4, 5),
-        Const(7, 4),
-        Divide(8, 4, 7),
-      ],
-      vec![
-        Num(Int(1)),
-        Num(Float(OrderedFloat(2.))),
-        Num(Int(4)),
-        Num(Int(12)),
-        Num(Int(-6)),
-      ]
-    ),
+    program![
+      Const(0, 1),
+      Const(1, 2.),
+      Add(2, 0, 1),
+      Const(3, 4),
+      Multiply(4, 2, 3),
+      Const(5, 12),
+      Subtract(6, 4, 5),
+      Const(7, -6),
+      Divide(8, 4, 7),
+    ],
     (2, 3.),
     (4, 12.),
     (6, 0.),
@@ -440,22 +428,11 @@ mod tests {
 
   simple_register_test!(
     environment,
-    Program::new(
-      vec![Const(0, 0), Bind(0, 0), Lookup(1, 0)],
-      vec![100.into()]
-    ),
+    program![Const(0, 100), Bind(0, 0), Lookup(1, 0)],
     (1, 100)
   );
 
-  simple_register_test!(
-    clear,
-    Program::new(vec![Const(0, 0), Clear(0)], vec![100.into()]),
-    (0, Nil)
-  );
+  simple_register_test!(clear, program![Const(0, 100), Clear(0)], (0, Nil));
 
-  simple_register_test!(
-    copy,
-    Program::new(vec![Const(0, 0), Copy(1, 0)], vec![100.into()]),
-    (1, 100)
-  );
+  simple_register_test!(copy, program![Const(0, 100), Copy(1, 0)], (1, 100));
 }

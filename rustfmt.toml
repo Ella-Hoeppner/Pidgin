@@ -1,2 +1,6 @@
+unstable_features = true
+
 tab_spaces = 2
 max_width = 80
+format_macro_matchers = true
+format_macro_bodies = true
