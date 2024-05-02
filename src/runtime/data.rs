@@ -11,7 +11,7 @@ use ordered_float::OrderedFloat;
 
 use crate::{CoreFnIndex, Instruction};
 
-use super::{vm::SymbolIndex, Error, Result};
+use super::{core_functions::CoreFnId, vm::SymbolIndex, Error, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Num {
@@ -206,7 +206,7 @@ pub enum Value {
   List(Rc<Vec<Value>>),
   Hashmap(Rc<HashMap<Value, Value>>),
   Hashset(Rc<HashSet<Value>>),
-  CoreFn(CoreFnIndex),
+  CoreFn(CoreFnId),
   CompositeFn(Rc<MiniVec<Instruction>>),
   RawVec(MiniVec<Value>),
 }

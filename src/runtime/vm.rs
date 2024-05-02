@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use minivec::{mini_vec, MiniVec};
 
+use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
 use crate::{string_utils::indent_lines, Instruction, Num, Value};
 use Instruction::*;
@@ -250,19 +251,19 @@ impl EvaluationState {
         Apply0(result, f) => {
           // Applies a function of 0 arguments (a thunk)
           let f_value = self.get_register(f).clone();
-          self.frames.push(StackFrame {
-            beginning: self.consumption,
-            return_stack_index: self.register_stack_index(result),
-          });
           match f_value {
-            CoreFn(core_fn_index) => {
-              let core_fn = CORE_FNS[core_fn_index as usize];
-              todo!();
-            }
             CompositeFn(instructions) => {
+              self.frames.push(StackFrame {
+                beginning: self.consumption,
+                return_stack_index: self.register_stack_index(result),
+              });
               for instruction in instructions.iter().cloned().rev() {
                 instruction_stack.push(instruction);
               }
+            }
+            CoreFn(core_fn) => {
+              let core_fn = CORE_FUNCTIONS[core_fn];
+              todo!();
             }
             List(_) | Hashmap(_) | Hashset(_) => {
               return Err(Error::InvalidArity)
@@ -276,16 +277,12 @@ impl EvaluationState {
           // Applies a function of a single argument.
           let f_value = self.get_register(f).clone();
           let arg_value = self.steal_register(arg_and_result);
-          self.frames.push(StackFrame {
-            beginning: self.consumption,
-            return_stack_index: self.register_stack_index(arg_and_result),
-          });
           match f_value {
-            CoreFn(core_fn_index) => {
-              let core_fn = CORE_FNS[core_fn_index as usize];
-              todo!();
-            }
             CompositeFn(instructions) => {
+              self.frames.push(StackFrame {
+                beginning: self.consumption,
+                return_stack_index: self.register_stack_index(arg_and_result),
+              });
               let mut remaining_instructions = instructions.iter().cloned();
               if let Some(Argument(symbol_index)) =
                 remaining_instructions.next()
@@ -301,6 +298,10 @@ impl EvaluationState {
                 instruction_stack.push(instruction);
               }
             }
+            CoreFn(core_fn) => {
+              let core_fn = CORE_FUNCTIONS[core_fn];
+              todo!();
+            }
             List(list) => todo!(),
             Hashmap(map) => todo!(),
             Hashset(set) => todo!(),
@@ -314,16 +315,12 @@ impl EvaluationState {
           let f_value = self.get_register(f).clone();
           let arg_1_value = self.steal_register(arg_1_and_result);
           let arg_2_value = self.get_register(arg_2).clone();
-          self.frames.push(StackFrame {
-            beginning: self.consumption,
-            return_stack_index: self.register_stack_index(arg_1_and_result),
-          });
           match f_value {
-            CoreFn(core_fn_index) => {
-              let core_fn = CORE_FNS[core_fn_index as usize];
-              todo!();
-            }
             CompositeFn(instructions) => {
+              self.frames.push(StackFrame {
+                beginning: self.consumption,
+                return_stack_index: self.register_stack_index(arg_1_and_result),
+              });
               let mut remaining_instructions = instructions.iter().cloned();
               if let Some(Argument(symbol_1_index)) =
                 remaining_instructions.next()
@@ -349,6 +346,10 @@ impl EvaluationState {
                 instruction_stack.push(instruction);
               }
             }
+            CoreFn(core_fn) => {
+              let core_fn = CORE_FUNCTIONS[core_fn];
+              todo!();
+            }
             List(_) | Hashmap(_) | Hashset(_) => {
               return Err(Error::InvalidArity)
             }
@@ -360,20 +361,17 @@ impl EvaluationState {
         ApplyN(args_and_result, f) => {
           // Applies a function of a single argument.
           let f_value = self.get_register(f).clone();
-          if let RawVec(args_vec) = self.steal_register(args_and_result) {
-            self.frames.push(StackFrame {
-              beginning: self.consumption,
-              return_stack_index: self.register_stack_index(args_and_result),
-            });
+          if let RawVec(args_raw_vec) = self.steal_register(args_and_result) {
             match f_value {
-              CoreFn(core_fn_index) => {
-                let core_fn = CORE_FNS[core_fn_index as usize];
-                todo!();
-              }
               CompositeFn(instructions) => {
+                self.frames.push(StackFrame {
+                  beginning: self.consumption,
+                  return_stack_index: self
+                    .register_stack_index(args_and_result),
+                });
                 let mut remaining_instructions =
                   instructions.iter().cloned().into_iter();
-                for (i, arg_value) in args_vec.into_iter().enumerate() {
+                for (i, arg_value) in args_raw_vec.into_iter().enumerate() {
                   if let Some(Argument(symbol_index)) =
                     remaining_instructions.next()
                   {
@@ -388,6 +386,12 @@ impl EvaluationState {
                 for instruction in remaining_instructions.rev() {
                   instruction_stack.push(instruction);
                 }
+              }
+              CoreFn(core_fn_id) => {
+                self.set_register(
+                  args_and_result,
+                  CORE_FUNCTIONS[core_fn_id](args_raw_vec)?,
+                );
               }
               List(list) => todo!(),
               Hashmap(map) => todo!(),
@@ -751,19 +755,14 @@ impl EvaluationState {
   }
 }
 
-fn test_fn(args: &[Value]) -> Result<Value> {
-  Ok(Nil)
-}
-
-const CORE_FNS: [fn(&[Value]) -> Result<Value>; 1] = [test_fn];
-
 #[cfg(test)]
 mod tests {
   use std::rc::Rc;
 
   use super::EvaluationState;
   use crate::{
-    ConstIndex, Instruction::*, Num::*, Program, RegisterIndex, Value::*,
+    runtime::core_functions::CoreFnId, ConstIndex, Instruction::*, Num::*,
+    Program, RegisterIndex, Value::*,
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
@@ -956,6 +955,22 @@ mod tests {
       ApplyN(3, 4),
     ],
     (3, 24)
+  );
+
+  simple_register_test!(
+    apply_n_core_fn_add,
+    program![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      EmptyRawVec(3, 3),
+      StealIntoRawVec(3, 0),
+      StealIntoRawVec(3, 1),
+      StealIntoRawVec(3, 2),
+      Const(4, CoreFn(CoreFnId::Add)),
+      ApplyN(3, 4),
+    ],
+    (3, 6)
   );
 
   simple_register_test!(

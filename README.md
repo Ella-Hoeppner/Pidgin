@@ -4,7 +4,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 Compiler/Runtime stuff:
 * write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
   * not sure exactly how to do this...
-* implement `CoreFn` support
 * start work on IR
   * This representation will simplify some things relative to the bytecode:
     * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
