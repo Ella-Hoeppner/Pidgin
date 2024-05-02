@@ -17,6 +17,9 @@ pub enum Instruction {
   // Function control flow
   Argument(SymbolIndex),
   Return(R),
+  EmptyArgs(R),
+  CloneArg(R, R),
+  StealArg(R, R),
   Apply0(R, R),
   Apply1(R, R),
   Apply2(R, R, R),

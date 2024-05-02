@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use minivec::mini_vec;
+
 use crate::string_utils::pad;
 use crate::{string_utils::indent_lines, Value};
 
@@ -179,6 +181,12 @@ impl EvaluationState {
   fn get_stack(&self, index: StackIndex) -> &Value {
     self.get_stack_usize(index as usize)
   }
+  fn get_stack_mut_usize(&mut self, index: usize) -> &mut Value {
+    &mut self.stack[index]
+  }
+  fn get_stack_mut(&mut self, index: StackIndex) -> &mut Value {
+    self.get_stack_mut_usize(index as usize)
+  }
   fn register_stack_index(&self, register: RegisterIndex) -> StackIndex {
     self.current_stack_frame_beginning() + register as StackIndex
   }
@@ -206,6 +214,14 @@ impl EvaluationState {
     }
     //
     self.get_stack(self.register_stack_index(register))
+  }
+  fn get_register_mut(&mut self, register: RegisterIndex) -> &mut Value {
+    //debug
+    if register as usize >= self.consumption as usize {
+      panic!("trying to access register that hasn't been set yet")
+    }
+    //
+    self.get_stack_mut(self.register_stack_index(register))
   }
 }
 
@@ -264,6 +280,25 @@ pub fn evaluate(
         }
         state.consumption = finished_stack_frame.beginning;
         state.set_stack(finished_stack_frame.return_stack_index, return_value);
+      }
+      I::EmptyArgs(result) => {
+        state.set_register(result, Value::Args(mini_vec![]))
+      }
+      I::CloneArg(args, new_arg) => {
+        let new_arg_value = state.get_register(new_arg).clone();
+        if let Value::Args(args_vec) = state.get_register_mut(args) {
+          args_vec.push(new_arg_value);
+        } else {
+          panic!("CloneArg called with non-Args value")
+        }
+      }
+      I::StealArg(args, new_arg) => {
+        let new_arg_value = state.steal_register(new_arg);
+        if let Value::Args(args_vec) = state.get_register_mut(args) {
+          args_vec.push(new_arg_value);
+        } else {
+          panic!("CloneArg called with non-Args value")
+        }
       }
       I::Apply0(result, f) => {
         // Applies a function of 0 arguments (a thunk)
@@ -378,7 +413,48 @@ pub fn evaluate(
           }
         }
       }
-      I::ApplyN(args_and_result, f) => todo!(),
+      I::ApplyN(args_and_result, f) => {
+        // Applies a function of a single argument.
+        let f_value = state.get_register(f).clone();
+        if let Value::Args(args_vec) = state.steal_register(args_and_result) {
+          state.frames.push(StackFrame {
+            beginning: state.consumption,
+            return_stack_index: state.register_stack_index(args_and_result),
+          });
+          match f_value {
+            Value::CoreFn(core_fn_index) => {
+              let core_fn = CORE_FNS[core_fn_index as usize];
+              todo!();
+            }
+            Value::CompositeFn(instructions) => {
+              let mut remaining_instructions = instructions.into_iter();
+              for (i, arg_value) in args_vec.into_iter().enumerate() {
+                if let Some(I::Argument(symbol_index)) =
+                  remaining_instructions.next()
+                {
+                  state.environment.insert(symbol_index, arg_value);
+                } else {
+                  panic!(
+                    "CompositeFn called by ApplyN with wrong number of\
+                    arguments"
+                  )
+                }
+              }
+              for instruction in remaining_instructions.rev() {
+                instruction_stack.push(instruction);
+              }
+            }
+            Value::List(list) => todo!(),
+            Value::Map(list) => todo!(),
+            Value::Set(list) => todo!(),
+            _ => {
+              return Err(Error::CantApply);
+            }
+          }
+        } else {
+          panic!("ApplyN called with non-Args value");
+        }
+      }
       I::Apply0AndReturn(f) => todo!(),
       I::Apply1AndReturn(f, args) => {
         // This instruction is for supporting tail-call elimination. It takes a
@@ -719,7 +795,7 @@ mod tests {
   simple_register_test!(copy, program![Const(0, 100), Copy(1, 0)], (1, 100));
 
   #[test]
-  fn apply0_constant_function() {
+  fn apply_0_constant_function() {
     run_and_check_registers!(
       Program::new(
         vec![Const(0, 0), Apply0(1, 0)],
@@ -730,7 +806,7 @@ mod tests {
   }
 
   simple_register_test!(
-    apply1_square_function,
+    apply_1_square_function,
     program![
       Const(0, 10),
       Const(
@@ -748,7 +824,7 @@ mod tests {
   );
 
   #[test]
-  fn apply1_double_square_nested_function() {
+  fn apply_1_double_square_nested_function() {
     run_and_check_registers!(
       Program::new(
         vec![Const(0, 0), Const(1, 2), Apply1(0, 1)],
@@ -775,7 +851,7 @@ mod tests {
   }
 
   simple_register_test!(
-    apply2_square_product_function,
+    apply_2_square_product_function,
     program![
       Const(0, 2),
       Const(1, 3),
@@ -794,5 +870,48 @@ mod tests {
       Apply2(0, 2, 1),
     ],
     (0, 36)
+  );
+
+  simple_register_test!(
+    clone_arg,
+    program![EmptyArgs(0), Const(1, "Hello!"), CloneArg(0, 1),],
+    (0, Args(mini_vec!["Hello!".into()])),
+    (1, "Hello!")
+  );
+
+  simple_register_test!(
+    steal_arg,
+    program![EmptyArgs(0), Const(1, "Hello!"), StealArg(0, 1),],
+    (0, Args(mini_vec!["Hello!".into()])),
+    (1, Nil)
+  );
+
+  simple_register_test!(
+    apply_n_triple_product_function,
+    program![
+      EmptyArgs(0),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, 4),
+      StealArg(0, 1),
+      StealArg(0, 2),
+      StealArg(0, 3),
+      Const(
+        4,
+        CompositeFn(mini_vec![
+          Argument(0),
+          Argument(1),
+          Argument(2),
+          Lookup(0, 0),
+          Lookup(1, 1),
+          Lookup(2, 2),
+          Multiply(0, 1, 0),
+          Multiply(0, 2, 0),
+          Return(0)
+        ])
+      ),
+      ApplyN(0, 4),
+    ],
+    (0, 24)
   );
 }

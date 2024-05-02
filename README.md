@@ -3,8 +3,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 VM stuff:
 * make `program!` macro capable of handling `Const` instructions inside composite functions
-* implement `ApplyN`
-  * this will need some supplementary instructions to pack the arguments into a vector...
+* think about how to support multi-arity composite functions
 * implement `Apply<X>AndReturn` instructions
 * start work on an optimizer
   * for now this should just find occurrences of `Apply<X>` followed by `Return`, and convert them into `Apply<X>AndReturn`

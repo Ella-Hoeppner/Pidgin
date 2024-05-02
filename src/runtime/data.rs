@@ -208,6 +208,7 @@ pub enum Value {
   Set(Rc<HashSet<Value>>),
   CoreFn(CoreFnIndex),
   CompositeFn(MiniVec<Instruction>),
+  Args(MiniVec<Value>),
 }
 
 impl Hash for Value {
@@ -278,6 +279,15 @@ impl Value {
         format!("fn({})", instructions.len())
       }
       Value::CoreFn(_) => todo!(),
+      Value::Args(args) => format!(
+        "args({})[{}]",
+        args.len(),
+        args
+          .iter()
+          .map(|v| v.description())
+          .collect::<Vec<String>>()
+          .join(", ")
+      ),
     }
   }
 }
