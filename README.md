@@ -2,8 +2,14 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 VM stuff:
-* implement instructions and tests
-* support functions having multiple arguments
+* make `program!` macro capable of handling `Const` instructions inside composite functions
+* implement `ApplyN`
+  * this will need some supplementary instructions to pack the arguments into a vector...
+* implement `Apply<X>AndReturn` instructions
+* start work on an optimizer
+  * for now this should just find occurrences of `Apply<X>` followed by `Return`, and convert them into `Apply<X>AndReturn`
+  * implement tests for these based on equality checking between programs
+* implement `CoreFn` support
 * figure out what to do about laziness...
   * unsure of how to represent this.
     * Should I go for the same approach as Quoot?
@@ -13,9 +19,8 @@ VM stuff:
       * this approach felt pretty messy
     * Maybe I could have an `Iter` type that mostly just wraps rust's iterator system? Though it would probably still need to be composed of both a `vec` of already realized values and an `iter` that can produce the rest of the values
       * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
-* how is `apply` going to work on built-in operations? I guess for each operation there needs a corresponding function that does runtime arity checking and dispatch?
-  * This makes sense I guess. This means that there can be slightly different logic for the `apply`d version, which can be good in some cases like `(apply + x)`, where the dynamically dispatched function version of `+` can do a rust-level reduce to sum all the elements of `x`, while expressions that use `+` normally can just be compiled into a bunch of binary `Add` instructions.
 * think about representing continuations
+* implement remaining instructions and tests
 
 Language stuff:
 * Finish GSE (in its repo)
@@ -61,3 +66,10 @@ Language stuff:
     }
     ```
   * This should fit in just 9 bytes, so it wouldn't make `Value` any bigger. Getting all the implementation details right to be as well-optimized as `Vec` or `MiniVec` might be pretty difficult tho.
+* Distinguish between multi-use constants and single-use constants
+  * if a constant is known to be single-use, it could just be swapped with `Nil` in the constants stack rather than needing to be cloned when it's used
+  * this could be especially important for functions with many instructions inside
+  * this will require some static analysis, but probably nothing to crazy
+    * will need to be recursive to fully catch all places where this optimization could be done, e.g. a constant that's used only once inside a function that's used only once an be made single-use, but you'd need to identify the function as single-use first to notice that
+  * if the same constant is used multiple times in different places, it would actually be best to *not* make that a single constant that's used multiple times but instead a bunch of different copies of the same constant, such that each of them can be taken as single-use
+  * anything declared globally should be inelligible for being declared single-use, since it could always be used an indeterminite number of times in the future by the repl

@@ -265,7 +265,31 @@ pub fn evaluate(
         state.consumption = finished_stack_frame.beginning;
         state.set_stack(finished_stack_frame.return_stack_index, return_value);
       }
-      I::Apply0(result, f) => todo!(),
+      I::Apply0(result, f) => {
+        // Applies a function of 0 arguments (a thunk)
+        let f_value = state.get_register(f).clone();
+        state.frames.push(StackFrame {
+          beginning: state.consumption,
+          return_stack_index: state.register_stack_index(result),
+        });
+        match f_value {
+          Value::CoreFn(core_fn_index) => {
+            let core_fn = CORE_FNS[core_fn_index as usize];
+            todo!();
+          }
+          Value::CompositeFn(instructions) => {
+            for instruction in instructions.into_iter().rev() {
+              instruction_stack.push(instruction);
+            }
+          }
+          Value::List(list) => todo!(),
+          Value::Map(list) => todo!(),
+          Value::Set(list) => todo!(),
+          _ => {
+            return Err(Error::CantApply);
+          }
+        }
+      }
       I::Apply1(arg_and_result, f) => {
         // Applies a function of a single argument.
         let f_value = state.get_register(f).clone();
@@ -694,6 +718,17 @@ mod tests {
 
   simple_register_test!(copy, program![Const(0, 100), Copy(1, 0)], (1, 100));
 
+  #[test]
+  fn apply0_constant_function() {
+    run_and_check_registers!(
+      Program::new(
+        vec![Const(0, 0), Apply0(1, 0)],
+        vec![CompositeFn(mini_vec![Const(0, 1), Return(0)]), 5.into()],
+      ),
+      (1, 5)
+    );
+  }
+
   simple_register_test!(
     apply1_square_function,
     program![
@@ -714,27 +749,29 @@ mod tests {
 
   #[test]
   fn apply1_double_square_nested_function() {
-    let p = Program::new(
-      vec![Const(0, 0), Const(1, 2), Apply1(0, 1)],
-      vec![
-        10.into(),
-        CompositeFn(mini_vec![
-          Argument(0),
-          Lookup(0, 0),
-          Multiply(0, 0, 0),
-          Return(0)
-        ]),
-        CompositeFn(mini_vec![
-          Argument(0),
-          Lookup(0, 0),
-          Const(1, 1),
-          Apply1(0, 1),
-          Apply1(0, 1),
-          Return(0)
-        ]),
-      ],
+    run_and_check_registers!(
+      Program::new(
+        vec![Const(0, 0), Const(1, 2), Apply1(0, 1)],
+        vec![
+          10.into(),
+          CompositeFn(mini_vec![
+            Argument(0),
+            Lookup(0, 0),
+            Multiply(0, 0, 0),
+            Return(0)
+          ]),
+          CompositeFn(mini_vec![
+            Argument(0),
+            Lookup(0, 0),
+            Const(1, 1),
+            Apply1(0, 1),
+            Apply1(0, 1),
+            Return(0)
+          ]),
+        ],
+      ),
+      (0, 10000)
     );
-    run_and_check_registers!(p, (0, 10000));
   }
 
   simple_register_test!(
