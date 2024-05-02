@@ -7,7 +7,8 @@ use std::fmt::Debug;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Error {
   ArgumentNotNum,
-  ArgumentNotInto,
+  ArgumentNotInt,
+  ArgumentNotList,
   NotYetImplemented,
   CantCastToNum,
   CantApply,

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use minivec::{mini_vec, MiniVec};
 
@@ -424,9 +425,6 @@ impl EvaluationState {
         If(condition_and_result, thunk_1, thunk_2) => todo!(),
         Partial(result, f, arg) => todo!(),
         Compose(result, f_1, f_2) => todo!(),
-        Filter(result, f, collection) => todo!(),
-        Map(result, f, collection) => todo!(),
-        MultiListMap(result, f, collections) => todo!(),
         FindSome(result, f, collection) => todo!(),
         ReduceWithoutInitialValue(result, f, collection) => todo!(),
         ReduceWithInitialValue(initial_value_and_result, f, collection) => {
@@ -574,36 +572,130 @@ impl EvaluationState {
         Or(result, bool_1, bool_2) => todo!(),
         Xor(result, bool_1, bool_2) => todo!(),
         IsEmpty(result, collection) => todo!(),
+        First(result, collection) => self.set_register(
+          result,
+          match self.get_register(collection) {
+            List(list) => list.first().cloned().unwrap_or(Nil),
+            Hashset(set) => set.iter().next().cloned().unwrap_or(Nil),
+            Hashmap(hashmap) => hashmap
+              .iter()
+              .next()
+              .map(|(key, value)| vec![key.clone(), value.clone()].into())
+              .unwrap_or(Nil),
+            Nil => Nil,
+            _ => return Err(Error::ArgumentNotList),
+          },
+        ),
         Count(result, collection) => todo!(),
         Flatten(result, collection) => todo!(),
-        Remove(result, collection, key) => todo!(),
-        Set(value_and_result, collection, key) => todo!(),
-        SetIn(value_and_result, collection, path) => todo!(),
+        Remove(collection, key) => todo!(),
+        Filter(collection, f) => todo!(),
+        Map(collection, f) => todo!(),
+        DoubleMap(collection, other_collection, f) => {
+          // Special case of multi-collection map with just 2 collections.
+          // This special case comes up often enough (e.g. mapping with
+          // `(range)` as a second argument for indexing) that the optimization
+          // from having this instruction seems worthwhile
+          todo!()
+        }
+        MultiCollectionMap(raw_vec_of_collections, f) => todo!(),
+        Set(collection, value, key) => todo!(),
+        SetIn(collection, value, path) => todo!(),
         Get(result, collection, key) => todo!(),
         GetIn(result, collection, path) => todo!(),
-        Update(f_and_result, collection, key) => todo!(),
-        UpdateIn(f_and_result, collection, path) => todo!(),
+        Update(collection, f, key) => todo!(),
+        UpdateIn(collection, f, path) => todo!(),
         MinKey(result, collection, f) => todo!(),
         MaxKey(result, collection, f) => todo!(),
-        First(result, collection) => todo!(),
-        Sort(result, collection) => todo!(),
-        SortBy(result, collection, f) => todo!(),
-        EmptyList(result) => todo!(),
+        Push(collection, value) => {
+          let value = self.get_register(value).clone();
+          let collection_value = self.steal_register(collection);
+          match collection_value {
+            List(mut list_value) => {
+              self.set_register(
+                collection,
+                if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
+                  owned_list_value.push(value);
+                  list_value
+                } else {
+                  let mut list_value_clone = (*list_value).clone();
+                  list_value_clone.push(value);
+                  Rc::new(list_value_clone)
+                },
+              );
+            }
+            Hashmap(hashmap) => todo!(),
+            Hashset(set) => todo!(),
+            Nil => self.set_register(collection, Nil),
+            _ => return Err(Error::ArgumentNotList),
+          };
+        }
+        Sort(collection) => todo!(),
+        SortBy(collection, f) => todo!(),
+        EmptyList(result) => {
+          self.set_register(result, Vec::new());
+        }
         ListFromRawVec(result) => todo!(),
-        Last(result, list) => todo!(),
+        Last(result, list) => self.set_register(
+          result,
+          match self.get_register(list) {
+            List(list) => list.last().cloned().unwrap_or(Nil),
+            Nil => Nil,
+            _ => return Err(Error::ArgumentNotList),
+          },
+        ),
+        Rest(list) => {
+          let list_value = self.steal_register(list);
+          match list_value {
+            List(mut list_value) => {
+              self.set_register(
+                list,
+                if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
+                  owned_list_value.remove(0);
+                  list_value
+                } else {
+                  let mut list_value_clone = (*list_value).clone();
+                  list_value_clone.remove(0);
+                  Rc::new(list_value_clone)
+                },
+              );
+            }
+            Nil => self.set_register(list, Nil),
+            _ => return Err(Error::ArgumentNotList),
+          };
+        }
+        ButLast(list) => {
+          let list_value = self.steal_register(list);
+          match list_value {
+            List(mut list_value) => {
+              self.set_register(
+                list,
+                if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
+                  owned_list_value.pop();
+                  list_value
+                } else {
+                  let mut list_value_clone = (*list_value).clone();
+                  list_value_clone.pop();
+                  Rc::new(list_value_clone)
+                },
+              );
+            }
+            Nil => self.set_register(list, Nil),
+            _ => return Err(Error::ArgumentNotList),
+          };
+        }
         Nth(result, list, n) => {
           // While `Get` returns nil for a list when index is OOB, `Nth` throws
           todo!()
         }
         NthFromLast(result, list, n) => todo!(),
-        Cons(result, list, value) => todo!(),
-        Push(result, list, value) => todo!(),
-        Concat(result, list_1, list_2) => todo!(),
-        Take(result, list, n) => todo!(),
-        Drop(result, list, n) => todo!(),
-        Reverse(result, list) => todo!(),
-        Distinct(result, list) => todo!(),
-        Sub(start_index_and_result, list, end_index) => todo!(),
+        Cons(list, value) => todo!(),
+        Concat(list, other_list) => todo!(),
+        Take(list, n) => todo!(),
+        Drop(list, n) => todo!(),
+        Reverse(list) => todo!(),
+        Distinct(list) => todo!(),
+        Sub(list, start_index, end_index) => todo!(),
         Partition(result, list, size) => todo!(),
         SteppedPartition(step_and_return, list, size) => todo!(),
         Pad(value_and_result, list, size) => todo!(),
@@ -616,6 +708,7 @@ impl EvaluationState {
         MergeWith(merge_f_and_result, map_1, map_2) => todo!(),
         MapKeys(result, f, map) => todo!(),
         MapValues(result, f, map) => todo!(),
+        SelectKeys(map, keys) => todo!(),
         EmptySet(result) => todo!(),
         Union(result, set_1, set_2) => todo!(),
         Intersection(result, set_1, set_2) => todo!(),
@@ -863,5 +956,42 @@ mod tests {
       ApplyN(3, 4),
     ],
     (3, 24)
+  );
+
+  simple_register_test!(
+    list_first_last,
+    program![Const(0, vec![1.into(), 2.into()]), First(1, 0), Last(2, 0)],
+    (1, 1),
+    (2, 2)
+  );
+
+  simple_register_test!(
+    list_push,
+    program![EmptyList(0), Const(1, "test"), Push(0, 1)],
+    (0, List(Rc::new(vec!["test".into()])))
+  );
+
+  simple_register_test!(
+    list_rest,
+    program![
+      Const(0, List(Rc::new(vec![1.into(), 2.into()]))),
+      Rest(0),
+      Const(1, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
+      Rest(1)
+    ],
+    (0, List(Rc::new(vec![2.into()]))),
+    (1, List(Rc::new(vec![2.into(), 3.into()])))
+  );
+
+  simple_register_test!(
+    list_butlast,
+    program![
+      Const(0, List(Rc::new(vec![1.into(), 2.into()]))),
+      ButLast(0),
+      Const(1, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
+      ButLast(1)
+    ],
+    (0, List(Rc::new(vec![1.into()]))),
+    (1, List(Rc::new(vec![1.into(), 2.into()])))
   );
 }

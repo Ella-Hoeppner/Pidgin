@@ -38,12 +38,9 @@ pub enum Instruction {
   When(R, R, R),
   If(R, R, R),
 
-  // Higher-order functions
+  // Functions manipulation
   Partial(R, R, R),
   Compose(R, R, R),
-  Filter(R, R, R),
-  Map(R, R, R),
-  MultiListMap(R, R, R),
   FindSome(R, R, R),
   ReduceWithoutInitialValue(R, R, R),
   ReduceWithInitialValue(R, R, R),
@@ -101,9 +98,14 @@ pub enum Instruction {
 
   // List + Map + Set manipulation
   IsEmpty(R, R),
+  First(R, R),
   Count(R, R),
   Flatten(R, R),
-  Remove(R, R, R),
+  Remove(R, R),
+  Filter(R, R),
+  Map(R, R),
+  DoubleMap(R, R, R),
+  MultiCollectionMap(R, R),
 
   // List + Map manipulation
   Set(R, R, R),
@@ -116,23 +118,24 @@ pub enum Instruction {
   MaxKey(R, R, R),
 
   // List + Set manipulation
-  First(R, R),
-  Sort(R, R),
-  SortBy(R, R, R),
+  Push(R, R),
+  Sort(R),
+  SortBy(R, R),
 
   // List manipulation (most apply to strings as well)
   EmptyList(R),
   ListFromRawVec(R),
   Last(R, R),
+  Rest(R),
+  ButLast(R),
   Nth(R, R, R),
   NthFromLast(R, R, R),
-  Cons(R, R, R),
-  Push(R, R, R),
-  Concat(R, R, R),
-  Take(R, R, R),
-  Drop(R, R, R),
-  Reverse(R, R),
-  Distinct(R, R),
+  Cons(R, R),
+  Concat(R, R),
+  Take(R, R),
+  Drop(R, R),
+  Reverse(R),
+  Distinct(R),
   Sub(R, R, R),
   Partition(R, R, R),
   SteppedPartition(R, R, R),
@@ -148,6 +151,7 @@ pub enum Instruction {
   MergeWith(R, R, R),
   MapKeys(R, R, R),
   MapValues(R, R, R),
+  SelectKeys(R, R),
 
   // Set manipulation
   EmptySet(R),

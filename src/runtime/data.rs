@@ -91,7 +91,7 @@ impl Num {
         if i as f64 == **f {
           Ok(i)
         } else {
-          Err(Error::ArgumentNotInto)
+          Err(Error::ArgumentNotInt)
         }
       }
     }
@@ -336,5 +336,15 @@ impl From<String> for Value {
 impl From<&str> for Value {
   fn from(s: &str) -> Self {
     Str(Rc::new(s.to_string()))
+  }
+}
+impl From<Vec<Value>> for Value {
+  fn from(values: Vec<Value>) -> Self {
+    List(Rc::new(values))
+  }
+}
+impl From<Rc<Vec<Value>>> for Value {
+  fn from(values: Rc<Vec<Value>>) -> Self {
+    List(values)
   }
 }
