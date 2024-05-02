@@ -6,7 +6,6 @@ pub enum Instruction {
   DebugPrint(u8),
 
   // Register manipulation
-  NoOp,
   Clear(R),
   Copy(R, R),
   Const(R, ConstIndex),
@@ -17,8 +16,8 @@ pub enum Instruction {
   // Function control flow
   Argument(SymbolIndex),
   Return(R),
-  EmptyArgs(R),
-  CloneArg(R, R),
+  StartArgs(R, u8),
+  CopyArg(R, R),
   StealArg(R, R),
   Apply0(R, R),
   Apply1(R, R),
@@ -43,7 +42,7 @@ pub enum Instruction {
   Filter(R, R, R),
   Map(R, R, R),
   MultiListMap(R, R, R),
-  Some(R, R, R),
+  FindSome(R, R, R),
   ReduceWithoutInitialValue(R, R, R),
   ReduceWithInitialValue(R, R, R),
   Memoize(R, R),

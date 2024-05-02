@@ -11,5 +11,6 @@ pub enum Error {
   NotYetImplemented,
   CantCastToNum,
   CantApply,
+  InvalidArity,
 }
 pub type Result<T> = std::result::Result<T, Error>;

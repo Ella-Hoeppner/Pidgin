@@ -3,11 +3,12 @@ use std::collections::HashMap;
 use minivec::mini_vec;
 
 use crate::string_utils::pad;
-use crate::{string_utils::indent_lines, Value};
+use crate::{string_utils::indent_lines, Instruction, Num, Value};
+use Instruction::*;
+use Num::*;
+use Value::*;
 
-use crate::runtime::instructions::Instruction;
-
-use super::{data::Num, Error, Result};
+use super::{Error, Result};
 
 const STACK_CAPACITY: usize = 30000; //u16::MAX as usize + 1;
 
@@ -53,7 +54,7 @@ pub struct EvaluationState {
 
 impl EvaluationState {
   pub fn new() -> Self {
-    const NIL: Value = Value::Nil;
+    const NIL: Value = Nil;
     Self {
       stack: [NIL; STACK_CAPACITY],
       frames: vec![StackFrame::root()],
@@ -105,45 +106,6 @@ impl EvaluationState {
       })
       .collect::<Vec<String>>()
       .join("\n")
-    /*format!(
-      "frame count:              {}\n\
-       current frame beginning:  {}\n\
-       consumption:              {}\n\
-       values:\n\
-       {}",
-      self.frames.len() - 1,
-      self.current_stack_frame_beginning(),
-      self.consumption,
-      self
-        .frames
-        .iter()
-        .map(|frame| frame.beginning)
-        .chain(std::iter::once(self.consumption))
-        .collect::<Vec<StackIndex>>()
-        .windows(2)
-        .enumerate()
-        .map(|(frame_index, window)| {
-          let start = window[0];
-          let end = window[1];
-          format!(
-            "{}\n{}",
-            pad(
-              34,
-              '-',
-              format!("---------- {}: ({} - {}) ", frame_index, start, end,)
-            ),
-            indent_lines(
-              11,
-              (start..end)
-                .map(|i| format!("{}: {}", i, self.get_stack(i).description()))
-                .collect::<Vec<String>>()
-                .join("\n")
-            ),
-          )
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
-    )*/
   }
   fn describe_environment(&self) -> String {
     let mut bindings: Vec<_> = self.environment.iter().collect();
@@ -170,7 +132,7 @@ impl EvaluationState {
     self.swap_stack_usize(index as usize, value)
   }
   fn steal_stack_usize(&mut self, index: usize) -> Value {
-    self.swap_stack_usize(index, Value::Nil)
+    self.swap_stack_usize(index, Nil)
   }
   fn steal_stack(&mut self, index: StackIndex) -> Value {
     self.steal_stack_usize(index as usize)
@@ -226,7 +188,7 @@ impl EvaluationState {
 }
 
 fn test_fn(args: &[Value]) -> Result<Value> {
-  Ok(Value::Nil)
+  Ok(Nil)
 }
 
 const CORE_FNS: [fn(&[Value]) -> Result<Value>; 1] = [test_fn];
@@ -238,9 +200,8 @@ pub fn evaluate(
   let mut instruction_stack = program.instructions.clone();
   instruction_stack.reverse();
   while let Some(instruction) = instruction_stack.pop() {
-    type I = Instruction;
     match instruction {
-      I::DebugPrint(id) => {
+      DebugPrint(id) => {
         println!(
           "{}\n\
            stack:\n{}\n\n\n\
@@ -251,56 +212,54 @@ pub fn evaluate(
           indent_lines(2, state.describe_environment())
         );
       }
-      I::NoOp => {
-        println!(
-          "Instruction::NoOp called! this probably shouldn't be happening :)"
-        )
-      }
-      I::Clear(register) => state.set_register(register, Value::Nil),
-      I::Copy(result, value) => {
+      Clear(register) => state.set_register(register, Nil),
+      Copy(result, value) => {
         state.set_register(result, state.get_register(value).clone())
       }
-      I::Const(result, const_index) => {
+      Const(result, const_index) => {
         state.set_register(
           result,
           program.constants[const_index as usize].clone(),
         );
       }
-      I::Print(value) => {
+      Print(value) => {
         println!("{}", state.get_register(value).description())
       }
-      I::Argument(SymbolIndex) => {
+      Argument(SymbolIndex) => {
         panic!("Instruction::Argument called, this should never happen")
       }
-      I::Return(value) => {
+      Return(value) => {
         let return_value = state.get_register(value).clone();
         let finished_stack_frame = state.frames.pop().unwrap();
         for i in finished_stack_frame.beginning..state.consumption {
-          state.set_stack(i, Value::Nil);
+          state.set_stack(i, Nil);
         }
         state.consumption = finished_stack_frame.beginning;
         state.set_stack(finished_stack_frame.return_stack_index, return_value);
       }
-      I::EmptyArgs(result) => {
-        state.set_register(result, Value::Args(mini_vec![]))
+      StartArgs(result, _arg_count) => {
+        // The second argument to this instruction is a u8 describing the number
+        // of arguments to this function. This isn't used at runtime, but it
+        // exists to give the compiler useful information during optimization
+        state.set_register(result, Args(mini_vec![]))
       }
-      I::CloneArg(args, new_arg) => {
+      CopyArg(args, new_arg) => {
         let new_arg_value = state.get_register(new_arg).clone();
-        if let Value::Args(args_vec) = state.get_register_mut(args) {
+        if let Args(args_vec) = state.get_register_mut(args) {
           args_vec.push(new_arg_value);
         } else {
-          panic!("CloneArg called with non-Args value")
+          panic!("CopyArg called with non-Args value")
         }
       }
-      I::StealArg(args, new_arg) => {
+      StealArg(args, new_arg) => {
         let new_arg_value = state.steal_register(new_arg);
-        if let Value::Args(args_vec) = state.get_register_mut(args) {
+        if let Args(args_vec) = state.get_register_mut(args) {
           args_vec.push(new_arg_value);
         } else {
-          panic!("CloneArg called with non-Args value")
+          panic!("CopyArg called with non-Args value")
         }
       }
-      I::Apply0(result, f) => {
+      Apply0(result, f) => {
         // Applies a function of 0 arguments (a thunk)
         let f_value = state.get_register(f).clone();
         state.frames.push(StackFrame {
@@ -308,24 +267,22 @@ pub fn evaluate(
           return_stack_index: state.register_stack_index(result),
         });
         match f_value {
-          Value::CoreFn(core_fn_index) => {
+          CoreFn(core_fn_index) => {
             let core_fn = CORE_FNS[core_fn_index as usize];
             todo!();
           }
-          Value::CompositeFn(instructions) => {
+          CompositeFn(instructions) => {
             for instruction in instructions.into_iter().rev() {
               instruction_stack.push(instruction);
             }
           }
-          Value::List(list) => todo!(),
-          Value::Map(list) => todo!(),
-          Value::Set(list) => todo!(),
+          List(_) | Hashmap(_) | Hashset(_) => return Err(Error::InvalidArity),
           _ => {
             return Err(Error::CantApply);
           }
         }
       }
-      I::Apply1(arg_and_result, f) => {
+      Apply1(arg_and_result, f) => {
         // Applies a function of a single argument.
         let f_value = state.get_register(f).clone();
         let arg_value = state.steal_register(arg_and_result);
@@ -334,14 +291,13 @@ pub fn evaluate(
           return_stack_index: state.register_stack_index(arg_and_result),
         });
         match f_value {
-          Value::CoreFn(core_fn_index) => {
+          CoreFn(core_fn_index) => {
             let core_fn = CORE_FNS[core_fn_index as usize];
             todo!();
           }
-          Value::CompositeFn(instructions) => {
+          CompositeFn(instructions) => {
             let mut remaining_instructions = instructions.into_iter();
-            if let Some(I::Argument(symbol_index)) =
-              remaining_instructions.next()
+            if let Some(Argument(symbol_index)) = remaining_instructions.next()
             {
               state.environment.insert(symbol_index, arg_value.clone());
             } else {
@@ -353,15 +309,15 @@ pub fn evaluate(
               instruction_stack.push(instruction);
             }
           }
-          Value::List(list) => todo!(),
-          Value::Map(list) => todo!(),
-          Value::Set(list) => todo!(),
+          List(list) => todo!(),
+          Hashmap(map) => todo!(),
+          Hashset(set) => todo!(),
           _ => {
             return Err(Error::CantApply);
           }
         }
       }
-      I::Apply2(arg_1_and_result, f, arg_2) => {
+      Apply2(arg_1_and_result, f, arg_2) => {
         // Applies a function of 2 arguments.
         let f_value = state.get_register(f).clone();
         let arg_1_value = state.steal_register(arg_1_and_result);
@@ -371,13 +327,13 @@ pub fn evaluate(
           return_stack_index: state.register_stack_index(arg_1_and_result),
         });
         match f_value {
-          Value::CoreFn(core_fn_index) => {
+          CoreFn(core_fn_index) => {
             let core_fn = CORE_FNS[core_fn_index as usize];
             todo!();
           }
-          Value::CompositeFn(instructions) => {
+          CompositeFn(instructions) => {
             let mut remaining_instructions = instructions.into_iter();
-            if let Some(I::Argument(symbol_1_index)) =
+            if let Some(Argument(symbol_1_index)) =
               remaining_instructions.next()
             {
               state
@@ -389,7 +345,7 @@ pub fn evaluate(
                  Apply2)"
               )
             }
-            if let Some(I::Argument(symbol_2_index)) =
+            if let Some(Argument(symbol_2_index)) =
               remaining_instructions.next()
             {
               state
@@ -405,31 +361,29 @@ pub fn evaluate(
               instruction_stack.push(instruction);
             }
           }
-          Value::List(list) => todo!(),
-          Value::Map(list) => todo!(),
-          Value::Set(list) => todo!(),
+          List(_) | Hashmap(_) | Hashset(_) => return Err(Error::InvalidArity),
           _ => {
             return Err(Error::CantApply);
           }
         }
       }
-      I::ApplyN(args_and_result, f) => {
+      ApplyN(args_and_result, f) => {
         // Applies a function of a single argument.
         let f_value = state.get_register(f).clone();
-        if let Value::Args(args_vec) = state.steal_register(args_and_result) {
+        if let Args(args_vec) = state.steal_register(args_and_result) {
           state.frames.push(StackFrame {
             beginning: state.consumption,
             return_stack_index: state.register_stack_index(args_and_result),
           });
           match f_value {
-            Value::CoreFn(core_fn_index) => {
+            CoreFn(core_fn_index) => {
               let core_fn = CORE_FNS[core_fn_index as usize];
               todo!();
             }
-            Value::CompositeFn(instructions) => {
+            CompositeFn(instructions) => {
               let mut remaining_instructions = instructions.into_iter();
               for (i, arg_value) in args_vec.into_iter().enumerate() {
-                if let Some(I::Argument(symbol_index)) =
+                if let Some(Argument(symbol_index)) =
                   remaining_instructions.next()
                 {
                   state.environment.insert(symbol_index, arg_value);
@@ -444,9 +398,9 @@ pub fn evaluate(
                 instruction_stack.push(instruction);
               }
             }
-            Value::List(list) => todo!(),
-            Value::Map(list) => todo!(),
-            Value::Set(list) => todo!(),
+            List(list) => todo!(),
+            Hashmap(map) => todo!(),
+            Hashset(set) => todo!(),
             _ => {
               return Err(Error::CantApply);
             }
@@ -455,8 +409,8 @@ pub fn evaluate(
           panic!("ApplyN called with non-Args value");
         }
       }
-      I::Apply0AndReturn(f) => todo!(),
-      I::Apply1AndReturn(f, args) => {
+      Apply0AndReturn(f) => todo!(),
+      Apply1AndReturn(f, args) => {
         // This instruction is for supporting tail-call elimination. It takes a
         // function and its arguments just like `Apply`, but before invoking
         // the function it cleans up the current stack frame, so tail-call
@@ -466,247 +420,247 @@ pub fn evaluate(
         // that can actually just be done in an optimization pass?)
         todo!()
       }
-      I::Apply2AndReturn(arg_1_and_result, f, arg_2) => todo!(),
-      I::ApplyNAndReturn(args_and_result, f) => todo!(),
-      I::Lookup(register, symbol_index) => {
+      Apply2AndReturn(arg_1_and_result, f, arg_2) => todo!(),
+      ApplyNAndReturn(args_and_result, f) => todo!(),
+      Lookup(register, symbol_index) => {
         state.set_register(register, state.environment[&symbol_index].clone());
       }
-      I::Bind(symbol_index, register) => {
+      Bind(symbol_index, register) => {
         state
           .environment
           .insert(symbol_index, state.get_register(register).clone());
       }
-      I::When(result, condition, thunk) => todo!(),
-      I::If(condition_and_result, thunk_1, thunk_2) => todo!(),
-      I::Partial(result, f, arg) => todo!(),
-      I::Compose(result, f_1, f_2) => todo!(),
-      I::Filter(result, f, collection) => todo!(),
-      I::Map(result, f, collection) => todo!(),
-      I::MultiListMap(result, f, collections) => todo!(),
-      I::Some(result, f, collection) => todo!(),
-      I::ReduceWithoutInitialValue(result, f, collection) => todo!(),
-      I::ReduceWithInitialValue(initial_value_and_result, f, collection) => {
+      When(result, condition, thunk) => todo!(),
+      If(condition_and_result, thunk_1, thunk_2) => todo!(),
+      Partial(result, f, arg) => todo!(),
+      Compose(result, f_1, f_2) => todo!(),
+      Filter(result, f, collection) => todo!(),
+      Map(result, f, collection) => todo!(),
+      MultiListMap(result, f, collections) => todo!(),
+      FindSome(result, f, collection) => todo!(),
+      ReduceWithoutInitialValue(result, f, collection) => todo!(),
+      ReduceWithInitialValue(initial_value_and_result, f, collection) => {
         todo!()
       }
-      I::Memoize(result, f) => todo!(),
-      I::Constantly(result, value) => todo!(),
-      I::NumericalEqual(result, num_1, num_2) => state.set_register(
+      Memoize(result, f) => todo!(),
+      Constantly(result, value) => todo!(),
+      NumericalEqual(result, num_1, num_2) => state.set_register(
         result,
         match (state.get_register(num_1), state.get_register(num_2)) {
-          (Value::Num(a), Value::Num(b)) => a.numerical_equal(b),
+          (Number(a), Number(b)) => a.numerical_equal(b),
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::IsZero(result, num) => state.set_register(
+      IsZero(result, num) => state.set_register(
         result,
         match state.get_register(num) {
-          Value::Num(Num::Float(f)) => *f == 0.,
-          Value::Num(Num::Int(i)) => *i == 0,
+          Number(Float(f)) => *f == 0.,
+          Number(Int(i)) => *i == 0,
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::IsNan(result, num) => state.set_register(
+      IsNan(result, num) => state.set_register(
         result,
         match state.get_register(num) {
-          Value::Num(Num::Float(f)) => f.is_nan(),
+          Number(Float(f)) => f.is_nan(),
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::IsInf(result, num) => state.set_register(
+      IsInf(result, num) => state.set_register(
         result,
         match state.get_register(num) {
-          Value::Num(Num::Float(f)) => f.is_infinite(),
+          Number(Float(f)) => f.is_infinite(),
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::IsEven(result, num) => state.set_register(
+      IsEven(result, num) => state.set_register(
         result,
         match state.get_register(num) {
-          Value::Num(n) => n.as_int_lossless()? % 2 == 0,
+          Number(n) => n.as_int_lossless()? % 2 == 0,
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::IsOdd(result, num) => state.set_register(
+      IsOdd(result, num) => state.set_register(
         result,
         match state.get_register(num) {
-          Value::Num(n) => n.as_int_lossless()? % 2 == 1,
+          Number(n) => n.as_int_lossless()? % 2 == 1,
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::IsPos(result, num) => state.set_register(
+      IsPos(result, num) => state.set_register(
         result,
         match state.get_register(num) {
-          Value::Num(Num::Float(f)) => **f > 0.,
-          Value::Num(Num::Int(i)) => *i > 0,
+          Number(Float(f)) => **f > 0.,
+          Number(Int(i)) => *i > 0,
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::IsNeg(result, num) => state.set_register(
+      IsNeg(result, num) => state.set_register(
         result,
         match state.get_register(num) {
-          Value::Num(Num::Float(f)) => **f < 0.,
-          Value::Num(Num::Int(i)) => *i < 0,
+          Number(Float(f)) => **f < 0.,
+          Number(Int(i)) => *i < 0,
           _ => return Err(Error::ArgumentNotNum),
         },
       ),
-      I::Inc(result, num) => {
+      Inc(result, num) => {
         state.set_register(result, state.get_register(num).as_num()?.inc())
       }
-      I::Dec(result, num) => {
+      Dec(result, num) => {
         state.set_register(result, state.get_register(num).as_num()?.dec())
       }
-      I::Negate(result, num) => {
+      Negate(result, num) => {
         state.set_register(result, -*state.get_register(num).as_num()?)
       }
-      I::Abs(result, num) => {
+      Abs(result, num) => {
         state.set_register(result, state.get_register(num).as_num()?.abs())
       }
-      I::Floor(result, num) => {
+      Floor(result, num) => {
         state.set_register(result, state.get_register(num).as_num()?.floor())
       }
-      I::Ceil(result, num) => {
+      Ceil(result, num) => {
         state.set_register(result, state.get_register(num).as_num()?.ceil())
       }
-      I::Sqrt(result, num) => state.set_register(
+      Sqrt(result, num) => state.set_register(
         result,
         state.get_register(num).as_num()?.as_float().sqrt(),
       ),
-      I::Exp(result, num) => state.set_register(
+      Exp(result, num) => state.set_register(
         result,
         state.get_register(num).as_num()?.as_float().exp(),
       ),
-      I::Exp2(result, num) => state.set_register(
+      Exp2(result, num) => state.set_register(
         result,
         state.get_register(num).as_num()?.as_float().exp2(),
       ),
-      I::Ln(result, num) => state.set_register(
+      Ln(result, num) => state.set_register(
         result,
         state.get_register(num).as_num()?.as_float().ln(),
       ),
-      I::Log2(result, num) => state.set_register(
+      Log2(result, num) => state.set_register(
         result,
         state.get_register(num).as_num()?.as_float().log2(),
       ),
-      I::Add(result, num_1, num_2) => state.set_register(
+      Add(result, num_1, num_2) => state.set_register(
         result,
         *state.get_register(num_1).as_num()?
           + *state.get_register(num_2).as_num()?,
       ),
-      I::Subtract(result, num_1, num_2) => state.set_register(
+      Subtract(result, num_1, num_2) => state.set_register(
         result,
         *state.get_register(num_1).as_num()?
           - *state.get_register(num_2).as_num()?,
       ),
-      I::Multiply(result, num_1, num_2) => {
+      Multiply(result, num_1, num_2) => {
         state.set_register(
           result,
           *state.get_register(num_1).as_num()?
             * *state.get_register(num_2).as_num()?,
         );
       }
-      I::Divide(result, num_1, num_2) => state.set_register(
+      Divide(result, num_1, num_2) => state.set_register(
         result,
         *state.get_register(num_1).as_num()?
           / *state.get_register(num_2).as_num()?,
       ),
-      I::Pow(result, num_1, num_2) => todo!(),
-      I::Mod(result, num_1, num_2) => todo!(),
-      I::Quot(result, num_1, num_2) => todo!(),
-      I::Min(result, num_1, num_2) => todo!(),
-      I::Max(result, num_1, num_2) => todo!(),
-      I::GreaterThan(result, num_1, num_2) => todo!(),
-      I::GreaterThanOrEqual(result, num_1, num_2) => todo!(),
-      I::LessThan(result, num_1, num_2) => todo!(),
-      I::LessThanOrEqual(result, num_1, num_2) => todo!(),
-      I::Rand(result) => todo!(),
-      I::UpperBoundedRand(result, upper_bound) => todo!(),
-      I::LowerUpperBoundedRand(result, lower_bound, upper_bound) => todo!(),
-      I::RandInt(result, upper_bound) => todo!(),
-      I::LowerBoundedRandInt(result, lower_bound, upper_bound) => todo!(),
-      I::Equal(result, value_1, value_2) => todo!(),
-      I::NotEqual(result, value_1, value_2) => todo!(),
-      I::Not(result, value) => todo!(),
-      I::And(result, bool_1, bool_2) => todo!(),
-      I::Or(result, bool_1, bool_2) => todo!(),
-      I::Xor(result, bool_1, bool_2) => todo!(),
-      I::IsEmpty(result, collection) => todo!(),
-      I::Count(result, collection) => todo!(),
-      I::Flatten(result, collection) => todo!(),
-      I::Remove(result, collection, key) => todo!(),
-      I::Set(value_and_result, collection, key) => todo!(),
-      I::SetIn(value_and_result, collection, path) => todo!(),
-      I::Get(result, collection, key) => todo!(),
-      I::GetIn(result, collection, path) => todo!(),
-      I::Update(f_and_result, collection, key) => todo!(),
-      I::UpdateIn(f_and_result, collection, path) => todo!(),
-      I::MinKey(result, collection, f) => todo!(),
-      I::MaxKey(result, collection, f) => todo!(),
-      I::First(result, collection) => todo!(),
-      I::Sort(result, collection) => todo!(),
-      I::SortBy(result, collection, f) => todo!(),
-      I::EmptyList(result) => todo!(),
-      I::Last(result, list) => todo!(),
-      I::Nth(result, list, n) => {
+      Pow(result, num_1, num_2) => todo!(),
+      Mod(result, num_1, num_2) => todo!(),
+      Quot(result, num_1, num_2) => todo!(),
+      Min(result, num_1, num_2) => todo!(),
+      Max(result, num_1, num_2) => todo!(),
+      GreaterThan(result, num_1, num_2) => todo!(),
+      GreaterThanOrEqual(result, num_1, num_2) => todo!(),
+      LessThan(result, num_1, num_2) => todo!(),
+      LessThanOrEqual(result, num_1, num_2) => todo!(),
+      Rand(result) => todo!(),
+      UpperBoundedRand(result, upper_bound) => todo!(),
+      LowerUpperBoundedRand(result, lower_bound, upper_bound) => todo!(),
+      RandInt(result, upper_bound) => todo!(),
+      LowerBoundedRandInt(result, lower_bound, upper_bound) => todo!(),
+      Equal(result, value_1, value_2) => todo!(),
+      NotEqual(result, value_1, value_2) => todo!(),
+      Not(result, value) => todo!(),
+      And(result, bool_1, bool_2) => todo!(),
+      Or(result, bool_1, bool_2) => todo!(),
+      Xor(result, bool_1, bool_2) => todo!(),
+      IsEmpty(result, collection) => todo!(),
+      Count(result, collection) => todo!(),
+      Flatten(result, collection) => todo!(),
+      Remove(result, collection, key) => todo!(),
+      Set(value_and_result, collection, key) => todo!(),
+      SetIn(value_and_result, collection, path) => todo!(),
+      Get(result, collection, key) => todo!(),
+      GetIn(result, collection, path) => todo!(),
+      Update(f_and_result, collection, key) => todo!(),
+      UpdateIn(f_and_result, collection, path) => todo!(),
+      MinKey(result, collection, f) => todo!(),
+      MaxKey(result, collection, f) => todo!(),
+      First(result, collection) => todo!(),
+      Sort(result, collection) => todo!(),
+      SortBy(result, collection, f) => todo!(),
+      EmptyList(result) => todo!(),
+      Last(result, list) => todo!(),
+      Nth(result, list, n) => {
         // While `Get` returns nil for a list when index is OOB, `Nth` throws
         todo!()
       }
-      I::NthFromLast(result, list, n) => todo!(),
-      I::Cons(result, list, value) => todo!(),
-      I::Push(result, list, value) => todo!(),
-      I::Concat(result, list_1, list_2) => todo!(),
-      I::Take(result, list, n) => todo!(),
-      I::Drop(result, list, n) => todo!(),
-      I::Reverse(result, list) => todo!(),
-      I::Distinct(result, list) => todo!(),
-      I::Sub(start_index_and_result, list, end_index) => todo!(),
-      I::Partition(result, list, size) => todo!(),
-      I::SteppedPartition(step_and_return, list, size) => todo!(),
-      I::Pad(value_and_result, list, size) => todo!(),
-      I::EmptyMap(result) => todo!(),
-      I::Keys(result, map) => todo!(),
-      I::Values(result, map) => todo!(),
-      I::Zip(result, key_list, value_list) => todo!(),
-      I::Invert(result, map) => todo!(),
-      I::Merge(result, map_1, map_2) => todo!(),
-      I::MergeWith(merge_f_and_result, map_1, map_2) => todo!(),
-      I::MapKeys(result, f, map) => todo!(),
-      I::MapValues(result, f, map) => todo!(),
-      I::EmptySet(result) => todo!(),
-      I::Union(result, set_1, set_2) => todo!(),
-      I::Intersection(result, set_1, set_2) => todo!(),
-      I::Difference(result, set_1, set_2) => todo!(),
-      I::SymmetricDifference(result, set_1, set_2) => todo!(),
-      I::InfiniteRange(result) => todo!(),
-      I::UpperBoundedRange(result, size) => todo!(),
-      I::LowerUpperBoundedRange(result, lower_bound, upper_bound) => todo!(),
-      I::InfiniteRepeat(result, value) => todo!(),
-      I::BoundedRepeat(result, value, count) => todo!(),
-      I::InfiniteRepeatedly(result, f) => todo!(),
-      I::BoundedRepeatedly(result, f, count) => todo!(),
-      I::InfiniteIterate(result, f, initial_value) => todo!(),
-      I::BoundedIterate(bound_and_result, f, initial_value) => todo!(),
-      I::IsNil(result, value) => todo!(),
-      I::IsBool(result, value) => todo!(),
-      I::IsChar(result, value) => todo!(),
-      I::IsNum(result, value) => todo!(),
-      I::IsInt(result, value) => todo!(),
-      I::IsFloat(result, value) => todo!(),
-      I::IsSymbol(result, value) => todo!(),
-      I::IsString(result, value) => todo!(),
-      I::IsList(result, value) => todo!(),
-      I::IsMap(result, value) => todo!(),
-      I::IsSet(result, value) => todo!(),
-      I::IsCollection(result, value) => todo!(),
-      I::IsFn(result, value) => todo!(),
-      I::ToBool(result, value) => todo!(),
-      I::ToChar(result, value) => todo!(),
-      I::ToNum(result, value) => todo!(),
-      I::ToInt(result, value) => todo!(),
-      I::ToFloat(result, value) => todo!(),
-      I::ToSymbol(result, value) => todo!(),
-      I::ToString(result, value) => todo!(),
-      I::ToList(result, value) => todo!(),
-      I::ToMap(result, value) => todo!(),
+      NthFromLast(result, list, n) => todo!(),
+      Cons(result, list, value) => todo!(),
+      Push(result, list, value) => todo!(),
+      Concat(result, list_1, list_2) => todo!(),
+      Take(result, list, n) => todo!(),
+      Drop(result, list, n) => todo!(),
+      Reverse(result, list) => todo!(),
+      Distinct(result, list) => todo!(),
+      Sub(start_index_and_result, list, end_index) => todo!(),
+      Partition(result, list, size) => todo!(),
+      SteppedPartition(step_and_return, list, size) => todo!(),
+      Pad(value_and_result, list, size) => todo!(),
+      EmptyMap(result) => todo!(),
+      Keys(result, map) => todo!(),
+      Values(result, map) => todo!(),
+      Zip(result, key_list, value_list) => todo!(),
+      Invert(result, map) => todo!(),
+      Merge(result, map_1, map_2) => todo!(),
+      MergeWith(merge_f_and_result, map_1, map_2) => todo!(),
+      MapKeys(result, f, map) => todo!(),
+      MapValues(result, f, map) => todo!(),
+      EmptySet(result) => todo!(),
+      Union(result, set_1, set_2) => todo!(),
+      Intersection(result, set_1, set_2) => todo!(),
+      Difference(result, set_1, set_2) => todo!(),
+      SymmetricDifference(result, set_1, set_2) => todo!(),
+      InfiniteRange(result) => todo!(),
+      UpperBoundedRange(result, size) => todo!(),
+      LowerUpperBoundedRange(result, lower_bound, upper_bound) => todo!(),
+      InfiniteRepeat(result, value) => todo!(),
+      BoundedRepeat(result, value, count) => todo!(),
+      InfiniteRepeatedly(result, f) => todo!(),
+      BoundedRepeatedly(result, f, count) => todo!(),
+      InfiniteIterate(result, f, initial_value) => todo!(),
+      BoundedIterate(bound_and_result, f, initial_value) => todo!(),
+      IsNil(result, value) => todo!(),
+      IsBool(result, value) => todo!(),
+      IsChar(result, value) => todo!(),
+      IsNum(result, value) => todo!(),
+      IsInt(result, value) => todo!(),
+      IsFloat(result, value) => todo!(),
+      IsSymbol(result, value) => todo!(),
+      IsString(result, value) => todo!(),
+      IsList(result, value) => todo!(),
+      IsMap(result, value) => todo!(),
+      IsSet(result, value) => todo!(),
+      IsCollection(result, value) => todo!(),
+      IsFn(result, value) => todo!(),
+      ToBool(result, value) => todo!(),
+      ToChar(result, value) => todo!(),
+      ToNum(result, value) => todo!(),
+      ToInt(result, value) => todo!(),
+      ToFloat(result, value) => todo!(),
+      ToSymbol(result, value) => todo!(),
+      ToString(result, value) => todo!(),
+      ToList(result, value) => todo!(),
+      ToMap(result, value) => todo!(),
     }
   }
   Ok(state)
@@ -874,14 +828,14 @@ mod tests {
 
   simple_register_test!(
     clone_arg,
-    program![EmptyArgs(0), Const(1, "Hello!"), CloneArg(0, 1),],
+    program![StartArgs(0, 1), Const(1, "Hello!"), CopyArg(0, 1),],
     (0, Args(mini_vec!["Hello!".into()])),
     (1, "Hello!")
   );
 
   simple_register_test!(
     steal_arg,
-    program![EmptyArgs(0), Const(1, "Hello!"), StealArg(0, 1),],
+    program![StartArgs(0, 1), Const(1, "Hello!"), StealArg(0, 1),],
     (0, Args(mini_vec!["Hello!".into()])),
     (1, Nil)
   );
@@ -889,13 +843,9 @@ mod tests {
   simple_register_test!(
     apply_n_triple_product_function,
     program![
-      EmptyArgs(0),
-      Const(1, 2),
-      Const(2, 3),
-      Const(3, 4),
-      StealArg(0, 1),
-      StealArg(0, 2),
-      StealArg(0, 3),
+      Const(0, 2),
+      Const(1, 3),
+      Const(2, 4),
       Const(
         4,
         CompositeFn(mini_vec![
@@ -910,8 +860,12 @@ mod tests {
           Return(0)
         ])
       ),
-      ApplyN(0, 4),
+      StartArgs(3, 3),
+      StealArg(3, 0),
+      StealArg(3, 1),
+      StealArg(3, 2),
+      ApplyN(3, 4),
     ],
-    (0, 24)
+    (3, 24)
   );
 }

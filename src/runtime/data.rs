@@ -200,16 +200,17 @@ pub enum Value {
   Nil,
   Bool(bool),
   Char(char),
-  Num(Num),
+  Number(Num),
   Symbol(SymbolIndex),
   Str(Rc<String>),
   List(Rc<Vec<Value>>),
-  Map(Rc<HashMap<Value, Value>>),
-  Set(Rc<HashSet<Value>>),
+  Hashmap(Rc<HashMap<Value, Value>>),
+  Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnIndex),
   CompositeFn(MiniVec<Instruction>),
   Args(MiniVec<Value>),
 }
+use Value::*;
 
 impl Hash for Value {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -220,24 +221,24 @@ impl Hash for Value {
 impl Value {
   pub fn as_num(&self) -> Result<&Num> {
     match self {
-      Value::Num(n) => Ok(n),
-      Value::Nil => Ok(&Int(0)),
+      Number(n) => Ok(n),
+      Nil => Ok(&Int(0)),
       _ => Err(Error::CantCastToNum),
     }
   }
   pub fn as_bool(&self) -> bool {
     match self {
-      Value::Bool(value) => *value,
-      Value::Nil => false,
+      Bool(value) => *value,
+      Nil => false,
       _ => true,
     }
   }
   pub fn description(&self) -> String {
     match self {
-      Value::Nil => "nil".to_string(),
-      Value::Bool(b) => b.to_string(),
-      Value::Char(c) => format!("'{}'", c),
-      Value::Num(n) => match n {
+      Nil => "nil".to_string(),
+      Bool(b) => b.to_string(),
+      Char(c) => format!("'{}'", c),
+      Number(n) => match n {
         Int(i) => i.to_string(),
         Float(f) => {
           let mut s = f.to_string();
@@ -247,7 +248,7 @@ impl Value {
           s
         }
       },
-      Value::List(values) => {
+      List(values) => {
         format!(
           "[{}]",
           values
@@ -257,7 +258,7 @@ impl Value {
             .join(", ")
         )
       }
-      Value::Map(hashmap) => format!(
+      Hashmap(hashmap) => format!(
         "{{{}}}",
         hashmap
           .iter()
@@ -265,7 +266,7 @@ impl Value {
           .collect::<Vec<String>>()
           .join(", ")
       ),
-      Value::Set(hashset) => format!(
+      Hashset(hashset) => format!(
         "#{{{}}}",
         hashset
           .iter()
@@ -273,13 +274,13 @@ impl Value {
           .collect::<Vec<String>>()
           .join(", ")
       ),
-      Value::Symbol(index) => format!("symbol {}", index),
-      Value::Str(s) => format!("\"{}\"", s),
-      Value::CompositeFn(instructions) => {
+      Symbol(index) => format!("symbol {}", index),
+      Str(s) => format!("\"{}\"", s),
+      CompositeFn(instructions) => {
         format!("fn({})", instructions.len())
       }
-      Value::CoreFn(_) => todo!(),
-      Value::Args(args) => format!(
+      CoreFn(_) => todo!(),
+      Args(args) => format!(
         "args({})[{}]",
         args.len(),
         args
@@ -300,41 +301,41 @@ impl Display for Value {
 
 impl From<Num> for Value {
   fn from(n: Num) -> Self {
-    Value::Num(n)
+    Number(n)
   }
 }
 impl From<i64> for Value {
   fn from(i: i64) -> Self {
-    Value::Num(i.into())
+    Number(i.into())
   }
 }
 impl From<f64> for Value {
   fn from(f: f64) -> Self {
-    Value::Num(f.into())
+    Number(f.into())
   }
 }
 impl From<OrderedFloat<f64>> for Value {
   fn from(f: OrderedFloat<f64>) -> Self {
-    Value::Num(f.into())
+    Number(f.into())
   }
 }
 impl From<bool> for Value {
   fn from(b: bool) -> Self {
-    Value::Bool(b)
+    Bool(b)
   }
 }
 impl From<char> for Value {
   fn from(c: char) -> Self {
-    Value::Char(c)
+    Char(c)
   }
 }
 impl From<String> for Value {
   fn from(s: String) -> Self {
-    Value::Str(Rc::new(s))
+    Str(Rc::new(s))
   }
 }
 impl From<&str> for Value {
   fn from(s: &str) -> Self {
-    Value::Str(Rc::new(s.to_string()))
+    Str(Rc::new(s.to_string()))
   }
 }
