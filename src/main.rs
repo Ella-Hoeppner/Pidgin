@@ -16,5 +16,6 @@ fn main() {
     vec![Const(0, 0), Const(1, 1), Const(2, 2), Const(3, 3)],
     vec![Number(Int(1)), Bool(false), Symbol(0), Nil],
   );
-  evaluate(program, EvaluationState::new()).unwrap();
+  let mut state = EvaluationState::new();
+  state.evaluate(program).unwrap();
 }

@@ -207,8 +207,8 @@ pub enum Value {
   Hashmap(Rc<HashMap<Value, Value>>),
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnIndex),
-  CompositeFn(MiniVec<Instruction>),
-  Args(MiniVec<Value>),
+  CompositeFn(Rc<MiniVec<Instruction>>),
+  RawVec(MiniVec<Value>),
 }
 use Value::*;
 
@@ -280,10 +280,9 @@ impl Value {
         format!("fn({})", instructions.len())
       }
       CoreFn(_) => todo!(),
-      Args(args) => format!(
-        "args({})[{}]",
-        args.len(),
-        args
+      RawVec(values) => format!(
+        "(raw) [{}]",
+        values
           .iter()
           .map(|v| v.description())
           .collect::<Vec<String>>()

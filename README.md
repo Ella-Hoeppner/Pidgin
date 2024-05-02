@@ -4,6 +4,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 VM stuff:
 * make `program!` macro capable of handling `Const` instructions inside composite functions
 * think about how to support multi-arity composite functions
+  * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction` type to `SingleArityCompositeFunction`
 * implement `Apply<X>AndReturn` instructions
 * start work on an optimizer
   * optimizations I can think of so far at the vm level, in order of application:
@@ -12,7 +13,10 @@ VM stuff:
   * actually... should there just be an IR between the AST and the bytecode??
     * This would simplify some things:
       * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
+        * could also get rid of the `program!` macro, or at least simplify it :P
       * The AST->IR compiler could use `usize` for registers and just use them in SSA form, and the IR->bytecode compiler could handle register reallocation. This would make lifetime analysis somewhat easier, and in some cases it might even be necessary - functions with >256 local variables might be very difficult/impossible to compile directly to the bytecode format.
+        * Hmm, how would instructions like `If` that overwrite their arguments fit into SSA? Would the IR also represent them as overwriting their arguments or would it have them assign to a new register? I think the former might make it harder to make use of the nice properties that SSA provides, but the latter might make the IR->bytecode compilation process more complicated.
+          * Actually I guess it wouldn't be much more complicated... once liftime analysis has been performed the IR->bytecode compiler should be able to easily tell whether the bytecode can reuse the register of the argument or whether the argument needs to be copied into a new register to avoid being overwritten.
       * The AST->IR compiler could just have one type of `Apply`, which the IR->bytecode compiler could then convert to the specialized `Apply<X>` or `Apply<X>AndReturn` instructions.
         * This would feel a bit more elegant but I'm not sure if it's a real advantage...
       * Instructions like `Add`, `Multiply`, `List` that take a variable number of arguments could be represented more elegantly in the IR.
@@ -21,6 +25,8 @@ VM stuff:
     * I think having this layer would make it easier to carry around debugging info during compilation without bloating the values that the VM uses, which will be helpful for giving informative compilation errors
   * implement tests for these based on equality checking between programs
 * implement `CoreFn` support
+* implement at least a few `List` related functions
+  * make sure the perceus-esque mutable-when-single-owned `Rc` idea works in practice
 * figure out what to do about laziness...
   * unsure of how to represent this.
     * Should I go for the same approach as Quoot?
