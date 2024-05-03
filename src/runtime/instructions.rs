@@ -19,7 +19,6 @@ pub enum Instruction {
   StealIntoRawVec(R, R),
 
   // Function control flow
-  Argument(SymbolIndex),
   Return(R),
   Apply0(R, R),
   Apply1(R, R),

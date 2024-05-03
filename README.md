@@ -2,8 +2,9 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
-  * not sure exactly how to do this...
+* learn rust debug-build-specific-code stuff so that I can stop just putting `// debug` everywhere
+* Change functions to not use the environment for their variables
+  * I think the only thing the environment will really be used for is global definitions. Everything else can be compiled to registers. Even global definitions could if we didn't care about supporting a repl, but I do, so I'll keep it around.
 * start work on IR
   * This representation will simplify some things relative to the bytecode:
     * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
@@ -20,6 +21,8 @@ Compiler/Runtime stuff:
   * Calls to `Apply` will, depending on their arity, be converted into `Apply0`, `Apply1`, `Apply2`, or `ApplyN` instructions. In the `ApplyN` case, it will also need to emit `EmptyRawVec` and `CopyIntoRawVec`/`StealIntoRawVec` instructions to construct the argument vector.
   * Optimizations (not essential at first):
     * All occurrences of `Apply` followed by `Return` should be converted into `Apply<X>AndReturn` instructions rather than normal `Apply<X>` instructions
+* write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
+  * not sure exactly how to do this...
 * implement `Apply<X>AndReturn` instructions
   * implement tests for these based on equality checking between programs
 * think about how to support multi-arity composite functions
@@ -33,24 +36,10 @@ Compiler/Runtime stuff:
       * this approach felt pretty messy
     * Maybe I could have an `Iter` type that mostly just wraps rust's iterator system? Though it would probably still need to be composed of both a `vec` of already realized values and an `iter` that can produce the rest of the values
       * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
-* think about representing continuations
+* support coroutines
 * implement remaining instructions, and write tests
 * start on a compiler from ASTs into IR
-
-Language stuff:
-* Finish GSE (in its repo)
-* Specify a default parser
-* Start on a compiler
-  * start with just arithmetic stuff
-  * lists/vectors
-    * can just start with the basic operations for now
-      * push, pop, count, concat
-  * functions
-    * wanna use CPS and ANF
-    * not entirely sure how stack tracing works in register-based VMs
-      * is it even strictly necessary? Definitely want to be able to do it for debugging purposes, but it feels like if the compiler keeps good track of the active registers then it feels like you could just do a function application without needing to do the equivalent of pushing a stack frame
-  * let bindings
-    * should this just be a macro that expands to a function call?? this is how CL does afaik. I feel uncertain about whether this makes sense from a performance perspective, not sure tho. Maybe CL can get away with it because it's compiler is very advanced??
+* Once GSE is ready, specify a basic grammer, and set up a function that accepts a GSE string, parses it, compiles it to the IR, compiles that to the bytecode, and then runs it.
 
 # Long-run optimizations
 * Reimplement `Value::List` using a custom reference-counted vector.

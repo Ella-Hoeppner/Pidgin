@@ -236,9 +236,6 @@ impl EvaluationState {
             panic!("CopyArg called with non-RawVec value")
           }
         }
-        Argument(SymbolIndex) => {
-          panic!("Instruction::Argument called, this should never happen")
-        }
         Return(value) => {
           let return_value = self.get_register(value).clone();
           let finished_stack_frame = self.frames.pop().unwrap();
@@ -252,12 +249,20 @@ impl EvaluationState {
           // Applies a function of 0 arguments (a thunk)
           let f_value = self.get_register(f).clone();
           match f_value {
-            CompositeFn(instructions) => {
+            CompositeFn(composite_fn) => {
               self.frames.push(StackFrame {
                 beginning: self.consumption,
                 return_stack_index: self.register_stack_index(result),
               });
-              for instruction in instructions.iter().cloned().rev() {
+              // debug
+              if composite_fn.0 != 0 {
+                panic!(
+                  "Apply0 called on CompositeFn with {}!=0 arguments",
+                  composite_fn.0
+                )
+              }
+              //
+              for instruction in composite_fn.1.iter().rev().cloned() {
                 instruction_stack.push(instruction);
               }
             }
@@ -278,23 +283,21 @@ impl EvaluationState {
           let f_value = self.get_register(f).clone();
           let arg_value = self.steal_register(arg_and_result);
           match f_value {
-            CompositeFn(instructions) => {
+            CompositeFn(composite_fn) => {
               self.frames.push(StackFrame {
                 beginning: self.consumption,
                 return_stack_index: self.register_stack_index(arg_and_result),
               });
-              let mut remaining_instructions = instructions.iter().cloned();
-              if let Some(Argument(symbol_index)) =
-                remaining_instructions.next()
-              {
-                self.environment.insert(symbol_index, arg_value.clone());
-              } else {
+              // debug
+              if composite_fn.0 != 1 {
                 panic!(
-                  "CompositeFn missing Argument instruction (called from \
-                  Apply1)"
+                  "Apply1 called on CompositeFn with {}!=1 arguments",
+                  composite_fn.0
                 )
               }
-              for instruction in remaining_instructions.rev() {
+              //
+              self.set_register(0, arg_value);
+              for instruction in composite_fn.1.iter().cloned().rev() {
                 instruction_stack.push(instruction);
               }
             }
@@ -314,35 +317,24 @@ impl EvaluationState {
           // Applies a function of 2 arguments.
           let f_value = self.get_register(f).clone();
           let arg_1_value = self.steal_register(arg_1_and_result);
-          let arg_2_value = self.get_register(arg_2).clone();
+          let arg_2_value = self.steal_register(arg_2).clone();
           match f_value {
-            CompositeFn(instructions) => {
+            CompositeFn(composite_fn) => {
               self.frames.push(StackFrame {
                 beginning: self.consumption,
                 return_stack_index: self.register_stack_index(arg_1_and_result),
               });
-              let mut remaining_instructions = instructions.iter().cloned();
-              if let Some(Argument(symbol_1_index)) =
-                remaining_instructions.next()
-              {
-                self.environment.insert(symbol_1_index, arg_1_value.clone());
-              } else {
+              // debug
+              if composite_fn.0 != 2 {
                 panic!(
-                  "CompositeFn missing first Argument instruction (called from\
-                   Apply2)"
+                  "Apply2 called on CompositeFn with {}!=2 arguments",
+                  composite_fn.0
                 )
               }
-              if let Some(Argument(symbol_2_index)) =
-                remaining_instructions.next()
-              {
-                self.environment.insert(symbol_2_index, arg_2_value.clone());
-              } else {
-                panic!(
-                  "CompositeFn missing second Argument instruction (called from\
-                   Apply2)"
-                )
-              }
-              for instruction in remaining_instructions.rev() {
+              //
+              self.set_register(0, arg_1_value);
+              self.set_register(1, arg_2_value);
+              for instruction in composite_fn.1.iter().cloned().rev() {
                 instruction_stack.push(instruction);
               }
             }
@@ -363,27 +355,26 @@ impl EvaluationState {
           let f_value = self.get_register(f).clone();
           if let RawVec(args_raw_vec) = self.steal_register(args_and_result) {
             match f_value {
-              CompositeFn(instructions) => {
+              CompositeFn(composite_fn) => {
                 self.frames.push(StackFrame {
                   beginning: self.consumption,
                   return_stack_index: self
                     .register_stack_index(args_and_result),
                 });
-                let mut remaining_instructions =
-                  instructions.iter().cloned().into_iter();
-                for (i, arg_value) in args_raw_vec.into_iter().enumerate() {
-                  if let Some(Argument(symbol_index)) =
-                    remaining_instructions.next()
-                  {
-                    self.environment.insert(symbol_index, arg_value);
-                  } else {
-                    panic!(
-                      "CompositeFn called by ApplyN with wrong number of\
-                      arguments"
-                    )
-                  }
+                let provided_arg_count = args_raw_vec.len();
+                // debug
+                if composite_fn.0 as usize != provided_arg_count {
+                  panic!(
+                    "ApplyN called on CompositeFn that expects {} arguments, {} arguments provided",
+                    composite_fn.0,
+                    provided_arg_count
+                  )
                 }
-                for instruction in remaining_instructions.rev() {
+                //
+                for (i, arg_value) in args_raw_vec.into_iter().enumerate() {
+                  self.set_register(i as RegisterIndex, arg_value);
+                }
+                for instruction in composite_fn.1.iter().rev().cloned() {
                   instruction_stack.push(instruction);
                 }
               }
@@ -839,7 +830,7 @@ mod tests {
       Program::new(
         vec![Const(0, 0), Apply0(1, 0)],
         vec![
-          CompositeFn(Rc::new(mini_vec![Const(0, 1), Return(0)])),
+          CompositeFn(Rc::new((0, mini_vec![Const(0, 1), Return(0)]))),
           5.into()
         ],
       ),
@@ -853,12 +844,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        CompositeFn(Rc::new(mini_vec![
-          Argument(0),
-          Lookup(0, 0),
-          Multiply(0, 0, 0),
-          Return(0)
-        ]))
+        CompositeFn(Rc::new((1, mini_vec![Multiply(0, 0, 0), Return(0)])))
       ),
       Apply1(0, 1),
     ],
@@ -872,20 +858,11 @@ mod tests {
         vec![Const(0, 0), Const(1, 2), Apply1(0, 1)],
         vec![
           10.into(),
-          CompositeFn(Rc::new(mini_vec![
-            Argument(0),
-            Lookup(0, 0),
-            Multiply(0, 0, 0),
-            Return(0)
-          ])),
-          CompositeFn(Rc::new(mini_vec![
-            Argument(0),
-            Lookup(0, 0),
-            Const(1, 1),
-            Apply1(0, 1),
-            Apply1(0, 1),
-            Return(0)
-          ])),
+          CompositeFn(Rc::new((1, mini_vec![Multiply(0, 0, 0), Return(0)]))),
+          CompositeFn(Rc::new((
+            1,
+            mini_vec![Const(1, 1), Apply1(0, 1), Apply1(0, 1), Return(0)]
+          ))),
         ],
       ),
       (0, 10000)
@@ -899,15 +876,10 @@ mod tests {
       Const(1, 3),
       Const(
         2,
-        CompositeFn(Rc::new(mini_vec![
-          Argument(0),
-          Argument(1),
-          Lookup(0, 0),
-          Lookup(1, 1),
-          Multiply(0, 1, 0),
-          Multiply(0, 0, 0),
-          Return(0)
-        ]))
+        CompositeFn(Rc::new((
+          2,
+          mini_vec![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
+        )))
       ),
       Apply2(0, 2, 1),
     ],
@@ -936,17 +908,10 @@ mod tests {
       Const(2, 4),
       Const(
         4,
-        CompositeFn(Rc::new(mini_vec![
-          Argument(0),
-          Argument(1),
-          Argument(2),
-          Lookup(0, 0),
-          Lookup(1, 1),
-          Lookup(2, 2),
-          Multiply(0, 1, 0),
-          Multiply(0, 2, 0),
-          Return(0)
-        ]))
+        CompositeFn(Rc::new((
+          3,
+          mini_vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
+        )))
       ),
       EmptyRawVec(3, 3),
       StealIntoRawVec(3, 0),
