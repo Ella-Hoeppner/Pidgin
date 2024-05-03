@@ -195,7 +195,21 @@ impl From<i64> for Num {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+pub struct CompositeFunction {
+  pub arg_count: u8,
+  pub instructions: Vec<Instruction>,
+}
+impl CompositeFunction {
+  pub fn new(arg_count: u8, instructions: Vec<Instruction>) -> Self {
+    Self {
+      arg_count,
+      instructions,
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
 pub enum Value {
   Nil,
   Bool(bool),
@@ -207,10 +221,31 @@ pub enum Value {
   Hashmap(Rc<HashMap<Value, Value>>),
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnId),
-  CompositeFn(Rc<(u8, MiniVec<Instruction>)>),
+  CompositeFn(Rc<CompositeFunction>),
   RawVec(MiniVec<Value>),
 }
 use Value::*;
+
+impl PartialEq for Value {
+  fn eq(&self, other: &Self) -> bool {
+    match (self, other) {
+      (Self::Nil, Self::Nil) => true,
+      (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+      (Self::Char(l0), Self::Char(r0)) => l0 == r0,
+      (Self::Number(l0), Self::Number(r0)) => l0 == r0,
+      (Self::Symbol(l0), Self::Symbol(r0)) => l0 == r0,
+      (Self::Str(l0), Self::Str(r0)) => l0 == r0,
+      (Self::List(l0), Self::List(r0)) => l0 == r0,
+      (Self::Hashmap(l0), Self::Hashmap(r0)) => l0 == r0,
+      (Self::Hashset(l0), Self::Hashset(r0)) => l0 == r0,
+      (Self::CoreFn(l0), Self::CoreFn(r0)) => l0 == r0,
+      (Self::CompositeFn(l0), Self::CompositeFn(r0)) => Rc::ptr_eq(l0, r0),
+      (Self::RawVec(l0), Self::RawVec(r0)) => l0 == r0,
+      _ => false,
+    }
+  }
+}
+impl Eq for Value {}
 
 impl Hash for Value {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -279,8 +314,8 @@ impl Value {
       CompositeFn(composite_fn) => {
         format!(
           "fn({} args, {} instructions)",
-          composite_fn.0,
-          composite_fn.1.len()
+          composite_fn.arg_count,
+          composite_fn.instructions.len()
         )
       }
       CoreFn(_) => todo!(),

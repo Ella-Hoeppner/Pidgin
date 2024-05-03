@@ -31,7 +31,6 @@ pub enum Instruction {
 
   // Environment manipulation
   Lookup(R, SymbolIndex),
-  Bind(SymbolIndex, R),
 
   // Control flow
   When(R, R, R),

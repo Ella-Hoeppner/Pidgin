@@ -2,9 +2,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* learn rust debug-build-specific-code stuff so that I can stop just putting `// debug` everywhere
-* Change functions to not use the environment for their variables
-  * I think the only thing the environment will really be used for is global definitions. Everything else can be compiled to registers. Even global definitions could if we didn't care about supporting a repl, but I do, so I'll keep it around.
+* add a type for weak RC references to `CompositeFn`, for recursive functions
 * start work on IR
   * This representation will simplify some things relative to the bytecode:
     * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
@@ -25,7 +23,7 @@ Compiler/Runtime stuff:
   * not sure exactly how to do this...
 * implement `Apply<X>AndReturn` instructions
   * implement tests for these based on equality checking between programs
-* think about how to support multi-arity composite functions
+* support multi-arity composite functions
   * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction` type to `SingleArityCompositeFunction`
 * figure out what to do about laziness...
   * unsure of how to represent this.
@@ -37,11 +35,35 @@ Compiler/Runtime stuff:
     * Maybe I could have an `Iter` type that mostly just wraps rust's iterator system? Though it would probably still need to be composed of both a `vec` of already realized values and an `iter` that can produce the rest of the values
       * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
 * support coroutines
+* support custom instructions
+  * the definitions of these should be stored in `EvaluationState`, such that you can create an `EvaluationState` and then add custom instructions to it before doing any evaluation
+* support a `Foreign` type, a general-purpose boxed-rust-object type
 * implement remaining instructions, and write tests
 * start on a compiler from ASTs into IR
 * Once GSE is ready, specify a basic grammer, and set up a function that accepts a GSE string, parses it, compiles it to the IR, compiles that to the bytecode, and then runs it.
 
+# planned language features (once the IR and VM are usable and a basic AST)
+* global defs
+  * these will need special logic since I'm got rid of the `Bind` instruction, but that's fine since they're only allowed at the top level
+* destructuring function arguments
+* let blocks that desugar into a function calls
+* match blocks
+  * I guess these can desugar into a sequence of attempted function calls wrapped in `try` blocks or something? That way it could just defer to the normal function destructuring logic for matching...
+    * except that wouldn't handle matches where certain things are fixed to be specific literal values...
+    * also relying on the error handling system here might be bad for performance
+* shadowing will not be allowed by default, but there will be a special kind of `let` that allows shadowing, maybe `let-shadow` or just `shadow` or something
+  * so many times in clojure I've accidentally shadowed the `str` function with a local variable and wasted a lot of time trying to figure out why stuff wasn't working. Having the compiler refuse to let you shadow with explicitly stating that you know that's what you're doing would be really nice.
+    * I considered just not allowing shadowing at all, but I think for some metaprogramming purposes it might be useful, so allowing it only in a special form seems nice
+* quasiquoting
+* macros
+* top-level unquoting
+
 # Long-run optimizations
+* `EvaluationState::consumption` shouldn't *really* need to be tracked at runtime
+  * Right now every single call to `set_register` has to update `consumption`, so getting rid of that might mean a fairly significant reduction in overhead
+  * The only thing that it's actually used for at runtime (other than debugging) is to figure out where to start a new stack frame when a function is called, but that should be determinable at compile time via static analysis.
+    * There would need to be a new special instruction like `SetStackFrameOffset(u8)` that the compiler places before calls to `Apply<X>`, which sets a global value that is then used in the `Apply<X>` instruction handler to determine where to start the new stack frame (relative to the old). This does mean there will be slightly more overhead in function dispatching, but I think it would definitely be worth it for the save in updating `consumption` with every instruction.
+    * Doing the static analysis would just involve finding the highest register that has been touched
 * Reimplement `Value::List` using a custom reference-counted vector.
   * This could take more advantage of the fact that the behavior is very different when the reference count is 1. Also, `Rc<Vec<Value>>` involves two layers of indirection, but it should be possible to implement a custom `RcVec` with just one. This might be something like an enum with two variants for the single-ownership (mutable) case and the shared-ownership (immutable) case, like:
     ```rust

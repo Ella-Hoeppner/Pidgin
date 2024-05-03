@@ -1,4 +1,5 @@
 #![allow(warnings)]
+#![feature(stmt_expr_attributes)]
 
 mod runtime;
 mod string_utils;

@@ -71,6 +71,13 @@ impl EvaluationState {
       .map(|stack_frame| stack_frame.beginning)
       .unwrap_or(0)
   }
+  fn bind_symbol<T: Into<Value>>(
+    &mut self,
+    symbol_index: StackIndex,
+    value: T,
+  ) {
+    self.environment.insert(symbol_index, value.into());
+  }
   fn describe_stack(&self) -> String {
     self
       .frames
@@ -172,19 +179,17 @@ impl EvaluationState {
     self.steal_stack(self.register_stack_index(register))
   }
   fn get_register(&self, register: RegisterIndex) -> &Value {
-    //debug
+    #[cfg(debug_assertions)]
     if register as usize >= self.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
-    //
     self.get_stack(self.register_stack_index(register))
   }
   fn get_register_mut(&mut self, register: RegisterIndex) -> &mut Value {
-    //debug
+    #[cfg(debug_assertions)]
     if register as usize >= self.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
-    //
     self.get_stack_mut(self.register_stack_index(register))
   }
   pub fn evaluate(&mut self, program: Program) -> Result<()> {
@@ -254,15 +259,15 @@ impl EvaluationState {
                 beginning: self.consumption,
                 return_stack_index: self.register_stack_index(result),
               });
-              // debug
-              if composite_fn.0 != 0 {
+              #[cfg(debug_assertions)]
+              if composite_fn.arg_count != 0 {
                 panic!(
                   "Apply0 called on CompositeFn with {}!=0 arguments",
-                  composite_fn.0
+                  composite_fn.arg_count
                 )
               }
-              //
-              for instruction in composite_fn.1.iter().rev().cloned() {
+              for instruction in composite_fn.instructions.iter().rev().cloned()
+              {
                 instruction_stack.push(instruction);
               }
             }
@@ -288,16 +293,16 @@ impl EvaluationState {
                 beginning: self.consumption,
                 return_stack_index: self.register_stack_index(arg_and_result),
               });
-              // debug
-              if composite_fn.0 != 1 {
+              #[cfg(debug_assertions)]
+              if composite_fn.arg_count != 1 {
                 panic!(
                   "Apply1 called on CompositeFn with {}!=1 arguments",
-                  composite_fn.0
+                  composite_fn.arg_count
                 )
               }
-              //
               self.set_register(0, arg_value);
-              for instruction in composite_fn.1.iter().cloned().rev() {
+              for instruction in composite_fn.instructions.iter().cloned().rev()
+              {
                 instruction_stack.push(instruction);
               }
             }
@@ -324,17 +329,17 @@ impl EvaluationState {
                 beginning: self.consumption,
                 return_stack_index: self.register_stack_index(arg_1_and_result),
               });
-              // debug
-              if composite_fn.0 != 2 {
+              #[cfg(debug_assertions)]
+              if composite_fn.arg_count != 2 {
                 panic!(
                   "Apply2 called on CompositeFn with {}!=2 arguments",
-                  composite_fn.0
+                  composite_fn.arg_count
                 )
               }
-              //
               self.set_register(0, arg_1_value);
               self.set_register(1, arg_2_value);
-              for instruction in composite_fn.1.iter().cloned().rev() {
+              for instruction in composite_fn.instructions.iter().cloned().rev()
+              {
                 instruction_stack.push(instruction);
               }
             }
@@ -362,19 +367,20 @@ impl EvaluationState {
                     .register_stack_index(args_and_result),
                 });
                 let provided_arg_count = args_raw_vec.len();
-                // debug
-                if composite_fn.0 as usize != provided_arg_count {
+                #[cfg(debug_assertions)]
+                if composite_fn.arg_count as usize != provided_arg_count {
                   panic!(
-                    "ApplyN called on CompositeFn that expects {} arguments, {} arguments provided",
-                    composite_fn.0,
-                    provided_arg_count
+                    "ApplyN called on CompositeFn that expects {} arguments, \
+                     {} arguments provided",
+                    composite_fn.arg_count, provided_arg_count
                   )
                 }
-                //
                 for (i, arg_value) in args_raw_vec.into_iter().enumerate() {
                   self.set_register(i as RegisterIndex, arg_value);
                 }
-                for instruction in composite_fn.1.iter().rev().cloned() {
+                for instruction in
+                  composite_fn.instructions.iter().rev().cloned()
+                {
                   instruction_stack.push(instruction);
                 }
               }
@@ -410,11 +416,6 @@ impl EvaluationState {
         ApplyNAndReturn(args_and_result, f) => todo!(),
         Lookup(register, symbol_index) => {
           self.set_register(register, self.environment[&symbol_index].clone());
-        }
-        Bind(symbol_index, register) => {
-          self
-            .environment
-            .insert(symbol_index, self.get_register(register).clone());
         }
         When(result, condition, thunk) => todo!(),
         If(condition_and_result, thunk_1, thunk_2) => todo!(),
@@ -752,8 +753,8 @@ mod tests {
 
   use super::EvaluationState;
   use crate::{
-    runtime::core_functions::CoreFnId, ConstIndex, Instruction::*, Num::*,
-    Program, RegisterIndex, Value::*,
+    runtime::core_functions::CoreFnId, CompositeFunction, ConstIndex,
+    Instruction::*, Num::*, Program, RegisterIndex, Value::*,
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
@@ -814,11 +815,12 @@ mod tests {
     (8, -2.)
   );
 
-  simple_register_test!(
-    environment,
-    program![Const(0, 100), Bind(0, 0), Lookup(1, 0)],
-    (1, 100)
-  );
+  fn environment_lookup() {
+    let mut state = EvaluationState::new();
+    state.bind_symbol(0, "test!");
+    state.evaluate(program![Lookup(0, 0)]).unwrap();
+    assert_register!(state, 0, "test!");
+  }
 
   simple_register_test!(clear, program![Const(0, 100), Clear(0)], (0, Nil));
 
@@ -830,7 +832,10 @@ mod tests {
       Program::new(
         vec![Const(0, 0), Apply0(1, 0)],
         vec![
-          CompositeFn(Rc::new((0, mini_vec![Const(0, 1), Return(0)]))),
+          CompositeFn(Rc::new(CompositeFunction::new(
+            0,
+            vec![Const(0, 1), Return(0)]
+          ))),
           5.into()
         ],
       ),
@@ -844,7 +849,10 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        CompositeFn(Rc::new((1, mini_vec![Multiply(0, 0, 0), Return(0)])))
+        CompositeFn(Rc::new(CompositeFunction::new(
+          1,
+          vec![Multiply(0, 0, 0), Return(0)]
+        )))
       ),
       Apply1(0, 1),
     ],
@@ -858,10 +866,13 @@ mod tests {
         vec![Const(0, 0), Const(1, 2), Apply1(0, 1)],
         vec![
           10.into(),
-          CompositeFn(Rc::new((1, mini_vec![Multiply(0, 0, 0), Return(0)]))),
-          CompositeFn(Rc::new((
+          CompositeFn(Rc::new(CompositeFunction::new(
             1,
-            mini_vec![Const(1, 1), Apply1(0, 1), Apply1(0, 1), Return(0)]
+            vec![Multiply(0, 0, 0), Return(0)]
+          ))),
+          CompositeFn(Rc::new(CompositeFunction::new(
+            1,
+            vec![Const(1, 1), Apply1(0, 1), Apply1(0, 1), Return(0)]
           ))),
         ],
       ),
@@ -876,9 +887,9 @@ mod tests {
       Const(1, 3),
       Const(
         2,
-        CompositeFn(Rc::new((
+        CompositeFn(Rc::new(CompositeFunction::new(
           2,
-          mini_vec![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
+          vec![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
         )))
       ),
       Apply2(0, 2, 1),
@@ -908,9 +919,9 @@ mod tests {
       Const(2, 4),
       Const(
         4,
-        CompositeFn(Rc::new((
+        CompositeFn(Rc::new(CompositeFunction::new(
           3,
-          mini_vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
+          vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )))
       ),
       EmptyRawVec(3, 3),
