@@ -195,16 +195,21 @@ impl From<i64> for Num {
   }
 }
 
+pub type InstructionBlock = Rc<[Instruction]>;
+
 #[derive(Clone, Debug)]
 pub struct CompositeFunction {
   pub arg_count: u8,
-  pub instructions: Vec<Instruction>,
+  pub instructions: InstructionBlock,
 }
 impl CompositeFunction {
-  pub fn new(arg_count: u8, instructions: Vec<Instruction>) -> Self {
+  pub fn new<T: Into<InstructionBlock>>(
+    arg_count: u8,
+    instructions: T,
+  ) -> Self {
     Self {
       arg_count,
-      instructions,
+      instructions: instructions.into(),
     }
   }
 }

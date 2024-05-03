@@ -20,6 +20,7 @@ pub enum Instruction {
 
   // Function control flow
   Return(R),
+  CallingFunction(R),
   Apply0(R, R),
   Apply1(R, R),
   Apply2(R, R, R),
@@ -33,8 +34,10 @@ pub enum Instruction {
   Lookup(R, SymbolIndex),
 
   // Control flow
-  When(R, R, R),
-  If(R, R, R),
+  If(R),
+  Else,
+  ElseIf(R),
+  EndIf,
 
   // Functions manipulation
   Partial(R, R, R),
@@ -194,4 +197,10 @@ pub enum Instruction {
   ToString(R, R),
   ToList(R, R),
   ToMap(R, R),
+
+  // Cells
+  CreateCell(R),
+  GetCellValue(R, R),
+  SetCellValue(R, R),
+  UpdateCell(R, R),
 }

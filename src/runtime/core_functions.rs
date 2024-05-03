@@ -130,6 +130,10 @@ pub(crate) enum CoreFnId {
   ToString,
   ToList,
   ToMap,
+  CreateCell,
+  GetCellValue,
+  SetCellValue,
+  UpdateCell,
 }
 pub(crate) const CORE_FUNCTIONS: EnumMap<
   CoreFnId,
@@ -386,5 +390,13 @@ pub(crate) const CORE_FUNCTIONS: EnumMap<
   // ToList
   |args: MiniVec<Value>| todo!(),
   // ToMap
+  |args: MiniVec<Value>| todo!(),
+  // CreateCell
+  |args: MiniVec<Value>| todo!(),
+  // GetCellValue
+  |args: MiniVec<Value>| todo!(),
+  // SetCellValue
+  |args: MiniVec<Value>| todo!(),
+  // UpdateCell
   |args: MiniVec<Value>| todo!(),
 ]);

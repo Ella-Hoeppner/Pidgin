@@ -2,7 +2,8 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* add a type for weak RC references to `CompositeFn`, for recursive functions
+* implement conditionals
+* write a test for recursion
 * start work on IR
   * This representation will simplify some things relative to the bytecode:
     * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
@@ -64,6 +65,7 @@ Compiler/Runtime stuff:
   * The only thing that it's actually used for at runtime (other than debugging) is to figure out where to start a new stack frame when a function is called, but that should be determinable at compile time via static analysis.
     * There would need to be a new special instruction like `SetStackFrameOffset(u8)` that the compiler places before calls to `Apply<X>`, which sets a global value that is then used in the `Apply<X>` instruction handler to determine where to start the new stack frame (relative to the old). This does mean there will be slightly more overhead in function dispatching, but I think it would definitely be worth it for the save in updating `consumption` with every instruction.
     * Doing the static analysis would just involve finding the highest register that has been touched
+* using the `take_mut` crate can probably avoid replacing a stolen register with a temporary `Nil` for several instructions
 * Reimplement `Value::List` using a custom reference-counted vector.
   * This could take more advantage of the fact that the behavior is very different when the reference count is 1. Also, `Rc<Vec<Value>>` involves two layers of indirection, but it should be possible to implement a custom `RcVec` with just one. This might be something like an enum with two variants for the single-ownership (mutable) case and the shared-ownership (immutable) case, like:
     ```rust
@@ -92,6 +94,7 @@ Compiler/Runtime stuff:
     }
     ```
   * This should fit in just 9 bytes, so it wouldn't make `Value` any bigger. Getting all the implementation details right to be as well-optimized as `Vec` or `MiniVec` might be pretty difficult tho.
+  * A reference-counted-vector type that only involves one layer of indirection rather than the 2 of an `Rc<Vec<>>` would also be nice for reprenting functions 
 * Distinguish between multi-use constants and single-use constants
   * if a constant is known to be single-use, it could just be swapped with `Nil` in the constants stack rather than needing to be cloned when it's used
   * this could be especially important for functions with many instructions inside

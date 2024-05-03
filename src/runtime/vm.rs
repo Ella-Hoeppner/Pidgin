@@ -5,7 +5,10 @@ use minivec::{mini_vec, MiniVec};
 
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
-use crate::{string_utils::indent_lines, Instruction, Num, Value};
+use crate::InstructionBlock;
+use crate::{
+  string_utils::indent_lines, CompositeFunction, Instruction, Num, Value,
+};
 use Instruction::*;
 use Num::*;
 use Value::*;
@@ -22,13 +25,16 @@ pub type CoreFnIndex = u8;
 
 #[derive(Debug)]
 pub struct Program {
-  instructions: Vec<Instruction>,
+  instructions: InstructionBlock,
   constants: Vec<Value>,
 }
 impl Program {
-  pub fn new(instructions: Vec<Instruction>, constants: Vec<Value>) -> Self {
+  pub fn new<T: Into<InstructionBlock>>(
+    instructions: T,
+    constants: Vec<Value>,
+  ) -> Self {
     Self {
-      instructions,
+      instructions: instructions.into(),
       constants,
     }
   }
@@ -36,52 +42,49 @@ impl Program {
 
 struct StackFrame {
   beginning: StackIndex,
+  calling_function: Option<Rc<CompositeFunction>>,
+  instructions: InstructionBlock,
+  instruction_index: usize,
   return_stack_index: StackIndex,
 }
 impl StackFrame {
-  fn root() -> Self {
+  fn root(instructions: InstructionBlock) -> Self {
     Self {
       beginning: 0,
+      calling_function: None,
+      instructions,
+      instruction_index: 0,
       return_stack_index: 0,
     }
   }
 }
 
 pub struct EvaluationState {
+  constants: Vec<Value>,
   stack: [Value; STACK_CAPACITY],
-  frames: Vec<StackFrame>,
+  current_frame: StackFrame,
+  paused_frames: Vec<StackFrame>,
   consumption: StackIndex,
   environment: HashMap<SymbolIndex, Value>,
 }
 
 impl EvaluationState {
-  pub fn new() -> Self {
+  pub fn new(program: Program) -> Self {
     const NIL: Value = Nil;
     Self {
+      constants: program.constants,
       stack: [NIL; STACK_CAPACITY],
-      frames: vec![StackFrame::root()],
+      current_frame: StackFrame::root(program.instructions),
+      paused_frames: vec![],
       consumption: 0,
       environment: HashMap::new(),
     }
   }
-  fn current_stack_frame_beginning(&self) -> StackIndex {
-    self
-      .frames
-      .last()
-      .map(|stack_frame| stack_frame.beginning)
-      .unwrap_or(0)
-  }
-  fn bind_symbol<T: Into<Value>>(
-    &mut self,
-    symbol_index: StackIndex,
-    value: T,
-  ) {
-    self.environment.insert(symbol_index, value.into());
-  }
   fn describe_stack(&self) -> String {
     self
-      .frames
+      .paused_frames
       .iter()
+      .chain(std::iter::once(&self.current_frame))
       .map(|frame| Some(frame))
       .chain(std::iter::once(None))
       .collect::<Vec<_>>()
@@ -127,6 +130,22 @@ impl EvaluationState {
       .collect::<Vec<String>>()
       .join("\n")
   }
+  fn bind_symbol<T: Into<Value>>(
+    &mut self,
+    symbol_index: StackIndex,
+    value: T,
+  ) {
+    self.environment.insert(symbol_index, value.into());
+  }
+  fn push_frame(&mut self, mut frame: StackFrame) {
+    std::mem::swap(&mut self.current_frame, &mut frame);
+    self.paused_frames.push(frame);
+  }
+  fn complete_frame(&mut self) -> StackFrame {
+    let mut x = self.paused_frames.pop().unwrap();
+    std::mem::swap(&mut self.current_frame, &mut x);
+    x
+  }
   fn set_stack_usize(&mut self, index: usize, value: Value) {
     self.stack[index] = value;
     self.consumption = self.consumption.max(index as u16 + 1);
@@ -159,7 +178,7 @@ impl EvaluationState {
     self.get_stack_mut_usize(index as usize)
   }
   fn register_stack_index(&self, register: RegisterIndex) -> StackIndex {
-    self.current_stack_frame_beginning() + register as StackIndex
+    self.current_frame.beginning + register as StackIndex
   }
   fn set_register<T: Into<Value>>(
     &mut self,
@@ -192,10 +211,17 @@ impl EvaluationState {
     }
     self.get_stack_mut(self.register_stack_index(register))
   }
-  pub fn evaluate(&mut self, program: Program) -> Result<()> {
-    let mut instruction_stack = program.instructions.clone();
-    instruction_stack.reverse();
-    while let Some(instruction) = instruction_stack.pop() {
+  pub fn evaluate(&mut self) -> Result<()> {
+    loop {
+      if self.current_frame.instruction_index
+        >= self.current_frame.instructions.len()
+      {
+        break;
+      }
+      let instruction = self.current_frame.instructions
+        [self.current_frame.instruction_index]
+        .clone();
+      self.current_frame.instruction_index += 1;
       match instruction {
         DebugPrint(id) => {
           println!(
@@ -213,10 +239,8 @@ impl EvaluationState {
           self.set_register(result, self.get_register(value).clone())
         }
         Const(result, const_index) => {
-          self.set_register(
-            result,
-            program.constants[const_index as usize].clone(),
-          );
+          self
+            .set_register(result, self.constants[const_index as usize].clone());
         }
         Print(value) => {
           println!("{}", self.get_register(value).description())
@@ -243,20 +267,36 @@ impl EvaluationState {
         }
         Return(value) => {
           let return_value = self.get_register(value).clone();
-          let finished_stack_frame = self.frames.pop().unwrap();
-          for i in finished_stack_frame.beginning..self.consumption {
+          let completed_frame = self.complete_frame();
+          for i in completed_frame.beginning..self.consumption {
             self.set_stack(i, Nil);
           }
-          self.consumption = finished_stack_frame.beginning;
-          self.set_stack(finished_stack_frame.return_stack_index, return_value);
+          self.consumption = completed_frame.beginning;
+          self.set_stack(completed_frame.return_stack_index, return_value);
+        }
+        CallingFunction(result) => {
+          // This instruction puts a reference to the current calling function
+          // in a register, which is necessary to support recursion.
+          if let Some(calling_function) =
+            self.current_frame.calling_function.clone()
+          {
+            self.set_register(result, CompositeFn(calling_function));
+          } else {
+            panic!(
+              "CallingFunction invoked with no calling_function in StackFrame"
+            )
+          }
         }
         Apply0(result, f) => {
           // Applies a function of 0 arguments (a thunk)
           let f_value = self.get_register(f).clone();
           match f_value {
             CompositeFn(composite_fn) => {
-              self.frames.push(StackFrame {
+              self.push_frame(StackFrame {
                 beginning: self.consumption,
+                instructions: composite_fn.instructions.clone(),
+                instruction_index: 0,
+                calling_function: Some(composite_fn.clone()),
                 return_stack_index: self.register_stack_index(result),
               });
               #[cfg(debug_assertions)]
@@ -265,10 +305,6 @@ impl EvaluationState {
                   "Apply0 called on CompositeFn with {}!=0 arguments",
                   composite_fn.arg_count
                 )
-              }
-              for instruction in composite_fn.instructions.iter().rev().cloned()
-              {
-                instruction_stack.push(instruction);
               }
             }
             CoreFn(core_fn) => {
@@ -289,8 +325,11 @@ impl EvaluationState {
           let arg_value = self.steal_register(arg_and_result);
           match f_value {
             CompositeFn(composite_fn) => {
-              self.frames.push(StackFrame {
+              self.push_frame(StackFrame {
                 beginning: self.consumption,
+                instructions: composite_fn.instructions.clone(),
+                instruction_index: 0,
+                calling_function: Some(composite_fn.clone()),
                 return_stack_index: self.register_stack_index(arg_and_result),
               });
               #[cfg(debug_assertions)]
@@ -301,10 +340,6 @@ impl EvaluationState {
                 )
               }
               self.set_register(0, arg_value);
-              for instruction in composite_fn.instructions.iter().cloned().rev()
-              {
-                instruction_stack.push(instruction);
-              }
             }
             CoreFn(core_fn) => {
               let core_fn = CORE_FUNCTIONS[core_fn];
@@ -325,8 +360,11 @@ impl EvaluationState {
           let arg_2_value = self.steal_register(arg_2).clone();
           match f_value {
             CompositeFn(composite_fn) => {
-              self.frames.push(StackFrame {
+              self.push_frame(StackFrame {
                 beginning: self.consumption,
+                instructions: composite_fn.instructions.clone(),
+                instruction_index: 0,
+                calling_function: Some(composite_fn.clone()),
                 return_stack_index: self.register_stack_index(arg_1_and_result),
               });
               #[cfg(debug_assertions)]
@@ -338,10 +376,6 @@ impl EvaluationState {
               }
               self.set_register(0, arg_1_value);
               self.set_register(1, arg_2_value);
-              for instruction in composite_fn.instructions.iter().cloned().rev()
-              {
-                instruction_stack.push(instruction);
-              }
             }
             CoreFn(core_fn) => {
               let core_fn = CORE_FUNCTIONS[core_fn];
@@ -361,8 +395,11 @@ impl EvaluationState {
           if let RawVec(args_raw_vec) = self.steal_register(args_and_result) {
             match f_value {
               CompositeFn(composite_fn) => {
-                self.frames.push(StackFrame {
+                self.push_frame(StackFrame {
                   beginning: self.consumption,
+                  instructions: composite_fn.instructions.clone(),
+                  instruction_index: 0,
+                  calling_function: Some(composite_fn.clone()),
                   return_stack_index: self
                     .register_stack_index(args_and_result),
                 });
@@ -377,11 +414,6 @@ impl EvaluationState {
                 }
                 for (i, arg_value) in args_raw_vec.into_iter().enumerate() {
                   self.set_register(i as RegisterIndex, arg_value);
-                }
-                for instruction in
-                  composite_fn.instructions.iter().rev().cloned()
-                {
-                  instruction_stack.push(instruction);
                 }
               }
               CoreFn(core_fn_id) => {
@@ -417,8 +449,21 @@ impl EvaluationState {
         Lookup(register, symbol_index) => {
           self.set_register(register, self.environment[&symbol_index].clone());
         }
-        When(result, condition, thunk) => todo!(),
-        If(condition_and_result, thunk_1, thunk_2) => todo!(),
+        If(condition) => {
+          if !self.get_register(condition).as_bool() {
+            // skip to next Else, ElseIf, or EndIf instruction
+            todo!()
+          }
+        }
+        Else => {
+          // skip to next EndIf instruction
+          todo!()
+        }
+        ElseIf(condition) => {
+          // skip to next EndIf instruction
+          todo!()
+        }
+        EndIf => {}
         Partial(result, f, arg) => todo!(),
         Compose(result, f_1, f_2) => todo!(),
         FindSome(result, f, collection) => todo!(),
@@ -741,6 +786,10 @@ impl EvaluationState {
         ToString(result, value) => todo!(),
         ToList(result, value) => todo!(),
         ToMap(result, value) => todo!(),
+        CreateCell(result) => todo!(),
+        GetCellValue(result, cell) => todo!(),
+        SetCellValue(result, value) => todo!(),
+        UpdateCell(result, f) => todo!(),
       }
     }
     Ok(())
@@ -767,8 +816,8 @@ mod tests {
   }
   macro_rules! run_and_check_registers {
     ($program:expr, $(($register:expr, $value:expr)),*$(,)?) => {
-      let mut state = EvaluationState::new();
-      state.evaluate($program).unwrap();
+      let mut state = EvaluationState::new($program);
+      state.evaluate().unwrap();
       $(assert_register!(state, $register, $value);)*
     };
   }
@@ -816,9 +865,9 @@ mod tests {
   );
 
   fn environment_lookup() {
-    let mut state = EvaluationState::new();
+    let mut state = EvaluationState::new(program![Lookup(0, 0)]);
     state.bind_symbol(0, "test!");
-    state.evaluate(program![Lookup(0, 0)]).unwrap();
+    state.evaluate().unwrap();
     assert_register!(state, 0, "test!");
   }
 
@@ -856,7 +905,24 @@ mod tests {
       ),
       Apply1(0, 1),
     ],
-    (0, 100)
+    (0, 100),
+  );
+
+  simple_register_test!(
+    apply_1_square_function_twice,
+    program![
+      Const(0, 10),
+      Const(
+        1,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          1,
+          vec![Multiply(0, 0, 0), Return(0)]
+        )))
+      ),
+      Apply1(0, 1),
+      Apply1(0, 1),
+    ],
+    (0, 10000),
   );
 
   #[test]
