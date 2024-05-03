@@ -57,6 +57,19 @@ impl StackFrame {
       return_stack_index: 0,
     }
   }
+  fn for_fn(
+    f: Rc<CompositeFunction>,
+    beginning: StackIndex,
+    return_stack_index: StackIndex,
+  ) -> Self {
+    Self {
+      beginning,
+      instructions: f.instructions.clone(),
+      instruction_index: 0,
+      calling_function: Some(f),
+      return_stack_index,
+    }
+  }
 }
 
 pub struct EvaluationState {
@@ -211,6 +224,31 @@ impl EvaluationState {
     }
     self.get_stack_mut(self.register_stack_index(register))
   }
+  fn start_fn_stack_frame(
+    &mut self,
+    f: Rc<CompositeFunction>,
+    return_stack_index: StackIndex,
+  ) {
+    self.push_frame(StackFrame::for_fn(
+      f.clone(),
+      self.consumption,
+      return_stack_index,
+    ));
+  }
+  fn next_instruction(&mut self) -> Instruction {
+    let instruction = self.current_frame.instructions
+      [self.current_frame.instruction_index]
+      .clone();
+    self.current_frame.instruction_index += 1;
+    instruction
+  }
+  fn skip_to_endif(&mut self) {
+    loop {
+      if self.next_instruction() == Instruction::EndIf {
+        break;
+      }
+    }
+  }
   pub fn evaluate(&mut self) -> Result<()> {
     loop {
       if self.current_frame.instruction_index
@@ -218,10 +256,7 @@ impl EvaluationState {
       {
         break;
       }
-      let instruction = self.current_frame.instructions
-        [self.current_frame.instruction_index]
-        .clone();
-      self.current_frame.instruction_index += 1;
+      let instruction = self.next_instruction();
       match instruction {
         DebugPrint(id) => {
           println!(
@@ -292,13 +327,10 @@ impl EvaluationState {
           let f_value = self.get_register(f).clone();
           match f_value {
             CompositeFn(composite_fn) => {
-              self.push_frame(StackFrame {
-                beginning: self.consumption,
-                instructions: composite_fn.instructions.clone(),
-                instruction_index: 0,
-                calling_function: Some(composite_fn.clone()),
-                return_stack_index: self.register_stack_index(result),
-              });
+              self.start_fn_stack_frame(
+                composite_fn.clone(),
+                self.register_stack_index(result),
+              );
               #[cfg(debug_assertions)]
               if composite_fn.arg_count != 0 {
                 panic!(
@@ -325,13 +357,10 @@ impl EvaluationState {
           let arg_value = self.steal_register(arg_and_result);
           match f_value {
             CompositeFn(composite_fn) => {
-              self.push_frame(StackFrame {
-                beginning: self.consumption,
-                instructions: composite_fn.instructions.clone(),
-                instruction_index: 0,
-                calling_function: Some(composite_fn.clone()),
-                return_stack_index: self.register_stack_index(arg_and_result),
-              });
+              self.start_fn_stack_frame(
+                composite_fn.clone(),
+                self.register_stack_index(arg_and_result),
+              );
               #[cfg(debug_assertions)]
               if composite_fn.arg_count != 1 {
                 panic!(
@@ -360,13 +389,10 @@ impl EvaluationState {
           let arg_2_value = self.steal_register(arg_2).clone();
           match f_value {
             CompositeFn(composite_fn) => {
-              self.push_frame(StackFrame {
-                beginning: self.consumption,
-                instructions: composite_fn.instructions.clone(),
-                instruction_index: 0,
-                calling_function: Some(composite_fn.clone()),
-                return_stack_index: self.register_stack_index(arg_1_and_result),
-              });
+              self.start_fn_stack_frame(
+                composite_fn.clone(),
+                self.register_stack_index(arg_1_and_result),
+              );
               #[cfg(debug_assertions)]
               if composite_fn.arg_count != 2 {
                 panic!(
@@ -395,14 +421,10 @@ impl EvaluationState {
           if let RawVec(args_raw_vec) = self.steal_register(args_and_result) {
             match f_value {
               CompositeFn(composite_fn) => {
-                self.push_frame(StackFrame {
-                  beginning: self.consumption,
-                  instructions: composite_fn.instructions.clone(),
-                  instruction_index: 0,
-                  calling_function: Some(composite_fn.clone()),
-                  return_stack_index: self
-                    .register_stack_index(args_and_result),
-                });
+                self.start_fn_stack_frame(
+                  composite_fn.clone(),
+                  self.register_stack_index(args_and_result),
+                );
                 let provided_arg_count = args_raw_vec.len();
                 #[cfg(debug_assertions)]
                 if composite_fn.arg_count as usize != provided_arg_count {
@@ -452,17 +474,22 @@ impl EvaluationState {
         If(condition) => {
           if !self.get_register(condition).as_bool() {
             // skip to next Else, ElseIf, or EndIf instruction
-            todo!()
+            loop {
+              match self.next_instruction() {
+                Else => break,
+                ElseIf(other_condition) => {
+                  if self.get_register(other_condition).as_bool() {
+                    break;
+                  }
+                }
+                EndIf => break,
+                _ => {}
+              }
+            }
           }
         }
-        Else => {
-          // skip to next EndIf instruction
-          todo!()
-        }
-        ElseIf(condition) => {
-          // skip to next EndIf instruction
-          todo!()
-        }
+        Else => self.skip_to_endif(),
+        ElseIf(condition) => self.skip_to_endif(),
         EndIf => {}
         Partial(result, f, arg) => todo!(),
         Compose(result, f_1, f_2) => todo!(),
@@ -792,6 +819,12 @@ impl EvaluationState {
         UpdateCell(result, f) => todo!(),
       }
     }
+    if self.paused_frames.len() > 0 {
+      panic!(
+        "Execution ended with paused stack frames remaining (maybe a \
+         function didn't end with a `Return` instruction?)"
+      )
+    }
     Ok(())
   }
 }
@@ -1050,5 +1083,107 @@ mod tests {
     ],
     (0, List(Rc::new(vec![1.into()]))),
     (1, List(Rc::new(vec![1.into(), 2.into()])))
+  );
+
+  simple_register_test!(
+    if_true,
+    program![Const(0, true), Const(1, -5), If(0), Const(1, 5), EndIf],
+    (1, 5)
+  );
+
+  simple_register_test!(
+    if_false,
+    program![Const(0, false), Const(1, -5), If(0), Const(1, 5), EndIf],
+    (1, -5)
+  );
+
+  simple_register_test!(
+    if_else_true,
+    program![
+      Const(0, true),
+      If(0),
+      Const(1, -5),
+      Else,
+      Const(1, 5),
+      EndIf
+    ],
+    (1, -5)
+  );
+
+  simple_register_test!(
+    if_else_false,
+    program![
+      Const(0, false),
+      If(0),
+      Const(1, -5),
+      Else,
+      Const(1, 5),
+      EndIf
+    ],
+    (1, 5)
+  );
+
+  simple_register_test!(
+    if_else_if_else_true_true,
+    program![
+      Const(0, true),
+      Const(1, true),
+      If(0),
+      Const(2, -5),
+      ElseIf(1),
+      Const(2, 0),
+      Else,
+      Const(2, 5),
+      EndIf
+    ],
+    (2, -5)
+  );
+
+  simple_register_test!(
+    if_else_if_else_true_false,
+    program![
+      Const(0, true),
+      Const(1, false),
+      If(0),
+      Const(2, -5),
+      ElseIf(1),
+      Const(2, 0),
+      Else,
+      Const(2, 5),
+      EndIf
+    ],
+    (2, -5)
+  );
+
+  simple_register_test!(
+    if_else_if_else_false_true,
+    program![
+      Const(0, false),
+      Const(1, true),
+      If(0),
+      Const(2, -5),
+      ElseIf(1),
+      Const(2, 0),
+      Else,
+      Const(2, 5),
+      EndIf
+    ],
+    (2, 0)
+  );
+
+  simple_register_test!(
+    if_else_if_else_false_false,
+    program![
+      Const(0, false),
+      Const(1, false),
+      If(0),
+      Const(2, -5),
+      ElseIf(1),
+      Const(2, 0),
+      Else,
+      Const(2, 5),
+      EndIf
+    ],
+    (2, 5)
   );
 }
