@@ -224,16 +224,20 @@ impl EvaluationState {
     }
     self.get_stack_mut(self.register_stack_index(register))
   }
+  fn create_fn_stack_frame(
+    &mut self,
+    f: Rc<CompositeFunction>,
+    return_stack_index: StackIndex,
+  ) -> StackFrame {
+    StackFrame::for_fn(f.clone(), self.consumption, return_stack_index)
+  }
   fn start_fn_stack_frame(
     &mut self,
     f: Rc<CompositeFunction>,
     return_stack_index: StackIndex,
   ) {
-    self.push_frame(StackFrame::for_fn(
-      f.clone(),
-      self.consumption,
-      return_stack_index,
-    ));
+    let frame = self.create_fn_stack_frame(f, return_stack_index);
+    self.push_frame(frame);
   }
   fn next_instruction(&mut self) -> Instruction {
     let instruction = self.current_frame.instructions
@@ -300,6 +304,60 @@ impl EvaluationState {
             panic!("CopyArg called with non-RawVec value")
           }
         }
+        Call(target, f, arg_count) => {
+          let f_value = self.get_register(f).clone();
+          match f_value {
+            CompositeFn(composite_fn) => {
+              let new_frame = self.create_fn_stack_frame(
+                composite_fn,
+                self.register_stack_index(target),
+              );
+              for i in 0..arg_count {
+                match self.next_instruction() {
+                  CopyArgument(arg_register) => {
+                    let value = self.get_register(arg_register).clone();
+                    println!("hehehe >:D {value}");
+                    self.set_stack(new_frame.beginning + i as StackIndex, value)
+                  }
+                  StealArgument(arg_register) => {
+                    let stolen_value =
+                      self.steal_register(arg_register).clone();
+                    self.set_stack(
+                      new_frame.beginning + i as StackIndex,
+                      stolen_value,
+                    )
+                  }
+                  other => panic!(
+                    "Expected CopyArgument or StealArgument instruction {}/{},
+                     found {:?}",
+                    i + 1,
+                    arg_count,
+                    other
+                  ),
+                }
+              }
+              self.push_frame(new_frame);
+            }
+            CoreFn(_) => {
+              panic!(
+                "Call instruction called with CoreFn value, this should \
+                 never happen"
+              )
+            }
+            List(list) => todo!(),
+            Hashmap(map) => todo!(),
+            Hashset(set) => todo!(),
+            _ => {
+              return Err(Error::CantApply);
+            }
+          }
+        }
+        CopyArgument(f) => {
+          panic!("CopyArgument instruction called, this should never happen")
+        }
+        StealArgument(f) => {
+          panic!("CopyArgument instruction called, this should never happen")
+        }
         Return(value) => {
           let return_value = self.get_register(value).clone();
           let completed_frame = self.complete_frame();
@@ -308,19 +366,6 @@ impl EvaluationState {
           }
           self.consumption = completed_frame.beginning;
           self.set_stack(completed_frame.return_stack_index, return_value);
-        }
-        CallingFunction(result) => {
-          // This instruction puts a reference to the current calling function
-          // in a register, which is necessary to support recursion.
-          if let Some(calling_function) =
-            self.current_frame.calling_function.clone()
-          {
-            self.set_register(result, CompositeFn(calling_function));
-          } else {
-            panic!(
-              "CallingFunction invoked with no calling_function in StackFrame"
-            )
-          }
         }
         Apply0(result, f) => {
           // Applies a function of 0 arguments (a thunk)
@@ -415,7 +460,7 @@ impl EvaluationState {
             }
           }
         }
-        ApplyN(args_and_result, f) => {
+        Apply(args_and_result, f) => {
           // Applies a function of a single argument.
           let f_value = self.get_register(f).clone();
           if let RawVec(args_raw_vec) = self.steal_register(args_and_result) {
@@ -429,7 +474,7 @@ impl EvaluationState {
                 #[cfg(debug_assertions)]
                 if composite_fn.arg_count as usize != provided_arg_count {
                   panic!(
-                    "ApplyN called on CompositeFn that expects {} arguments, \
+                    "Apply called on CompositeFn that expects {} arguments, \
                      {} arguments provided",
                     composite_fn.arg_count, provided_arg_count
                   )
@@ -452,7 +497,7 @@ impl EvaluationState {
               }
             }
           } else {
-            panic!("ApplyN called with non-RawVec value");
+            panic!("Apply called with non-RawVec value");
           }
         }
         Apply0AndReturn(f) => todo!(),
@@ -467,7 +512,7 @@ impl EvaluationState {
           todo!()
         }
         Apply2AndReturn(arg_1_and_result, f, arg_2) => todo!(),
-        ApplyNAndReturn(args_and_result, f) => todo!(),
+        ApplyAndReturn(args_and_result, f) => todo!(),
         Lookup(register, symbol_index) => {
           self.set_register(register, self.environment[&symbol_index].clone());
         }
@@ -486,6 +531,19 @@ impl EvaluationState {
                 _ => {}
               }
             }
+          }
+        }
+        CallingFunction(result) => {
+          // This instruction puts a reference to the current calling function
+          // in a register, which is necessary to support recursion.
+          if let Some(calling_function) =
+            self.current_frame.calling_function.clone()
+          {
+            self.set_register(result, CompositeFn(calling_function));
+          } else {
+            panic!(
+              "CallingFunction invoked with no calling_function in StackFrame"
+            )
           }
         }
         Else => self.skip_to_endif(),
@@ -909,10 +967,10 @@ mod tests {
   simple_register_test!(copy, program![Const(0, 100), Copy(1, 0)], (1, 100));
 
   #[test]
-  fn apply_0_constant_function() {
+  fn call_constant_function() {
     run_and_check_registers!(
       Program::new(
-        vec![Const(0, 0), Apply0(1, 0)],
+        vec![Const(0, 0), Call(1, 0, 0)],
         vec![
           CompositeFn(Rc::new(CompositeFunction::new(
             0,
@@ -926,23 +984,25 @@ mod tests {
   }
 
   simple_register_test!(
-    apply_1_square_function,
+    call_square_function,
     program![
       Const(0, 10),
       Const(
         1,
         CompositeFn(Rc::new(CompositeFunction::new(
           1,
-          vec![Multiply(0, 0, 0), Return(0)]
+          vec![DebugPrint(0), Multiply(0, 0, 0), Return(0)]
         )))
       ),
-      Apply1(0, 1),
+      Call(2, 1, 1),
+      CopyArgument(0)
     ],
-    (0, 100),
+    (0, 10),
+    (2, 100),
   );
 
   simple_register_test!(
-    apply_1_square_function_twice,
+    call_square_function_twice,
     program![
       Const(0, 10),
       Const(
@@ -952,17 +1012,19 @@ mod tests {
           vec![Multiply(0, 0, 0), Return(0)]
         )))
       ),
-      Apply1(0, 1),
-      Apply1(0, 1),
+      Call(0, 1, 1),
+      StealArgument(0),
+      Call(0, 1, 1),
+      StealArgument(0),
     ],
     (0, 10000),
   );
 
   #[test]
-  fn apply_1_double_square_nested_function() {
+  fn call_double_square_nested_function() {
     run_and_check_registers!(
       Program::new(
-        vec![Const(0, 0), Const(1, 2), Apply1(0, 1)],
+        vec![Const(0, 0), Const(1, 2), Call(0, 1, 1), StealArgument(0)],
         vec![
           10.into(),
           CompositeFn(Rc::new(CompositeFunction::new(
@@ -971,7 +1033,14 @@ mod tests {
           ))),
           CompositeFn(Rc::new(CompositeFunction::new(
             1,
-            vec![Const(1, 1), Apply1(0, 1), Apply1(0, 1), Return(0)]
+            vec![
+              Const(1, 1),
+              Call(0, 1, 1),
+              StealArgument(0),
+              Call(0, 1, 1),
+              StealArgument(0),
+              Return(0)
+            ]
           ))),
         ],
       ),
@@ -980,7 +1049,7 @@ mod tests {
   }
 
   simple_register_test!(
-    apply_2_square_product_function,
+    call_square_product_function,
     program![
       Const(0, 2),
       Const(1, 3),
@@ -991,7 +1060,9 @@ mod tests {
           vec![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
         )))
       ),
-      Apply2(0, 2, 1),
+      Call(0, 2, 2),
+      StealArgument(0),
+      StealArgument(1),
     ],
     (0, 36)
   );
@@ -1011,7 +1082,7 @@ mod tests {
   );
 
   simple_register_test!(
-    apply_n_triple_product_function,
+    call_triple_product_function,
     program![
       Const(0, 2),
       Const(1, 3),
@@ -1023,17 +1094,16 @@ mod tests {
           vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )))
       ),
-      EmptyRawVec(3, 3),
-      StealIntoRawVec(3, 0),
-      StealIntoRawVec(3, 1),
-      StealIntoRawVec(3, 2),
-      ApplyN(3, 4),
+      Call(3, 4, 3),
+      StealArgument(0),
+      StealArgument(1),
+      StealArgument(2),
     ],
     (3, 24)
   );
 
   simple_register_test!(
-    apply_n_core_fn_add,
+    apply_core_fn_add,
     program![
       Const(0, 1),
       Const(1, 2),
@@ -1043,7 +1113,7 @@ mod tests {
       StealIntoRawVec(3, 1),
       StealIntoRawVec(3, 2),
       Const(4, CoreFn(CoreFnId::Add)),
-      ApplyN(3, 4),
+      Apply(3, 4),
     ],
     (3, 6)
   );

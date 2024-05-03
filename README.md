@@ -2,7 +2,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* implement conditionals
 * overhaul `Apply` instructions
   * Having special-purpose `Apply<X>` instructions seems unnecessary now that I think about it. We can just have one `Call(R)`, which is followed by n `PassArgument(R)` instructions, such that the register indexes in `PassArgument` say which registers from the previous frame to fill the first n registers of the next stack frame with
   * We will still need an `Apply` instruction that takes a vector of instructions, but that's only for when the user actually uses the `apply` function. Function calls that pass a static number of argument should need to allocate a vector just to pass the arguments.

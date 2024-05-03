@@ -19,16 +19,19 @@ pub enum Instruction {
   StealIntoRawVec(R, R),
 
   // Function control flow
+  Call(R, R, u8),
+  CopyArgument(R),
+  StealArgument(R),
   Return(R),
-  CallingFunction(R),
   Apply0(R, R),
   Apply1(R, R),
   Apply2(R, R, R),
-  ApplyN(R, R),
+  Apply(R, R),
   Apply0AndReturn(R),
   Apply1AndReturn(R, R),
   Apply2AndReturn(R, R, R),
-  ApplyNAndReturn(R, R),
+  ApplyAndReturn(R, R),
+  CallingFunction(R),
 
   // Environment manipulation
   Lookup(R, SymbolIndex),
