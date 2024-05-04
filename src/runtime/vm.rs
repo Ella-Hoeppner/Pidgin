@@ -541,6 +541,9 @@ impl EvaluationState {
             )
           }
         }
+        Jump(instruction_index) => {
+          self.current_frame.instruction_index = instruction_index as usize;
+        }
         Else => self.skip_to_endif(),
         ElseIf(condition) => self.skip_to_endif(),
         EndIf => {}
@@ -1232,7 +1235,7 @@ mod tests {
   );
 
   simple_register_test!(
-    recursion_test,
+    recursion,
     program![
       Const(0, 10),
       Const(
@@ -1258,7 +1261,7 @@ mod tests {
   );
 
   simple_register_test!(
-    call_self_recursion_test,
+    call_self_recursion,
     program![
       Const(0, 10),
       Const(
@@ -1283,7 +1286,7 @@ mod tests {
   );
 
   simple_register_test!(
-    tail_recursion_test,
+    tail_recursion,
     program![
       Const(0, (u16::MAX as i64)),
       Const(
@@ -1309,9 +1312,9 @@ mod tests {
   );
 
   simple_register_test!(
-    call_self_tail_recursion_test,
+    call_self_tail_recursion,
     program![
-      Const(0, 10000000),
+      Const(0, (u16::MAX as i64)),
       Const(
         1,
         CompositeFn(Rc::new(CompositeFunction::new(
@@ -1325,6 +1328,23 @@ mod tests {
             EndIf,
             Return(0)
           ]
+        )))
+      ),
+      Call(0, 1, 1),
+      StealArgument(0),
+    ],
+    (0, 0),
+  );
+
+  simple_register_test!(
+    jump_loop,
+    program![
+      Const(0, (u16::MAX as i64)),
+      Const(
+        1,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          1,
+          vec![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
         )))
       ),
       Call(0, 1, 1),

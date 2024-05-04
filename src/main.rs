@@ -16,20 +16,12 @@ use Value::*;
 
 fn main() {
   let program = program![
-    Const(0, 10000000),
+    Const(0, 100000000),
     Const(
       1,
       CompositeFn(Rc::new(CompositeFunction::new(
         1,
-        vec![
-          IsPos(1, 0),
-          If(1),
-          Dec(2, 0),
-          CallSelfAndReturn(1),
-          StealArgument(2),
-          EndIf,
-          Return(0)
-        ]
+        vec![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
       )))
     ),
     Call(0, 1, 1),

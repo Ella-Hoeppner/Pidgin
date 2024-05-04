@@ -2,7 +2,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* write a test for recursion
 * support custom instructions
   * the definitions of these should be stored in `EvaluationState`, such that you can create an `EvaluationState` and then add custom instructions to it before doing any evaluation
 * support a `Foreign` type, a general-purpose boxed-rust-object type
@@ -10,19 +9,24 @@ Compiler/Runtime stuff:
   * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction`
 * start work on IR
   * This representation will simplify some things relative to the bytecode:
+    * Can just use `usize`s for registers and do SSA
+    * `Call` can just contain a list of the registers that are arguments, rather than needing to be followed by `CopyArgument/StealArgument` instructions
+    * `If` can contain two sub-blocks
     * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
-      * could also get rid of the `program!` macro, or at least simplify it :P
-    * The AST->IR compiler could use `usize` for registers and just use them in SSA form, and the IR->bytecode compiler could handle register reallocation. This would make lifetime analysis somewhat easier, and in some cases it might even be necessary - functions with >256 local variables might be very difficult/impossible to compile directly to the bytecode format.
-      * Hmm, how would instructions like `If` that overwrite their arguments fit into SSA? Would the IR also represent them as overwriting their arguments or would it have them assign to a new register? I think the former might make it harder to make use of the nice properties that SSA provides, but the latter might make the IR->bytecode compilation process more complicated.
-        * Actually I guess it wouldn't be much more complicated... once liftime analysis has been performed the IR->bytecode compiler should be able to easily tell whether the bytecode can reuse the register of the argument or whether the argument needs to be copied into a new register to avoid being overwritten.
-    * The AST->IR compiler could just have one type of `Apply`, which the IR->bytecode compiler could then convert to the specialized `Apply<X>` or `Apply<X>AndReturn` instructions.
-      * This would feel a bit more elegant but I'm not sure if it's a real advantage...
-    * Instructions like `Add`, `Multiply`, `List` that take a variable number of arguments could be represented more elegantly in the IR.
-      * would this be problematic for making use of the SSA form tho?
+    * Instructions like `Add`, `Multiply`, `List` can take an arbitrary number of arguments
 * Implement compiler from IR to bytecode
-  * Compute lifetimes of all virtual registers, reallocate them into a smaller number of real registers for the bytecode
-  * Optimizations (not essential at first):
-    * All occurrences of `Apply` followed by `Return` should be converted into `Apply<X>AndReturn` instructions rather than normal `Apply<X>` instructions
+  * Compute lifetimes of all virtual registers
+  * Reallocate all registers in block into `0-255`
+  * optimizations (not essential at first):
+    * When a value is at the end of its lifetime and is about to be used in another instruction, don't copy it, just use it directly
+    * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
+* add IR-level optimizations (not essential at first):
+  * [`Call`, `Return`] -> `CallAndReturn`
+  * [`CallSelf`, `Return`] -> `CallSelfAndReturn`
+  * [`Apply`, `Return`] -> `ApplyAndReturn`
+  * [`ApplySelf`, `Return`] -> `CallSelfAndReturn`
+  * Function inlining
+  * Functions ending with `CallSelfAndReturn` that can put their return values back into the corresponding input registers can just `Jump` back to the start of the function
 * write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
   * not sure exactly how to do this...`SingleArityCompositeFunction`
 * figure out what to do about laziness...
@@ -108,3 +112,4 @@ Compiler/Runtime stuff:
       * `ConcatList` - consists of two `Rc`s to normal lists, or maybe a `MiniVec<Rc>`
       * `PushedList` - an `Rc` to an existing (shared) list and an owned list that can be pushed to, allowing single-ownership-like mutation speeds despite the early part of the list being shared
       * `ConsedList` - an `Rc` to an existing (shared) list and a *backwards* single-ownership list, such that `Cons` instructions can just push onto the end of the secondary list
+* partial evaluation on the bytecode

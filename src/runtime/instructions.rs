@@ -26,6 +26,7 @@ pub enum Instruction {
   CallSelfAndReturn(u8),
   ApplySelfAndReturn(R),
   CallingFunction(R),
+  Jump(u16),
 
   // Environment manipulation
   Lookup(R, SymbolIndex),
