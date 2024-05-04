@@ -72,6 +72,10 @@ impl StackFrame {
   }
 }
 
+fn unwrap_or_clone_list(list: Rc<Vec<Value>>) -> Vec<Value> {
+  Rc::try_unwrap(list).unwrap_or_else(|list| (*list).clone())
+}
+
 pub struct EvaluationState {
   constants: Vec<Value>,
   stack: [Value; STACK_CAPACITY],
@@ -284,26 +288,6 @@ impl EvaluationState {
         Print(value) => {
           println!("{}", self.get_register(value).description())
         }
-        EmptyRawVec(result, arg_count) => self.set_register(
-          result,
-          RawVec(MiniVec::with_capacity(arg_count as usize)),
-        ),
-        CopyIntoRawVec(args, new_arg) => {
-          let new_arg_value = self.get_register(new_arg).clone();
-          if let RawVec(args_vec) = self.get_register_mut(args) {
-            args_vec.push(new_arg_value);
-          } else {
-            panic!("CopyArg called with non-RawVec value")
-          }
-        }
-        StealIntoRawVec(args, new_arg) => {
-          let new_arg_value = self.steal_register(new_arg);
-          if let RawVec(args_vec) = self.get_register_mut(args) {
-            args_vec.push(new_arg_value);
-          } else {
-            panic!("CopyArg called with non-RawVec value")
-          }
-        }
         Call(target, f, arg_count) => {
           let f_value = self.get_register(f).clone();
           match f_value {
@@ -367,110 +351,17 @@ impl EvaluationState {
           self.consumption = completed_frame.beginning;
           self.set_stack(completed_frame.return_stack_index, return_value);
         }
-        Apply0(result, f) => {
-          // Applies a function of 0 arguments (a thunk)
-          let f_value = self.get_register(f).clone();
-          match f_value {
-            CompositeFn(composite_fn) => {
-              self.start_fn_stack_frame(
-                composite_fn.clone(),
-                self.register_stack_index(result),
-              );
-              #[cfg(debug_assertions)]
-              if composite_fn.arg_count != 0 {
-                panic!(
-                  "Apply0 called on CompositeFn with {}!=0 arguments",
-                  composite_fn.arg_count
-                )
-              }
-            }
-            CoreFn(core_fn) => {
-              let core_fn = CORE_FUNCTIONS[core_fn];
-              todo!();
-            }
-            List(_) | Hashmap(_) | Hashset(_) => {
-              return Err(Error::InvalidArity)
-            }
-            _ => {
-              return Err(Error::CantApply);
-            }
-          }
-        }
-        Apply1(arg_and_result, f) => {
-          // Applies a function of a single argument.
-          let f_value = self.get_register(f).clone();
-          let arg_value = self.steal_register(arg_and_result);
-          match f_value {
-            CompositeFn(composite_fn) => {
-              self.start_fn_stack_frame(
-                composite_fn.clone(),
-                self.register_stack_index(arg_and_result),
-              );
-              #[cfg(debug_assertions)]
-              if composite_fn.arg_count != 1 {
-                panic!(
-                  "Apply1 called on CompositeFn with {}!=1 arguments",
-                  composite_fn.arg_count
-                )
-              }
-              self.set_register(0, arg_value);
-            }
-            CoreFn(core_fn) => {
-              let core_fn = CORE_FUNCTIONS[core_fn];
-              todo!();
-            }
-            List(list) => todo!(),
-            Hashmap(map) => todo!(),
-            Hashset(set) => todo!(),
-            _ => {
-              return Err(Error::CantApply);
-            }
-          }
-        }
-        Apply2(arg_1_and_result, f, arg_2) => {
-          // Applies a function of 2 arguments.
-          let f_value = self.get_register(f).clone();
-          let arg_1_value = self.steal_register(arg_1_and_result);
-          let arg_2_value = self.steal_register(arg_2).clone();
-          match f_value {
-            CompositeFn(composite_fn) => {
-              self.start_fn_stack_frame(
-                composite_fn.clone(),
-                self.register_stack_index(arg_1_and_result),
-              );
-              #[cfg(debug_assertions)]
-              if composite_fn.arg_count != 2 {
-                panic!(
-                  "Apply2 called on CompositeFn with {}!=2 arguments",
-                  composite_fn.arg_count
-                )
-              }
-              self.set_register(0, arg_1_value);
-              self.set_register(1, arg_2_value);
-            }
-            CoreFn(core_fn) => {
-              let core_fn = CORE_FUNCTIONS[core_fn];
-              todo!();
-            }
-            List(_) | Hashmap(_) | Hashset(_) => {
-              return Err(Error::InvalidArity)
-            }
-            _ => {
-              return Err(Error::CantApply);
-            }
-          }
-        }
         Apply(args_and_result, f) => {
           // Applies a function of a single argument.
           let f_value = self.get_register(f).clone();
-          if let RawVec(args_raw_vec) = self.steal_register(args_and_result) {
+          if let List(arg_list) = self.steal_register(args_and_result) {
             match f_value {
               CompositeFn(composite_fn) => {
                 self.start_fn_stack_frame(
                   composite_fn.clone(),
                   self.register_stack_index(args_and_result),
                 );
-                let provided_arg_count = args_raw_vec.len();
+                let provided_arg_count = arg_list.len();
                 #[cfg(debug_assertions)]
                 if composite_fn.arg_count as usize != provided_arg_count {
                   panic!(
@@ -479,14 +370,15 @@ impl EvaluationState {
                     composite_fn.arg_count, provided_arg_count
                   )
                 }
-                for (i, arg_value) in args_raw_vec.into_iter().enumerate() {
+                let x = unwrap_or_clone_list(arg_list);
+                for (i, arg_value) in x.into_iter().enumerate() {
                   self.set_register(i as RegisterIndex, arg_value);
                 }
               }
               CoreFn(core_fn_id) => {
                 self.set_register(
                   args_and_result,
-                  CORE_FUNCTIONS[core_fn_id](args_raw_vec)?,
+                  CORE_FUNCTIONS[core_fn_id](unwrap_or_clone_list(arg_list))?,
                 );
               }
               List(list) => todo!(),
@@ -497,22 +389,22 @@ impl EvaluationState {
               }
             }
           } else {
-            panic!("Apply called with non-RawVec value");
+            panic!("Apply called with non-List value");
           }
         }
-        Apply0AndReturn(f) => todo!(),
-        Apply1AndReturn(f, args) => {
+        CallAndReturn(f, arg_count) => {
           // This instruction is for supporting tail-call elimination. It takes
-          // a function and its arguments just like `Apply`, but before invoking
+          // a function and is followed by some number of `CopyArgument` or
+          // `StealArgument` instructions just like `Call`, but before invoking
           // the function it cleans up the current stack frame, so tail-call
           // recursive functions don't consume more space than necessary on the
-          // stack. Any time a `Apply` instruction would be immediately followed
-          // by a `Return` instruction, it should be replaced with this (maybe
-          // that can actually just be done in an optimization pass?)
+          // stack. Any time a `Call` sequence would be immediately followed
+          // by a `Return` instruction, it should be replaced with this
           todo!()
         }
-        Apply2AndReturn(arg_1_and_result, f, arg_2) => todo!(),
-        ApplyAndReturn(args_and_result, f) => todo!(),
+        ApplyAndReturn(args, f) => {
+          todo!()
+        }
         Lookup(register, symbol_index) => {
           self.set_register(register, self.environment[&symbol_index].clone());
         }
@@ -761,7 +653,6 @@ impl EvaluationState {
         EmptyList(result) => {
           self.set_register(result, Vec::new());
         }
-        ListFromRawVec(result) => todo!(),
         Last(result, list) => self.set_register(
           result,
           match self.get_register(list) {
@@ -1068,20 +959,6 @@ mod tests {
   );
 
   simple_register_test!(
-    clone_into_raw_vec,
-    program![EmptyRawVec(0, 1), Const(1, "Hello!"), CopyIntoRawVec(0, 1),],
-    (0, RawVec(mini_vec!["Hello!".into()])),
-    (1, "Hello!")
-  );
-
-  simple_register_test!(
-    steal_into_raw_vec,
-    program![EmptyRawVec(0, 1), Const(1, "Hello!"), StealIntoRawVec(0, 1),],
-    (0, RawVec(mini_vec!["Hello!".into()])),
-    (1, Nil)
-  );
-
-  simple_register_test!(
     call_triple_product_function,
     program![
       Const(0, 2),
@@ -1105,17 +982,11 @@ mod tests {
   simple_register_test!(
     apply_core_fn_add,
     program![
-      Const(0, 1),
-      Const(1, 2),
-      Const(2, 3),
-      EmptyRawVec(3, 3),
-      StealIntoRawVec(3, 0),
-      StealIntoRawVec(3, 1),
-      StealIntoRawVec(3, 2),
-      Const(4, CoreFn(CoreFnId::Add)),
-      Apply(3, 4),
+      Const(0, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
+      Const(1, CoreFn(CoreFnId::Add)),
+      Apply(0, 1),
     ],
-    (3, 6)
+    (0, 6)
   );
 
   simple_register_test!(

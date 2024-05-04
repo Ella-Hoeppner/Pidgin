@@ -13,23 +13,13 @@ pub enum Instruction {
   // Output
   Print(R),
 
-  // RawVec manipulation (used for function argument and List construction)
-  EmptyRawVec(R, u8),
-  CopyIntoRawVec(R, R),
-  StealIntoRawVec(R, R),
-
   // Function control flow
   Call(R, R, u8),
   CopyArgument(R),
   StealArgument(R),
   Return(R),
-  Apply0(R, R),
-  Apply1(R, R),
-  Apply2(R, R, R),
   Apply(R, R),
-  Apply0AndReturn(R),
-  Apply1AndReturn(R, R),
-  Apply2AndReturn(R, R, R),
+  CallAndReturn(R, u8),
   ApplyAndReturn(R, R),
   CallingFunction(R),
 
@@ -128,7 +118,6 @@ pub enum Instruction {
 
   // List manipulation (most apply to strings as well)
   EmptyList(R),
-  ListFromRawVec(R),
   Last(R, R),
   Rest(R),
   ButLast(R),

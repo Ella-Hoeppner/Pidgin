@@ -227,7 +227,6 @@ pub enum Value {
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnId),
   CompositeFn(Rc<CompositeFunction>),
-  RawVec(MiniVec<Value>),
 }
 use Value::*;
 
@@ -245,7 +244,6 @@ impl PartialEq for Value {
       (Self::Hashset(l0), Self::Hashset(r0)) => l0 == r0,
       (Self::CoreFn(l0), Self::CoreFn(r0)) => l0 == r0,
       (Self::CompositeFn(l0), Self::CompositeFn(r0)) => Rc::ptr_eq(l0, r0),
-      (Self::RawVec(l0), Self::RawVec(r0)) => l0 == r0,
       _ => false,
     }
   }
@@ -324,14 +322,6 @@ impl Value {
         )
       }
       CoreFn(_) => todo!(),
-      RawVec(values) => format!(
-        "(raw) [{}]",
-        values
-          .iter()
-          .map(|v| v.description())
-          .collect::<Vec<String>>()
-          .join(", ")
-      ),
     }
   }
 }

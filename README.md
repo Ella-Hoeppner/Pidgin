@@ -19,7 +19,6 @@ Compiler/Runtime stuff:
       * would this be problematic for making use of the SSA form tho?
 * Implement compiler from IR to bytecode
   * Compute lifetimes of all virtual registers, reallocate them into a smaller number of real registers for the bytecode
-  * Calls to `Apply` will, depending on their arity, be converted into `Apply0`, `Apply1`, `Apply2`, or `ApplyN` instructions. In the `ApplyN` case, it will also need to emit `EmptyRawVec` and `CopyIntoRawVec`/`StealIntoRawVec` instructions to construct the argument vector.
   * Optimizations (not essential at first):
     * All occurrences of `Apply` followed by `Return` should be converted into `Apply<X>AndReturn` instructions rather than normal `Apply<X>` instructions
 * write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
@@ -107,7 +106,6 @@ Compiler/Runtime stuff:
   * I guess rather than technically having a different kind of constant, which I guess would mean having a separate `single_use_constants` field in `Program`, there could just be a `StealConst` instruction in addition to the normal `Const` function
 * Have special types for lists (and hashmaps and hashsets, presumably) that aren't stored in `Rc`s and are just directly mutable, for values that can be determined at compile-time to be single-use.
   * This should save some overhead for calling `get_mut` on the `Rc`s and deallocating the extra data associated with an `Rc`. This would also remove some indirection, if I can't figure out how to make the `RcVec` thing work
-  * I guess this could just use `RawVec` in the case of lists?
 * Consider implementing specialized subtypes of `List` that handle certain operations in a more efficient way.
   * For instance, there could be a `SubList` that consists of an `Rc` to a normal list along with a start and end index, and operations like `get` or `count` could have special implementations for these types
     * Things like this could help avoid cloning data in a lot of cases

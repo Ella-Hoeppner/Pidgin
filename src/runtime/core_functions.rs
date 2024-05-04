@@ -1,7 +1,6 @@
 use crate::runtime::Result;
 use crate::{Num, Value};
 use enum_map::{enum_map, Enum, EnumMap};
-use minivec::MiniVec;
 use Num::*;
 use Value::*;
 
@@ -137,66 +136,66 @@ pub(crate) enum CoreFnId {
 }
 pub(crate) const CORE_FUNCTIONS: EnumMap<
   CoreFnId,
-  fn(MiniVec<Value>) -> Result<Value>,
+  fn(Vec<Value>) -> Result<Value>,
 > = EnumMap::from_array([
   // Print
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Apply
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // When
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // If
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Partial
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Compose
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // FindSome
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Reduce
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Memoize
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Constantly
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // NumericalEqual
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsZero
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsNan
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsInf
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsEven
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsOdd
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsPos
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsNeg
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Inc
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Dec
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Abs
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Floor
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Ceil
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Sqrt
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Exp
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Exp2
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Ln
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Log2
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Add
-  |args: MiniVec<Value>| {
+  |args: Vec<Value>| {
     let nums = args
       .iter()
       .map(|v| v.as_num().copied())
@@ -204,199 +203,199 @@ pub(crate) const CORE_FUNCTIONS: EnumMap<
     Ok(Number(nums.into_iter().fold(Int(0), |sum, n| sum + n)))
   },
   // Subtract
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Multiply
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Divide
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Pow
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Mod
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Quot
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Min
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Max
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // GreaterThan
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // GreaterThanOrEqual
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // LessThan
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // LessThanOrEqual
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Rand
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // RandInt
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Equal
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // NotEqual
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Not
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // And
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Or
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Xor
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsEmpty
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // First
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Count
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Flatten
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Remove
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Filter
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Map
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Set
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // SetIn
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Get
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // GetIn
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Update
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // UpdateIn
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // MinKey
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // MaxKey
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Push
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Sort
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // SortBy
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // CreateList
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Last
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Rest
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ButLast
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Nth
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // NthFromLast
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Cons
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Concat
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Take
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Drop
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Reverse
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Distinct
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Sub
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Partition
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Pad
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // CreateMap
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Keys
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Values
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Zip
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Invert
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Merge
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // MergeWith
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // MapKeys
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // MapValues
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // SelectKeys
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // CreateSet
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Union
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Intersection
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Difference
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // SymmetricDifference
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Range
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Repeat
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Repeatedly
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // Iterate
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsNil
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsBool
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsChar
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsNum
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsInt
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsFloat
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsSymbol
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsString
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsList
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsMap
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsSet
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsCollection
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // IsFn
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToBool
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToChar
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToNum
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToInt
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToFloat
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToSymbol
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToString
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToList
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // ToMap
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // CreateCell
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // GetCellValue
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // SetCellValue
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
   // UpdateCell
-  |args: MiniVec<Value>| todo!(),
+  |args: Vec<Value>| todo!(),
 ]);
