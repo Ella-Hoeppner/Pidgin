@@ -9,7 +9,9 @@ use std::{
 
 use ordered_float::OrderedFloat;
 
-use crate::{CoreFnIndex, Instruction};
+use crate::{
+  CoreFnIndex, InstructionBlock, RuntimeInstruction, RuntimeInstructionBlock,
+};
 
 use super::{core_functions::CoreFnId, vm::SymbolIndex, Error, Result};
 
@@ -195,15 +197,13 @@ impl From<i64> for Num {
   }
 }
 
-pub type InstructionBlock = Rc<[Instruction]>;
-
 #[derive(Clone, Debug)]
 pub struct CompositeFunction {
   pub arg_count: u8,
-  pub instructions: InstructionBlock,
+  pub instructions: RuntimeInstructionBlock,
 }
 impl CompositeFunction {
-  pub fn new<T: Into<InstructionBlock>>(
+  pub fn new<T: Into<RuntimeInstructionBlock>>(
     arg_count: u8,
     instructions: T,
   ) -> Self {

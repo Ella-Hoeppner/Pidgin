@@ -1,14 +1,15 @@
-use crate::{ConstIndex, RegisterIndex, StackIndex, SymbolIndex};
+use std::rc::Rc;
 
-type R = RegisterIndex; // for brevity
+use crate::{ConstIndex, RegisterIndex, StackIndex, SymbolIndex, Value};
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Instruction {
+pub enum Instruction<R, C> {
   DebugPrint(u8),
 
   // Register manipulation
   Clear(R),
   Copy(R, R),
-  Const(R, ConstIndex),
+  Const(R, C),
 
   // Output
   Print(R),
@@ -201,3 +202,9 @@ pub enum Instruction {
   SetCellValue(R, R),
   UpdateCell(R, R),
 }
+
+pub type InstructionBlock<R, C> = Rc<[Instruction<R, C>]>;
+pub type RuntimeInstruction = Instruction<RegisterIndex, ConstIndex>;
+pub type RuntimeInstructionBlock = InstructionBlock<RegisterIndex, ConstIndex>;
+pub type SugaredInstruction = Instruction<u64, Value>;
+pub type SugaredInstructionBlock = InstructionBlock<u64, Value>;

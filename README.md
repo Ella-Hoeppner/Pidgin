@@ -7,19 +7,14 @@ Compiler/Runtime stuff:
 * support a `Foreign` type, a general-purpose boxed-rust-object type
 * support multi-arity composite functions
   * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction`
-* start work on IR
-  * This representation will simplify some things relative to the bytecode:
-    * Can just use `usize`s for registers and do SSA
-    * `Call` can just contain a list of the registers that are arguments, rather than needing to be followed by `CopyArgument/StealArgument` instructions
-    * `If` can contain two sub-blocks
-    * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
-    * Instructions like `Add`, `Multiply`, `List` can take an arbitrary number of arguments
-* Implement compiler from IR to bytecode
+* Implement compiler from IR (using `Instruction<usize, Value>`) to bytecode
   * Compute lifetimes of all virtual registers
   * Reallocate all registers in block into `0-255`
   * optimizations (not essential at first):
     * When a value is at the end of its lifetime and is about to be used in another instruction, don't copy it, just use it directly
     * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
+* get rid of `EvaluationState::consumption`, determine stack frame offsets via static analysis
+  * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
 * add IR-level optimizations (not essential at first):
   * [`Call`, `Return`] -> `CallAndReturn`
   * [`CallSelf`, `Return`] -> `CallSelfAndReturn`
@@ -60,11 +55,6 @@ Compiler/Runtime stuff:
 * top-level unquoting
 
 # Long-run optimizations
-* `EvaluationState::consumption` shouldn't *really* need to be tracked at runtime
-  * Right now every single call to `set_register` has to update `consumption`, so getting rid of that might mean a fairly significant reduction in overhead
-  * The only thing that it's actually used for at runtime (other than debugging) is to figure out where to start a new stack frame when a function is called, but that should be determinable at compile time via static analysis.
-    * There would need to be a new special instruction like `SetStackFrameOffset(u8)` that the compiler places before calls to `Apply<X>`, which sets a global value that is then used in the `Apply<X>` instruction handler to determine where to start the new stack frame (relative to the old). This does mean there will be slightly more overhead in function dispatching, but I think it would definitely be worth it for the save in updating `consumption` with every instruction.
-    * Doing the static analysis would just involve finding the highest register that has been touched
 * using the `take_mut` crate can probably avoid replacing a stolen register with a temporary `Nil` for several instructions
 * Reimplement `Value::List` using a custom reference-counted vector.
   * This could take more advantage of the fact that the behavior is very different when the reference count is 1. Also, `Rc<Vec<Value>>` involves two layers of indirection, but it should be possible to implement a custom `RcVec` with just one. This might be something like an enum with two variants for the single-ownership (mutable) case and the shared-ownership (immutable) case, like:

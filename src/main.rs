@@ -1,6 +1,7 @@
 #![allow(warnings)]
 #![feature(stmt_expr_attributes)]
 
+mod instructions;
 mod runtime;
 mod string_utils;
 
@@ -8,13 +9,15 @@ use minivec::mini_vec;
 use ordered_float::OrderedFloat;
 use program_macro::program;
 
-use crate::runtime::{data::*, instructions::*, vm::*};
+use crate::instructions::*;
+use crate::runtime::{data::*, vm::*};
 use std::rc::Rc;
 use Instruction::*;
 use Num::*;
 use Value::*;
 
 fn main() {
+  let time = std::time::Instant::now();
   let program = program![
     Const(0, 100000000),
     Const(
@@ -28,7 +31,6 @@ fn main() {
     StealArgument(0),
   ];
   let mut state = EvaluationState::new(program);
-  let time = std::time::Instant::now();
   state.evaluate().unwrap();
   println!("{}", time.elapsed().as_secs_f64())
 }

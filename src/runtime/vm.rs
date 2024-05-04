@@ -5,10 +5,11 @@ use minivec::{mini_vec, MiniVec};
 
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
-use crate::InstructionBlock;
 use crate::{
-  string_utils::indent_lines, CompositeFunction, Instruction, Num, Value,
+  string_utils::indent_lines, CompositeFunction, Instruction, Num,
+  RuntimeInstruction, Value,
 };
+use crate::{InstructionBlock, RuntimeInstructionBlock};
 use Instruction::*;
 use Num::*;
 use Value::*;
@@ -25,11 +26,11 @@ pub type CoreFnIndex = u8;
 
 #[derive(Debug)]
 pub struct Program {
-  instructions: InstructionBlock,
+  instructions: RuntimeInstructionBlock,
   constants: Vec<Value>,
 }
 impl Program {
-  pub fn new<T: Into<InstructionBlock>>(
+  pub fn new<T: Into<RuntimeInstructionBlock>>(
     instructions: T,
     constants: Vec<Value>,
   ) -> Self {
@@ -43,12 +44,12 @@ impl Program {
 struct StackFrame {
   beginning: StackIndex,
   calling_function: Option<Rc<CompositeFunction>>,
-  instructions: InstructionBlock,
+  instructions: RuntimeInstructionBlock,
   instruction_index: usize,
   return_stack_index: StackIndex,
 }
 impl StackFrame {
-  fn root(instructions: InstructionBlock) -> Self {
+  fn root(instructions: RuntimeInstructionBlock) -> Self {
     Self {
       beginning: 0,
       calling_function: None,
@@ -70,7 +71,7 @@ impl StackFrame {
       return_stack_index,
     }
   }
-  fn next_instruction(&mut self) -> Instruction {
+  fn next_instruction(&mut self) -> RuntimeInstruction {
     let instruction = self.instructions[self.instruction_index].clone();
     self.instruction_index += 1;
     instruction
@@ -248,12 +249,12 @@ impl EvaluationState {
     let frame = self.create_fn_stack_frame(f, return_stack_index);
     self.push_frame(frame);
   }
-  fn next_instruction(&mut self) -> Instruction {
+  fn next_instruction(&mut self) -> RuntimeInstruction {
     self.current_frame.next_instruction()
   }
   fn skip_to_endif(&mut self) {
     loop {
-      if self.next_instruction() == Instruction::EndIf {
+      if self.next_instruction() == EndIf {
         break;
       }
     }
@@ -343,9 +344,6 @@ impl EvaluationState {
         Return(value) => {
           let return_value = self.get_register(value).clone();
           let completed_frame = self.complete_frame();
-          /*for i in completed_frame.beginning..self.consumption {
-            self.set_stack(i, Nil);
-          }*/
           self.consumption = completed_frame.beginning;
           self.set_stack(completed_frame.return_stack_index, return_value);
         }
