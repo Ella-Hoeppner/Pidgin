@@ -14,13 +14,17 @@ pub enum Instruction {
   Print(R),
 
   // Function control flow
-  Call(R, R, u8),
+  Return(R),
   CopyArgument(R),
   StealArgument(R),
-  Return(R),
+  Call(R, R, u8),
   Apply(R, R),
+  CallSelf(R, u8),
+  ApplySelf(R),
   CallAndReturn(R, u8),
   ApplyAndReturn(R, R),
+  CallSelfAndReturn(u8),
+  ApplySelfAndReturn(R),
   CallingFunction(R),
 
   // Environment manipulation

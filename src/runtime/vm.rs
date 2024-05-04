@@ -70,6 +70,11 @@ impl StackFrame {
       return_stack_index,
     }
   }
+  fn next_instruction(&mut self) -> Instruction {
+    let instruction = self.instructions[self.instruction_index].clone();
+    self.instruction_index += 1;
+    instruction
+  }
 }
 
 fn unwrap_or_clone_list(list: Rc<Vec<Value>>) -> Vec<Value> {
@@ -233,7 +238,7 @@ impl EvaluationState {
     f: Rc<CompositeFunction>,
     return_stack_index: StackIndex,
   ) -> StackFrame {
-    StackFrame::for_fn(f.clone(), self.consumption, return_stack_index)
+    StackFrame::for_fn(f, self.consumption, return_stack_index)
   }
   fn start_fn_stack_frame(
     &mut self,
@@ -244,16 +249,63 @@ impl EvaluationState {
     self.push_frame(frame);
   }
   fn next_instruction(&mut self) -> Instruction {
-    let instruction = self.current_frame.instructions
-      [self.current_frame.instruction_index]
-      .clone();
-    self.current_frame.instruction_index += 1;
-    instruction
+    self.current_frame.next_instruction()
   }
   fn skip_to_endif(&mut self) {
     loop {
       if self.next_instruction() == Instruction::EndIf {
         break;
+      }
+    }
+  }
+  fn take_args_from(
+    &mut self,
+    arg_count: u8,
+    beginning_stack_index: StackIndex,
+    frame: &mut StackFrame,
+  ) {
+    for i in 0..arg_count {
+      match frame.next_instruction() {
+        CopyArgument(arg_register) => {
+          let value = self
+            .get_stack(frame.beginning + arg_register as StackIndex)
+            .clone();
+          self.set_stack(beginning_stack_index + i as StackIndex, value)
+        }
+        StealArgument(arg_register) => {
+          let stolen_value = self
+            .steal_stack(frame.beginning + arg_register as StackIndex)
+            .clone();
+          self.set_stack(beginning_stack_index + i as StackIndex, stolen_value)
+        }
+        other => panic!(
+          "Expected CopyArgument or StealArgument instruction {}/{},
+           found {:?}",
+          i + 1,
+          arg_count,
+          other
+        ),
+      }
+    }
+  }
+  fn take_args(&mut self, arg_count: u8, beginning_stack_index: StackIndex) {
+    for i in 0..arg_count {
+      match self.next_instruction() {
+        CopyArgument(arg_register) => {
+          let value = self.get_register(arg_register).clone();
+          self.set_stack(beginning_stack_index + i as StackIndex, value)
+        }
+        StealArgument(arg_register) => {
+          let stolen_value = self.steal_register(arg_register).clone();
+          self.set_stack(beginning_stack_index + i as StackIndex, stolen_value)
+        }
+        other => panic!(
+          "Expected CopyArgument or StealArgument instruction {}/{},
+           found {:?}",
+          i + 1,
+          arg_count,
+          other
+        ),
       }
     }
   }
@@ -288,6 +340,21 @@ impl EvaluationState {
         Print(value) => {
           println!("{}", self.get_register(value).description())
         }
+        Return(value) => {
+          let return_value = self.get_register(value).clone();
+          let completed_frame = self.complete_frame();
+          /*for i in completed_frame.beginning..self.consumption {
+            self.set_stack(i, Nil);
+          }*/
+          self.consumption = completed_frame.beginning;
+          self.set_stack(completed_frame.return_stack_index, return_value);
+        }
+        CopyArgument(f) => {
+          panic!("CopyArgument instruction called, this should never happen")
+        }
+        StealArgument(f) => {
+          panic!("CopyArgument instruction called, this should never happen")
+        }
         Call(target, f, arg_count) => {
           let f_value = self.get_register(f).clone();
           match f_value {
@@ -296,30 +363,7 @@ impl EvaluationState {
                 composite_fn,
                 self.register_stack_index(target),
               );
-              for i in 0..arg_count {
-                match self.next_instruction() {
-                  CopyArgument(arg_register) => {
-                    let value = self.get_register(arg_register).clone();
-                    println!("hehehe >:D {value}");
-                    self.set_stack(new_frame.beginning + i as StackIndex, value)
-                  }
-                  StealArgument(arg_register) => {
-                    let stolen_value =
-                      self.steal_register(arg_register).clone();
-                    self.set_stack(
-                      new_frame.beginning + i as StackIndex,
-                      stolen_value,
-                    )
-                  }
-                  other => panic!(
-                    "Expected CopyArgument or StealArgument instruction {}/{},
-                     found {:?}",
-                    i + 1,
-                    arg_count,
-                    other
-                  ),
-                }
-              }
+              self.take_args(arg_count, new_frame.beginning);
               self.push_frame(new_frame);
             }
             CoreFn(_) => {
@@ -336,23 +380,7 @@ impl EvaluationState {
             }
           }
         }
-        CopyArgument(f) => {
-          panic!("CopyArgument instruction called, this should never happen")
-        }
-        StealArgument(f) => {
-          panic!("CopyArgument instruction called, this should never happen")
-        }
-        Return(value) => {
-          let return_value = self.get_register(value).clone();
-          let completed_frame = self.complete_frame();
-          for i in completed_frame.beginning..self.consumption {
-            self.set_stack(i, Nil);
-          }
-          self.consumption = completed_frame.beginning;
-          self.set_stack(completed_frame.return_stack_index, return_value);
-        }
         Apply(args_and_result, f) => {
-          // Applies a function of a single argument.
           let f_value = self.get_register(f).clone();
           if let List(arg_list) = self.steal_register(args_and_result) {
             match f_value {
@@ -392,19 +420,94 @@ impl EvaluationState {
             panic!("Apply called with non-List value");
           }
         }
+        CallSelf(target, arg_count) => {
+          let new_frame = self.create_fn_stack_frame(
+            self.current_frame.calling_function.clone().unwrap(),
+            self.register_stack_index(target),
+          );
+          self.take_args(arg_count, new_frame.beginning);
+          self.push_frame(new_frame);
+        }
+        ApplySelf(args_and_result) => {
+          if let List(arg_list) = self.steal_register(args_and_result) {
+            let composite_fn =
+              self.current_frame.calling_function.clone().unwrap();
+            self.start_fn_stack_frame(
+              composite_fn.clone(),
+              self.register_stack_index(args_and_result),
+            );
+            let provided_arg_count = arg_list.len();
+            #[cfg(debug_assertions)]
+            if composite_fn.arg_count as usize != provided_arg_count {
+              panic!(
+                "ApplySelf called on CompositeFn that expects {} arguments, \
+                 {} arguments provided",
+                composite_fn.arg_count, provided_arg_count
+              )
+            }
+            let x = unwrap_or_clone_list(arg_list);
+            for (i, arg_value) in x.into_iter().enumerate() {
+              self.set_register(i as RegisterIndex, arg_value);
+            }
+          } else {
+            panic!("Apply called with non-List value");
+          }
+        }
         CallAndReturn(f, arg_count) => {
-          // This instruction is for supporting tail-call elimination. It takes
-          // a function and is followed by some number of `CopyArgument` or
-          // `StealArgument` instructions just like `Call`, but before invoking
-          // the function it cleans up the current stack frame, so tail-call
-          // recursive functions don't consume more space than necessary on the
-          // stack. Any time a `Call` sequence would be immediately followed
-          // by a `Return` instruction, it should be replaced with this
-          todo!()
+          let f_value = self.get_register(f).clone();
+          let mut completed_frame = self.complete_frame();
+          match f_value {
+            CompositeFn(composite_fn) => {
+              let new_frame = StackFrame::for_fn(
+                composite_fn,
+                completed_frame.beginning,
+                completed_frame.return_stack_index,
+              );
+              self.take_args_from(
+                arg_count,
+                new_frame.beginning,
+                &mut completed_frame,
+              );
+              self.consumption =
+                completed_frame.beginning + arg_count as StackIndex;
+              self.push_frame(new_frame);
+            }
+            CoreFn(_) => {
+              panic!(
+                "CallAndReturn instruction called with CoreFn value, this \
+                 should never happen"
+              )
+            }
+            List(list) => todo!(),
+            Hashmap(map) => todo!(),
+            Hashset(set) => todo!(),
+            other => {
+              return Err(Error::CantApply);
+            }
+          }
         }
         ApplyAndReturn(args, f) => {
           todo!()
         }
+        CallSelfAndReturn(arg_count) => {
+          let composite_fn =
+            self.current_frame.calling_function.clone().unwrap();
+          let mut completed_frame = self.complete_frame();
+          let new_frame = StackFrame::for_fn(
+            composite_fn,
+            completed_frame.beginning,
+            completed_frame.return_stack_index,
+          );
+          self.take_args_from(
+            arg_count,
+            new_frame.beginning,
+            &mut completed_frame,
+          );
+          self.consumption =
+            completed_frame.beginning + arg_count as StackIndex;
+          self.push_frame(new_frame);
+        }
+        ApplySelfAndReturn(args) => todo!(),
         Lookup(register, symbol_index) => {
           self.set_register(register, self.environment[&symbol_index].clone());
         }
@@ -1126,5 +1229,107 @@ mod tests {
       EndIf
     ],
     (2, 5)
+  );
+
+  simple_register_test!(
+    recursion_test,
+    program![
+      Const(0, 10),
+      Const(
+        1,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          1,
+          vec![
+            IsPos(1, 0),
+            If(1),
+            Dec(0, 0),
+            CallingFunction(2),
+            Call(0, 2, 1),
+            StealArgument(0),
+            EndIf,
+            Return(0)
+          ]
+        )))
+      ),
+      Call(0, 1, 1),
+      StealArgument(0),
+    ],
+    (0, 0)
+  );
+
+  simple_register_test!(
+    call_self_recursion_test,
+    program![
+      Const(0, 10),
+      Const(
+        1,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          1,
+          vec![
+            IsPos(1, 0),
+            If(1),
+            Dec(0, 0),
+            CallSelf(0, 1),
+            StealArgument(0),
+            EndIf,
+            Return(0)
+          ]
+        )))
+      ),
+      Call(0, 1, 1),
+      StealArgument(0),
+    ],
+    (0, 0)
+  );
+
+  simple_register_test!(
+    tail_recursion_test,
+    program![
+      Const(0, (u16::MAX as i64)),
+      Const(
+        1,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          1,
+          vec![
+            IsPos(1, 0),
+            If(1),
+            Dec(2, 0),
+            CallingFunction(3),
+            CallAndReturn(3, 1),
+            StealArgument(2),
+            EndIf,
+            Return(0)
+          ]
+        )))
+      ),
+      Call(0, 1, 1),
+      StealArgument(0),
+    ],
+    (0, 0),
+  );
+
+  simple_register_test!(
+    call_self_tail_recursion_test,
+    program![
+      Const(0, 10000000),
+      Const(
+        1,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          1,
+          vec![
+            IsPos(1, 0),
+            If(1),
+            Dec(2, 0),
+            CallSelfAndReturn(1),
+            StealArgument(2),
+            EndIf,
+            Return(0)
+          ]
+        )))
+      ),
+      Call(0, 1, 1),
+      StealArgument(0),
+    ],
+    (0, 0),
   );
 }

@@ -2,10 +2,12 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* overhaul `Apply` instructions
-  * Having special-purpose `Apply<X>` instructions seems unnecessary now that I think about it. We can just have one `Call(R)`, which is followed by n `PassArgument(R)` instructions, such that the register indexes in `PassArgument` say which registers from the previous frame to fill the first n registers of the next stack frame with
-  * We will still need an `Apply` instruction that takes a vector of instructions, but that's only for when the user actually uses the `apply` function. Function calls that pass a static number of argument should need to allocate a vector just to pass the arguments.
 * write a test for recursion
+* support custom instructions
+  * the definitions of these should be stored in `EvaluationState`, such that you can create an `EvaluationState` and then add custom instructions to it before doing any evaluation
+* support a `Foreign` type, a general-purpose boxed-rust-object type
+* support multi-arity composite functions
+  * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction`
 * start work on IR
   * This representation will simplify some things relative to the bytecode:
     * Constants could just be inlined into the IR values, there would be no need for a separate constant table at that level
@@ -22,11 +24,7 @@ Compiler/Runtime stuff:
   * Optimizations (not essential at first):
     * All occurrences of `Apply` followed by `Return` should be converted into `Apply<X>AndReturn` instructions rather than normal `Apply<X>` instructions
 * write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
-  * not sure exactly how to do this...
-* implement `Apply<X>AndReturn` instructions
-  * implement tests for these based on equality checking between programs
-* support multi-arity composite functions
-  * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction` type to `SingleArityCompositeFunction`
+  * not sure exactly how to do this...`SingleArityCompositeFunction`
 * figure out what to do about laziness...
   * unsure of how to represent this.
     * Should I go for the same approach as Quoot?
@@ -37,9 +35,6 @@ Compiler/Runtime stuff:
     * Maybe I could have an `Iter` type that mostly just wraps rust's iterator system? Though it would probably still need to be composed of both a `vec` of already realized values and an `iter` that can produce the rest of the values
       * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
 * support coroutines
-* support custom instructions
-  * the definitions of these should be stored in `EvaluationState`, such that you can create an `EvaluationState` and then add custom instructions to it before doing any evaluation
-* support a `Foreign` type, a general-purpose boxed-rust-object type
 * implement remaining instructions, and write tests
 * start on a compiler from ASTs into IR
 * Once GSE is ready, specify a basic grammer, and set up a function that accepts a GSE string, parses it, compiles it to the IR, compiles that to the bytecode, and then runs it.

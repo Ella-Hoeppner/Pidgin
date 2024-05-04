@@ -6,17 +6,37 @@ mod string_utils;
 
 use minivec::mini_vec;
 use ordered_float::OrderedFloat;
+use program_macro::program;
 
 use crate::runtime::{data::*, instructions::*, vm::*};
+use std::rc::Rc;
 use Instruction::*;
 use Num::*;
 use Value::*;
 
 fn main() {
-  let program = Program::new(
-    vec![Const(0, 0), Const(1, 1), Const(2, 2), Const(3, 3)],
-    vec![Number(Int(1)), Bool(false), Symbol(0), Nil],
-  );
+  let program = program![
+    Const(0, 10000000),
+    Const(
+      1,
+      CompositeFn(Rc::new(CompositeFunction::new(
+        1,
+        vec![
+          IsPos(1, 0),
+          If(1),
+          Dec(2, 0),
+          CallSelfAndReturn(1),
+          StealArgument(2),
+          EndIf,
+          Return(0)
+        ]
+      )))
+    ),
+    Call(0, 1, 1),
+    StealArgument(0),
+  ];
   let mut state = EvaluationState::new(program);
+  let time = std::time::Instant::now();
   state.evaluate().unwrap();
+  println!("{}", time.elapsed().as_secs_f64())
 }
