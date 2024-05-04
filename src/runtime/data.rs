@@ -1,6 +1,7 @@
 use minivec::MiniVec;
 use std::{
   collections::{HashMap, HashSet},
+  error::Error,
   fmt::{Debug, Display},
   hash::Hash,
   ops::{Add, Div, Mul, Neg, Sub},
@@ -13,7 +14,11 @@ use crate::{
   CoreFnIndex, InstructionBlock, RuntimeInstruction, RuntimeInstructionBlock,
 };
 
-use super::{core_functions::CoreFnId, vm::SymbolIndex, Error, Result};
+use super::{
+  core_functions::CoreFnId,
+  error::{PidginError, PidginResult},
+  vm::SymbolIndex,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Num {
@@ -85,7 +90,7 @@ impl Num {
       Float(f) => *f,
     }
   }
-  pub fn as_int_lossless(&self) -> Result<i64> {
+  pub fn as_int_lossless(&self) -> PidginResult<i64> {
     match self {
       Int(i) => Ok(*i),
       Float(f) => {
@@ -93,7 +98,7 @@ impl Num {
         if i as f64 == **f {
           Ok(i)
         } else {
-          Err(Error::ArgumentNotInt)
+          Err(PidginError::ArgumentNotInt)
         }
       }
     }
@@ -137,6 +142,17 @@ impl Add for Num {
     }
   }
 }
+impl Add for &Num {
+  type Output = Num;
+  fn add(self, other: &Num) -> Num {
+    match (self, other) {
+      (Int(a), Int(b)) => (a + b).into(),
+      (Float(a), Float(b)) => (*a + *b).into(),
+      (Int(a), Float(b)) => ((*a as f64) + **b).into(),
+      (Float(a), Int(b)) => (a + (*b as f64)).into(),
+    }
+  }
+}
 
 impl Sub for Num {
   type Output = Num;
@@ -149,8 +165,28 @@ impl Sub for Num {
     }
   }
 }
+impl Sub for &Num {
+  type Output = Num;
+  fn sub(self, other: &Num) -> Num {
+    match (self, other) {
+      (Int(a), Int(b)) => (a - b).into(),
+      (Float(a), Float(b)) => (*a - b).into(),
+      (Int(a), Float(b)) => ((*a as f64) - **b).into(),
+      (Float(a), Int(b)) => (*a - (*b as f64)).into(),
+    }
+  }
+}
 
 impl Neg for Num {
+  type Output = Num;
+  fn neg(self) -> Num {
+    match self {
+      Int(i) => Int(-i),
+      Float(f) => Float(-f),
+    }
+  }
+}
+impl Neg for &Num {
   type Output = Num;
   fn neg(self) -> Num {
     match self {
@@ -171,10 +207,27 @@ impl Mul for Num {
     }
   }
 }
+impl Mul for &Num {
+  type Output = Num;
+  fn mul(self, other: &Num) -> Num {
+    match (self, other) {
+      (Int(a), Int(b)) => (a * b).into(),
+      (Float(a), Float(b)) => (*a * b).into(),
+      (Int(a), Float(b)) => ((*a as f64) * **b).into(),
+      (Float(a), Int(b)) => (a * (*b as f64)).into(),
+    }
+  }
+}
 
 impl Div for Num {
   type Output = Num;
   fn div(self, other: Num) -> Num {
+    (self.as_float() / other.as_float()).into()
+  }
+}
+impl Div for &Num {
+  type Output = Num;
+  fn div(self, other: &Num) -> Num {
     (self.as_float() / other.as_float()).into()
   }
 }
@@ -194,6 +247,17 @@ impl From<OrderedFloat<f64>> for Num {
 impl From<i64> for Num {
   fn from(i: i64) -> Self {
     Int(i)
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct ExternalFunction {
+  pub name: Option<String>,
+  pub f: fn(Vec<Value>) -> Result<Value, Rc<dyn Error>>,
+}
+impl ExternalFunction {
+  pub fn unnamed(f: fn(Vec<Value>) -> Result<Value, Rc<dyn Error>>) -> Self {
+    Self { name: None, f }
   }
 }
 
@@ -227,6 +291,7 @@ pub enum Value {
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnId),
   CompositeFn(Rc<CompositeFunction>),
+  ExternalFn(Rc<ExternalFunction>),
 }
 use Value::*;
 
@@ -257,11 +322,11 @@ impl Hash for Value {
 }
 
 impl Value {
-  pub fn as_num(&self) -> Result<&Num> {
+  pub fn as_num(&self) -> PidginResult<&Num> {
     match self {
       Number(n) => Ok(n),
       Nil => Ok(&Int(0)),
-      _ => Err(Error::CantCastToNum),
+      _ => Err(PidginError::CantCastToNum),
     }
   }
   pub fn as_bool(&self) -> bool {
@@ -316,12 +381,24 @@ impl Value {
       Str(s) => format!("\"{}\"", s),
       CompositeFn(composite_fn) => {
         format!(
-          "fn({} args, {} instructions)",
+          "fn( {} args, {} instructions )",
           composite_fn.arg_count,
           composite_fn.instructions.len()
         )
       }
-      CoreFn(_) => todo!(),
+      CoreFn(core_fn_id) => {
+        format!("core_fn( {} )", core_fn_id)
+      }
+      ExternalFn(external_fn) => {
+        format!(
+          "external_fn( {} )",
+          if let Some(name) = &(*external_fn).name {
+            name
+          } else {
+            "<unnamed>"
+          }
+        )
+      }
     }
   }
 }
@@ -380,5 +457,10 @@ impl From<Vec<Value>> for Value {
 impl From<Rc<Vec<Value>>> for Value {
   fn from(values: Rc<Vec<Value>>) -> Self {
     List(values)
+  }
+}
+impl From<ExternalFunction> for Value {
+  fn from(f: ExternalFunction) -> Self {
+    ExternalFn(Rc::new(f))
   }
 }

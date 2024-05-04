@@ -14,7 +14,7 @@ use Instruction::*;
 use Num::*;
 use Value::*;
 
-use super::{Error, Result};
+use super::error::{PidginError, PidginResult};
 
 const STACK_CAPACITY: usize = 30000; //u16::MAX as usize + 1;
 
@@ -259,7 +259,7 @@ impl EvaluationState {
       }
     }
   }
-  fn take_args_from(
+  fn move_args_from(
     &mut self,
     arg_count: u8,
     beginning_stack_index: StackIndex,
@@ -289,7 +289,7 @@ impl EvaluationState {
       }
     }
   }
-  fn take_args(&mut self, arg_count: u8, beginning_stack_index: StackIndex) {
+  fn move_args(&mut self, arg_count: u8, beginning_stack_index: StackIndex) {
     for i in 0..arg_count {
       match self.next_instruction() {
         CopyArgument(arg_register) => {
@@ -310,7 +310,24 @@ impl EvaluationState {
       }
     }
   }
-  pub fn evaluate(&mut self) -> Result<()> {
+  fn take_args(&mut self, arg_count: u8) -> Vec<Value> {
+    (0..arg_count)
+      .map(|i| match self.next_instruction() {
+        CopyArgument(arg_register) => self.get_register(arg_register).clone(),
+        StealArgument(arg_register) => {
+          self.steal_register(arg_register).clone()
+        }
+        other => panic!(
+          "Expected CopyArgument or StealArgument instruction {}/{},
+           found {:?}",
+          i + 1,
+          arg_count,
+          other
+        ),
+      })
+      .collect()
+  }
+  pub fn evaluate(&mut self) -> PidginResult<()> {
     loop {
       if self.current_frame.instruction_index
         >= self.current_frame.instructions.len()
@@ -361,7 +378,7 @@ impl EvaluationState {
                 composite_fn,
                 self.register_stack_index(target),
               );
-              self.take_args(arg_count, new_frame.beginning);
+              self.move_args(arg_count, new_frame.beginning);
               self.push_frame(new_frame);
             }
             CoreFn(_) => {
@@ -370,11 +387,22 @@ impl EvaluationState {
                  never happen"
               )
             }
+            ExternalFn(external_fn) => {
+              let f = (*external_fn).f;
+              let args = self.take_args(arg_count);
+              self.set_register(
+                target,
+                f(args).expect(
+                  "external_fn returned an error, and we don't have error \
+                   handling yet :(",
+                ),
+              );
+            }
             List(list) => todo!(),
             Hashmap(map) => todo!(),
             Hashset(set) => todo!(),
             _ => {
-              return Err(Error::CantApply);
+              return Err(PidginError::CantApply);
             }
           }
         }
@@ -407,11 +435,21 @@ impl EvaluationState {
                   CORE_FUNCTIONS[core_fn_id](unwrap_or_clone_list(arg_list))?,
                 );
               }
+              ExternalFn(external_fn) => {
+                let f = (*external_fn).f;
+                self.set_register(
+                  args_and_result,
+                  f(unwrap_or_clone_list(arg_list)).expect(
+                    "external_fn returned an error, and we don't have error \
+                     handling yet :(",
+                  ),
+                );
+              }
               List(list) => todo!(),
               Hashmap(map) => todo!(),
               Hashset(set) => todo!(),
               _ => {
-                return Err(Error::CantApply);
+                return Err(PidginError::CantApply);
               }
             }
           } else {
@@ -423,7 +461,7 @@ impl EvaluationState {
             self.current_frame.calling_function.clone().unwrap(),
             self.register_stack_index(target),
           );
-          self.take_args(arg_count, new_frame.beginning);
+          self.move_args(arg_count, new_frame.beginning);
           self.push_frame(new_frame);
         }
         ApplySelf(args_and_result) => {
@@ -461,7 +499,7 @@ impl EvaluationState {
                 completed_frame.beginning,
                 completed_frame.return_stack_index,
               );
-              self.take_args_from(
+              self.move_args_from(
                 arg_count,
                 new_frame.beginning,
                 &mut completed_frame,
@@ -470,6 +508,7 @@ impl EvaluationState {
                 completed_frame.beginning + arg_count as StackIndex;
               self.push_frame(new_frame);
             }
+            ExternalFn(_) => todo!(),
             CoreFn(_) => {
               panic!(
                 "CallAndReturn instruction called with CoreFn value, this \
@@ -480,7 +519,7 @@ impl EvaluationState {
             Hashmap(map) => todo!(),
             Hashset(set) => todo!(),
             other => {
-              return Err(Error::CantApply);
+              return Err(PidginError::CantApply);
             }
           }
         }
@@ -496,7 +535,7 @@ impl EvaluationState {
             completed_frame.beginning,
             completed_frame.return_stack_index,
           );
-          self.take_args_from(
+          self.move_args_from(
             arg_count,
             new_frame.beginning,
             &mut completed_frame,
@@ -558,7 +597,7 @@ impl EvaluationState {
           result,
           match (self.get_register(num_1), self.get_register(num_2)) {
             (Number(a), Number(b)) => a.numerical_equal(b),
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         IsZero(result, num) => self.set_register(
@@ -566,35 +605,35 @@ impl EvaluationState {
           match self.get_register(num) {
             Number(Float(f)) => *f == 0.,
             Number(Int(i)) => *i == 0,
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         IsNan(result, num) => self.set_register(
           result,
           match self.get_register(num) {
             Number(Float(f)) => f.is_nan(),
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         IsInf(result, num) => self.set_register(
           result,
           match self.get_register(num) {
             Number(Float(f)) => f.is_infinite(),
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         IsEven(result, num) => self.set_register(
           result,
           match self.get_register(num) {
             Number(n) => n.as_int_lossless()? % 2 == 0,
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         IsOdd(result, num) => self.set_register(
           result,
           match self.get_register(num) {
             Number(n) => n.as_int_lossless()? % 2 == 1,
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         IsPos(result, num) => self.set_register(
@@ -602,7 +641,7 @@ impl EvaluationState {
           match self.get_register(num) {
             Number(Float(f)) => **f > 0.,
             Number(Int(i)) => *i > 0,
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         IsNeg(result, num) => self.set_register(
@@ -610,7 +649,7 @@ impl EvaluationState {
           match self.get_register(num) {
             Number(Float(f)) => **f < 0.,
             Number(Int(i)) => *i < 0,
-            _ => return Err(Error::ArgumentNotNum),
+            _ => return Err(PidginError::ArgumentNotNum),
           },
         ),
         Inc(result, num) => {
@@ -705,7 +744,7 @@ impl EvaluationState {
               .map(|(key, value)| vec![key.clone(), value.clone()].into())
               .unwrap_or(Nil),
             Nil => Nil,
-            _ => return Err(Error::ArgumentNotList),
+            _ => return Err(PidginError::ArgumentNotList),
           },
         ),
         Count(result, collection) => todo!(),
@@ -749,7 +788,7 @@ impl EvaluationState {
             Hashmap(hashmap) => todo!(),
             Hashset(set) => todo!(),
             Nil => self.set_register(collection, Nil),
-            _ => return Err(Error::ArgumentNotList),
+            _ => return Err(PidginError::ArgumentNotList),
           };
         }
         Sort(collection) => todo!(),
@@ -762,7 +801,7 @@ impl EvaluationState {
           match self.get_register(list) {
             List(list) => list.last().cloned().unwrap_or(Nil),
             Nil => Nil,
-            _ => return Err(Error::ArgumentNotList),
+            _ => return Err(PidginError::ArgumentNotList),
           },
         ),
         Rest(list) => {
@@ -782,7 +821,7 @@ impl EvaluationState {
               );
             }
             Nil => self.set_register(list, Nil),
-            _ => return Err(Error::ArgumentNotList),
+            _ => return Err(PidginError::ArgumentNotList),
           };
         }
         ButLast(list) => {
@@ -802,7 +841,7 @@ impl EvaluationState {
               );
             }
             Nil => self.set_register(list, Nil),
-            _ => return Err(Error::ArgumentNotList),
+            _ => return Err(PidginError::ArgumentNotList),
           };
         }
         Nth(result, list, n) => {
@@ -889,7 +928,7 @@ mod tests {
   use super::EvaluationState;
   use crate::{
     runtime::core_functions::CoreFnId, CompositeFunction, ConstIndex,
-    Instruction::*, Num::*, Program, RegisterIndex, Value::*,
+    ExternalFunction, Instruction::*, Num::*, Program, RegisterIndex, Value::*,
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
@@ -1350,4 +1389,29 @@ mod tests {
     ],
     (0, 0),
   );
+
+  #[test]
+  fn call_external_function() {
+    run_and_check_registers!(
+      Program::new(
+        vec![
+          Const(0, 0),
+          Const(1, 1),
+          Const(2, 2),
+          Call(0, 2, 2),
+          StealArgument(0),
+          StealArgument(1)
+        ],
+        vec![
+          1.into(),
+          2.into(),
+          ExternalFunction::unnamed(|args| {
+            Ok((args[0].as_num()? + args[1].as_num()?).into())
+          })
+          .into(),
+        ],
+      ),
+      (0, 3)
+    );
+  }
 }
