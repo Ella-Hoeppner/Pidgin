@@ -1,6 +1,7 @@
 #![allow(warnings)]
 #![feature(stmt_expr_attributes)]
 
+mod compiler;
 mod instructions;
 mod runtime;
 mod string_utils;

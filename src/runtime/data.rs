@@ -12,7 +12,8 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  CoreFnIndex, InstructionBlock, RuntimeInstruction, RuntimeInstructionBlock,
+  ConstIndex, CoreFnIndex, Instruction, InstructionBlock, RegisterIndex,
+  RuntimeInstructionBlock,
 };
 
 use super::{
@@ -254,10 +255,12 @@ impl From<i64> for Num {
 #[derive(Clone, Debug)]
 pub struct ExternalFunction {
   pub name: Option<String>,
-  pub f: fn(Vec<Value>) -> Result<Value, Rc<dyn Error>>,
+  pub f: fn(Vec<Value>) -> Result<Value, Rc<dyn std::error::Error>>,
 }
 impl ExternalFunction {
-  pub fn unnamed(f: fn(Vec<Value>) -> Result<Value, Rc<dyn Error>>) -> Self {
+  pub fn unnamed(
+    f: fn(Vec<Value>) -> Result<Value, Rc<dyn std::error::Error>>,
+  ) -> Self {
     Self { name: None, f }
   }
 }
@@ -294,6 +297,7 @@ pub enum Value {
   CompositeFn(Rc<CompositeFunction>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
+  Error(PidginError),
 }
 use Value::*;
 
@@ -313,6 +317,7 @@ impl PartialEq for Value {
       (Self::CompositeFn(a), Self::CompositeFn(b)) => Rc::ptr_eq(a, b),
       (Self::ExternalFn(a), Self::ExternalFn(b)) => Rc::ptr_eq(a, b),
       (Self::ExternalObject(a), Self::ExternalObject(b)) => Rc::ptr_eq(a, b),
+      (Self::Error(a), Self::Error(b)) => a == b,
       _ => false,
     }
   }
@@ -404,6 +409,7 @@ impl Value {
         )
       }
       ExternalObject(_) => "external_object".to_string(),
+      Error(e) => format!("error: {}", e),
     }
   }
   pub fn external<T: Any>(external_object: T) -> Self {

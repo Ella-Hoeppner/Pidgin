@@ -13,6 +13,14 @@ pub enum PidginError {
   InvalidArity,
   ExternalError(Rc<dyn Error>),
 }
+impl PartialEq for PidginError {
+  fn eq(&self, other: &Self) -> bool {
+    match (self, other) {
+      (Self::ExternalError(l0), Self::ExternalError(r0)) => Rc::ptr_eq(l0, r0),
+      _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+    }
+  }
+}
 use PidginError::*;
 
 impl Display for PidginError {

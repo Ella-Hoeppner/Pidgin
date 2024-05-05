@@ -5,11 +5,11 @@ use minivec::{mini_vec, MiniVec};
 
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
+use crate::RuntimeInstructionBlock;
 use crate::{
   string_utils::indent_lines, CompositeFunction, Instruction, Num,
   RuntimeInstruction, Value,
 };
-use crate::{InstructionBlock, RuntimeInstructionBlock};
 use Instruction::*;
 use Num::*;
 use Value::*;
@@ -896,6 +896,7 @@ impl EvaluationState {
         IsSet(result, value) => todo!(),
         IsCollection(result, value) => todo!(),
         IsFn(result, value) => todo!(),
+        IsError(result, value) => todo!(),
         ToBool(result, value) => todo!(),
         ToChar(result, value) => todo!(),
         ToNum(result, value) => todo!(),
@@ -905,6 +906,8 @@ impl EvaluationState {
         ToString(result, value) => todo!(),
         ToList(result, value) => todo!(),
         ToMap(result, value) => todo!(),
+        ToSet(result, value) => todo!(),
+        ToError(result, value) => todo!(),
         CreateCell(result) => todo!(),
         GetCellValue(result, cell) => todo!(),
         SetCellValue(result, value) => todo!(),

@@ -2,11 +2,13 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* make errors first-class (have a `Value::Error` variant)
 * support multi-arity composite functions
   * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction`
 * Implement compiler from IR (using `Instruction<usize, Value>`) to bytecode
   * Compute lifetimes of all virtual registers
+    * Add a new generic type parameter to `Instruction` for replacable registers, i.e. registers that are used for both input and output
+      * in `RuntimeInstruction` this will just be the same
+      * having registers be overwritable like this breaks SSA, so the intermediate 
   * Reallocate all registers in block into `0-255`
   * optimizations (not essential at first):
     * When a value is at the end of its lifetime and is about to be used in another instruction, don't copy it, just use it directly
@@ -32,6 +34,9 @@ Compiler/Runtime stuff:
     * Maybe I could have an `Iter` type that mostly just wraps rust's iterator system? Though it would probably still need to be composed of both a `vec` of already realized values and an `iter` that can produce the rest of the values
       * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
 * support coroutines
+* error handling
+  * I guess all that's really necessary for this is for coroutines to return error values when they crash...
+    * try/catch blocks will be implementable from inside the language as long as this is the case
 * implement remaining instructions, and write tests
 * start on a compiler from ASTs into IR
 * Once GSE is ready, specify a basic grammer, and set up a function that accepts a GSE string, parses it, compiles it to the IR, compiles that to the bytecode, and then runs it.
