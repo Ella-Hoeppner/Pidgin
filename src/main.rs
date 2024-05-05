@@ -32,5 +32,5 @@ fn main() {
   ];
   let mut state = EvaluationState::new(program);
   state.evaluate().unwrap();
-  println!("{}", time.elapsed().as_secs_f64())
+  println!("{}", time.elapsed().as_secs_f64());
 }

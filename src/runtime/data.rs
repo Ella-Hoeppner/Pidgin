@@ -1,5 +1,6 @@
 use minivec::MiniVec;
 use std::{
+  any::Any,
   collections::{HashMap, HashSet},
   error::Error,
   fmt::{Debug, Display},
@@ -292,6 +293,7 @@ pub enum Value {
   CoreFn(CoreFnId),
   CompositeFn(Rc<CompositeFunction>),
   ExternalFn(Rc<ExternalFunction>),
+  ExternalObject(Rc<dyn Any>),
 }
 use Value::*;
 
@@ -299,16 +301,18 @@ impl PartialEq for Value {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::Nil, Self::Nil) => true,
-      (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
-      (Self::Char(l0), Self::Char(r0)) => l0 == r0,
-      (Self::Number(l0), Self::Number(r0)) => l0 == r0,
-      (Self::Symbol(l0), Self::Symbol(r0)) => l0 == r0,
-      (Self::Str(l0), Self::Str(r0)) => l0 == r0,
-      (Self::List(l0), Self::List(r0)) => l0 == r0,
-      (Self::Hashmap(l0), Self::Hashmap(r0)) => l0 == r0,
-      (Self::Hashset(l0), Self::Hashset(r0)) => l0 == r0,
-      (Self::CoreFn(l0), Self::CoreFn(r0)) => l0 == r0,
-      (Self::CompositeFn(l0), Self::CompositeFn(r0)) => Rc::ptr_eq(l0, r0),
+      (Self::Bool(a), Self::Bool(b)) => a == b,
+      (Self::Char(a), Self::Char(b)) => a == b,
+      (Self::Number(a), Self::Number(b)) => a == b,
+      (Self::Symbol(a), Self::Symbol(b)) => a == b,
+      (Self::Str(a), Self::Str(b)) => a == b,
+      (Self::List(a), Self::List(b)) => a == b,
+      (Self::Hashmap(a), Self::Hashmap(b)) => a == b,
+      (Self::Hashset(a), Self::Hashset(b)) => a == b,
+      (Self::CoreFn(a), Self::CoreFn(b)) => a == b,
+      (Self::CompositeFn(a), Self::CompositeFn(b)) => Rc::ptr_eq(a, b),
+      (Self::ExternalFn(a), Self::ExternalFn(b)) => Rc::ptr_eq(a, b),
+      (Self::ExternalObject(a), Self::ExternalObject(b)) => Rc::ptr_eq(a, b),
       _ => false,
     }
   }
@@ -399,6 +403,18 @@ impl Value {
           }
         )
       }
+      ExternalObject(_) => "external_object".to_string(),
+    }
+  }
+  pub fn external<T: Any>(external_object: T) -> Self {
+    ExternalObject(Rc::new(external_object))
+  }
+  pub fn casted_external<T: Any>(self) -> Option<Rc<T>> {
+    if let ExternalObject(external_object) = self {
+      println!("castin'!!");
+      external_object.downcast::<T>().ok()
+    } else {
+      None
     }
   }
 }

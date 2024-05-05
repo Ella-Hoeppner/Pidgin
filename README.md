@@ -2,9 +2,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Compiler/Runtime stuff:
-* support custom instructions
-  * the definitions of these should be stored in `EvaluationState`, such that you can create an `EvaluationState` and then add custom instructions to it before doing any evaluation
-* support a `Foreign` type, a general-purpose boxed-rust-object type
+* make errors first-class (have a `Value::Error` variant)
 * support multi-arity composite functions
   * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction`
 * Implement compiler from IR (using `Instruction<usize, Value>`) to bytecode

@@ -927,8 +927,12 @@ mod tests {
 
   use super::EvaluationState;
   use crate::{
-    runtime::core_functions::CoreFnId, CompositeFunction, ConstIndex,
-    ExternalFunction, Instruction::*, Num::*, Program, RegisterIndex, Value::*,
+    runtime::core_functions::CoreFnId,
+    CompositeFunction, ConstIndex, ExternalFunction,
+    Instruction::*,
+    Num::{self, *},
+    Program, RegisterIndex,
+    Value::{self, *},
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
@@ -1412,6 +1416,35 @@ mod tests {
         ],
       ),
       (0, 3)
+    );
+  }
+
+  #[test]
+  fn external_object() {
+    run_and_check_registers!(
+      Program::new(
+        vec![
+          Const(0, 0),
+          Const(1, 1),
+          Const(2, 2),
+          Call(0, 2, 2),
+          StealArgument(0),
+          StealArgument(1)
+        ],
+        vec![
+          Value::external((1i64, 2i64)),
+          Value::external((3i64, 4i64)),
+          ExternalFunction::unnamed(|mut args| {
+            let a =
+              args.pop().unwrap().casted_external::<(i64, i64)>().unwrap();
+            let b =
+              args.pop().unwrap().casted_external::<(i64, i64)>().unwrap();
+            Ok(Number(Num::from(a.0 + b.0 + a.1 + b.1)))
+          })
+          .into(),
+        ],
+      ),
+      (0, 10)
     );
   }
 }
