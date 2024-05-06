@@ -1,4 +1,3 @@
-use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -47,7 +46,7 @@ pub struct EvaluationState {
   constants: Vec<Value>,
   current_frame: StackFrame,
   current_process: ProcessState,
-  process_stack: Vec<PausedProcess>,
+  parent_process_stack: Vec<(StackIndex, PausedProcess)>,
   environment: HashMap<SymbolIndex, Value>,
 }
 
@@ -58,7 +57,7 @@ impl EvaluationState {
       constants: program.constants,
       current_frame: StackFrame::root(program.instructions),
       current_process: ProcessState::new(),
-      process_stack: vec![],
+      parent_process_stack: vec![],
       environment: HashMap::new(),
     }
   }
@@ -124,12 +123,12 @@ impl EvaluationState {
     std::mem::swap(&mut self.current_frame, &mut frame);
     self.current_process.paused_frames.push(frame);
   }
-  fn complete_process(&mut self) -> StackFrame {
-    let mut next_process = self
-      .process_stack
-      .pop()
-      .expect("attempted to complete_process with no paused processes");
-    let (frame, process_state) = next_process.resume();
+  fn complete_child_process(&mut self) -> StackFrame {
+    let (_child_process_stack_index, mut parent_process) =
+      self.parent_process_stack.pop().expect(
+        "attempted to complete_child_process with no paused parent processes",
+      );
+    let (frame, process_state) = parent_process.resume_from_child();
     self.current_process = process_state;
     frame
   }
@@ -138,9 +137,49 @@ impl EvaluationState {
       .current_process
       .paused_frames
       .pop()
-      .unwrap_or_else(|| self.complete_process());
+      .unwrap_or_else(|| self.complete_child_process());
     std::mem::swap(&mut self.current_frame, &mut next_frame);
     next_frame
+  }
+  fn return_value(&mut self, value: Value) {
+    let completed_frame = self.complete_frame();
+    self.current_process.consumption = completed_frame.beginning;
+    self.set_stack(completed_frame.return_stack_index, value);
+  }
+  fn yield_value(&mut self, yielded_value: Value) {
+    let return_stack_index = self.current_frame.return_stack_index;
+    let (child_process_stack_index, mut parent_process) = self
+      .parent_process_stack
+      .pop()
+      .expect("attempted to yield_process with no paused parent processes");
+    let (mut resumed_frame, mut process_state) =
+      parent_process.resume_from_child();
+    std::mem::swap(&mut process_state, &mut self.current_process);
+    let child_process_value = self.get_stack(child_process_stack_index).clone();
+    if let Process(process) = child_process_value {
+      if let Some(active_process_ref) = &*process {
+        #[cfg(debug_assertions)]
+        assert!(
+          (*active_process_ref).borrow().is_none(),
+          "process pointed to by child_process_stack_index when attempting to \
+          yield_value isn't inactive"
+        );
+        std::mem::swap(&mut resumed_frame, &mut self.current_frame);
+        active_process_ref.replace(Some(process_state.pause(resumed_frame)));
+        self.set_stack(return_stack_index, yielded_value);
+      } else {
+        panic!(
+          "process pointed to by child_process_stack_index when attempting to \
+          yield_value is dead"
+        )
+      }
+    } else {
+      panic!(
+        "value pointed to by child_process_stack_index when attempting to \
+         yield_value is not a Process"
+      )
+    }
+    //self.set_stack(index, value)
   }
   fn set_stack_usize(&mut self, index: usize, value: Value) {
     self.current_process.stack[index] = value;
@@ -233,12 +272,20 @@ impl EvaluationState {
       }
     }
   }
-  fn push_process(&mut self, process: PausedProcess, return_index: StackIndex) {
-    let (mut active_frame, process_state) = process.begin(return_index);
+  fn push_child_process(
+    &mut self,
+    process: PausedProcess,
+    parent_stack_reference_index: StackIndex,
+    return_index: StackIndex,
+  ) {
+    let (mut active_frame, process_state) =
+      process.begin_as_child(return_index);
     std::mem::swap(&mut self.current_frame, &mut active_frame);
     take(&mut self.current_process, |old_process| {
       let paused_old_process = old_process.pause(active_frame);
-      self.process_stack.push(paused_old_process);
+      self
+        .parent_process_stack
+        .push((parent_stack_reference_index, paused_old_process));
       process_state
     });
   }
@@ -327,7 +374,7 @@ impl EvaluationState {
              environment:\n{}\n\
              ----------------------------------------\n\n\n",
             pad(40, '-', format!("DEBUG {} ", id)),
-            self.process_stack.len(),
+            self.parent_process_stack.len(),
             self.describe_stack(),
             indent_lines(2, self.describe_environment())
           );
@@ -344,15 +391,8 @@ impl EvaluationState {
           println!("{}", self.get_register(value).description())
         }
         Return(value) => {
-          let return_value = self.get_register(value).clone();
-          println!(
-            "Return called!\nprocess_stack count: {}",
-            self.process_stack.len()
-          );
-          let completed_frame = self.complete_frame();
-          self.current_process.consumption = completed_frame.beginning;
-          println!("return setting {}", completed_frame.return_stack_index);
-          self.set_stack(completed_frame.return_stack_index, return_value);
+          let return_value = self.steal_register(value);
+          self.return_value(return_value);
         }
         CopyArgument(f) => {
           panic!("CopyArgument instruction called, this should never happen")
@@ -391,7 +431,11 @@ impl EvaluationState {
             Process(maybe_process) => {
               if let Some(process_ref) = &*maybe_process {
                 if let Some(process) = process_ref.replace(None) {
-                  self.push_process(process, self.register_stack_index(target));
+                  self.push_child_process(
+                    process,
+                    self.register_stack_index(f),
+                    self.register_stack_index(target),
+                  );
                 } else {
                   return Err(PidginError::ProcessAlreadyRunning);
                 }
@@ -914,7 +958,11 @@ impl EvaluationState {
           }
         }
         IsProcessAlive(result, process) => todo!(),
-        Yield(result, value) => todo!(),
+        Yield(value) => {
+          let yielded_value = self.get_register(value).clone();
+          self.yield_value(yielded_value);
+        }
+        YieldAndAccept(new_args, value) => todo!(),
         IsNil(result, value) => {
           self.set_register(
             result,
@@ -1181,10 +1229,7 @@ mod tests {
       Program::new(
         vec![Const(0, 0), Call(1, 0, 0)],
         vec![
-          CompositeFn(Rc::new(CompositeFunction::new(
-            0,
-            vec![Const(0, 1), Return(0)]
-          ))),
+          Value::composite_fn(0, vec![Const(0, 1), Return(0)]),
           5.into()
         ],
       ),
@@ -1198,10 +1243,10 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           1,
           vec![DebugPrint(0), Multiply(0, 0, 0), Return(0)]
-        )))
+        )
       ),
       Call(2, 1, 1),
       CopyArgument(0)
@@ -1216,10 +1261,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        CompositeFn(Rc::new(CompositeFunction::new(
-          1,
-          vec![Multiply(0, 0, 0), Return(0)]
-        )))
+        Value::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
       ),
       Call(0, 1, 1),
       StealArgument(0),
@@ -1236,11 +1278,8 @@ mod tests {
         vec![Const(0, 0), Const(1, 2), Call(0, 1, 1), StealArgument(0)],
         vec![
           10.into(),
-          CompositeFn(Rc::new(CompositeFunction::new(
-            1,
-            vec![Multiply(0, 0, 0), Return(0)]
-          ))),
-          CompositeFn(Rc::new(CompositeFunction::new(
+          Value::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)]),
+          Value::composite_fn(
             1,
             vec![
               Const(1, 1),
@@ -1250,7 +1289,7 @@ mod tests {
               StealArgument(0),
               Return(0)
             ]
-          ))),
+          ),
         ],
       ),
       (0, 10000)
@@ -1264,10 +1303,10 @@ mod tests {
       Const(1, 3),
       Const(
         2,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           2,
           vec![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
-        )))
+        )
       ),
       Call(0, 2, 2),
       StealArgument(0),
@@ -1284,10 +1323,10 @@ mod tests {
       Const(2, 4),
       Const(
         4,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           3,
           vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
-        )))
+        )
       ),
       Call(3, 4, 3),
       StealArgument(0),
@@ -1452,7 +1491,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1464,7 +1503,7 @@ mod tests {
             EndIf,
             Return(0)
           ]
-        )))
+        )
       ),
       Call(0, 1, 1),
       StealArgument(0),
@@ -1478,7 +1517,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1489,7 +1528,7 @@ mod tests {
             EndIf,
             Return(0)
           ]
-        )))
+        )
       ),
       Call(0, 1, 1),
       StealArgument(0),
@@ -1503,7 +1542,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1515,7 +1554,7 @@ mod tests {
             EndIf,
             Return(0)
           ]
-        )))
+        )
       ),
       Call(0, 1, 1),
       StealArgument(0),
@@ -1529,7 +1568,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1540,7 +1579,7 @@ mod tests {
             EndIf,
             Return(0)
           ]
-        )))
+        )
       ),
       Call(0, 1, 1),
       StealArgument(0),
@@ -1554,10 +1593,10 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        CompositeFn(Rc::new(CompositeFunction::new(
+        Value::composite_fn(
           1,
           vec![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
-        )))
+        )
       ),
       Call(0, 1, 1),
       StealArgument(0),
@@ -1606,13 +1645,7 @@ mod tests {
   simple_register_test!(
     create_process,
     program![
-      Const(
-        0,
-        CompositeFn(Rc::new(CompositeFunction::new(
-          0,
-          vec![EmptyList(0), Return(0)]
-        )))
-      ),
+      Const(0, Value::composite_fn(0, vec![EmptyList(0), Return(0)])),
       CreateProcess(0),
     ],
   );
@@ -1620,13 +1653,7 @@ mod tests {
   simple_register_test!(
     run_process,
     program![
-      Const(
-        0,
-        CompositeFn(Rc::new(CompositeFunction::new(
-          0,
-          vec![EmptyList(0), Return(0)]
-        )))
-      ),
+      Const(0, Value::composite_fn(0, vec![EmptyList(0), Return(0)])),
       CreateProcess(0),
       Call(1, 0, 0)
     ],
@@ -1635,22 +1662,89 @@ mod tests {
 
   #[test]
   fn run_nested_processes() {
-    let mut state = EvaluationState::new(Program::new(
-      vec![Const(0, 1), CreateProcess(0), Call(1, 0, 0)],
-      vec![
-        (CompositeFn(Rc::new(CompositeFunction::new(
-          0,
-          vec![EmptyList(0), Return(0)],
-        ))))
-        .into(),
-        (CompositeFn(Rc::new(CompositeFunction::new(
-          0,
-          vec![Const(0, 0), CreateProcess(0), Call(1, 0, 0), Return(1)],
-        ))))
-        .into(),
-      ],
-    ));
-    state.evaluate().unwrap();
-    assert_register!(state, 1, (List(Rc::new(vec![]))));
+    run_and_check_registers!(
+      Program::new(
+        vec![Const(0, 1), CreateProcess(0), Call(1, 0, 0)],
+        vec![
+          Value::composite_fn(0, vec![EmptyList(0), Return(0)]).into(),
+          Value::composite_fn(
+            0,
+            vec![Const(0, 0), CreateProcess(0), Call(1, 0, 0), Return(1)],
+          )
+          .into(),
+        ],
+      ),
+      (1, List(Rc::new(vec![])))
+    );
+  }
+
+  #[test]
+  fn process_yield() {
+    run_and_check_registers!(
+      Program::new(
+        vec![Const(0, 0), CreateProcess(0), Call(1, 0, 0), Call(2, 0, 0)],
+        vec![
+          Value::composite_fn(
+            0,
+            vec![Const(0, 1), Yield(0), Const(1, 2), Return(1)],
+          ),
+          "yielded value!".into(),
+          "returned value!".into(),
+        ],
+      ),
+      (1, "yielded value!"),
+      (2, "returned value!")
+    );
+  }
+
+  #[test]
+  fn nested_process_yield() {
+    run_and_check_registers!(
+      Program::new(
+        vec![
+          Const(0, 6),
+          CreateProcess(0),
+          Call(1, 0, 0),
+          Call(2, 0, 0),
+          Call(3, 0, 0),
+          Call(4, 0, 0)
+        ],
+        vec![
+          "first yield!".into(),
+          "first return!".into(),
+          "second yield!".into(),
+          "second return!".into(),
+          Value::composite_fn(
+            0,
+            vec![Const(0, 0), Yield(0), Const(1, 1), Yield(1)],
+          ),
+          Value::composite_fn(
+            0,
+            vec![Const(0, 2), Yield(0), Const(1, 3), Yield(1)],
+          ),
+          Value::composite_fn(
+            0,
+            vec![
+              Const(0, 4),
+              CreateProcess(0),
+              Call(1, 0, 0),
+              Yield(1),
+              Call(2, 0, 0),
+              Yield(2),
+              Const(0, 5),
+              CreateProcess(0),
+              Call(1, 0, 0),
+              Yield(1),
+              Call(2, 0, 0),
+              Yield(2)
+            ],
+          ),
+        ],
+      ),
+      (1, "first yield!"),
+      (2, "first return!"),
+      (3, "second yield!"),
+      (4, "second return!")
+    );
   }
 }

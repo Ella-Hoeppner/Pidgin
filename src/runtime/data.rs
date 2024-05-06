@@ -445,6 +445,15 @@ impl Value {
       None
     }
   }
+  pub fn composite_fn<
+    A: Into<ArgumentSpecifier>,
+    I: Into<RuntimeInstructionBlock>,
+  >(
+    args: A,
+    instructions: I,
+  ) -> Value {
+    CompositeFn(Rc::new(CompositeFunction::new(args, instructions)))
+  }
   pub fn fn_process(f: CompositeFunction) -> Value {
     Process(Rc::new(Some(RefCell::new(Some(f.into())))))
   }

@@ -74,7 +74,7 @@ pub struct PausedProcess {
   pub state: ProcessState,
 }
 impl PausedProcess {
-  pub fn begin(
+  pub fn begin_as_child(
     mut self,
     return_index: StackIndex,
   ) -> (StackFrame, ProcessState) {
@@ -86,7 +86,7 @@ impl PausedProcess {
     active_frame.return_stack_index = return_index;
     (active_frame, self.state)
   }
-  pub fn resume(mut self) -> (StackFrame, ProcessState) {
+  pub fn resume_from_child(mut self) -> (StackFrame, ProcessState) {
     let mut active_frame = self
       .state
       .paused_frames

@@ -3,8 +3,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 Runtime stuff:
 * support coroutines
-  * support yield
-  * support resuming after a yield
   * support arguments
   * support passing arguments into a resumption
   * when a coroutine encounters an error, it should yield that error, so that errors are handleable from the calling function
