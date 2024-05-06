@@ -322,10 +322,12 @@ impl EvaluationState {
         DebugPrint(id) => {
           println!(
             "{}\n\
+             paused processes: {}\n\
              stack:\n{}\n\n\n\
              environment:\n{}\n\
              ----------------------------------------\n\n\n",
             pad(40, '-', format!("DEBUG {} ", id)),
+            self.process_stack.len(),
             self.describe_stack(),
             indent_lines(2, self.describe_environment())
           );
@@ -1622,7 +1624,7 @@ mod tests {
         0,
         CompositeFn(Rc::new(CompositeFunction::new(
           0,
-          vec![EmptyList(0), DebugPrint(0), Return(0)]
+          vec![EmptyList(0), Return(0)]
         )))
       ),
       CreateProcess(0),
@@ -1630,4 +1632,25 @@ mod tests {
     ],
     (1, List(Rc::new(vec![])))
   );
+
+  #[test]
+  fn run_nested_processes() {
+    let mut state = EvaluationState::new(Program::new(
+      vec![Const(0, 1), CreateProcess(0), Call(1, 0, 0)],
+      vec![
+        (CompositeFn(Rc::new(CompositeFunction::new(
+          0,
+          vec![EmptyList(0), Return(0)],
+        ))))
+        .into(),
+        (CompositeFn(Rc::new(CompositeFunction::new(
+          0,
+          vec![Const(0, 0), CreateProcess(0), Call(1, 0, 0), Return(1)],
+        ))))
+        .into(),
+      ],
+    ));
+    state.evaluate().unwrap();
+    assert_register!(state, 1, (List(Rc::new(vec![]))));
+  }
 }

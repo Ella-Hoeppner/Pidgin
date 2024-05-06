@@ -415,7 +415,21 @@ impl Value {
           }
         )
       }
-      Process(_) => "process".to_string(),
+      Process(x) => format!(
+        "process ({})",
+        if let Some(maybe_paused_process) = &**x {
+          format!(
+            "alive, {}",
+            if let Some(paused_process) = (&*(*maybe_paused_process).borrow()) {
+              format!("awaiting {} arguments", paused_process.args)
+            } else {
+              "active".to_string()
+            }
+          )
+        } else {
+          "dead".to_string()
+        }
+      ),
       ExternalObject(_) => "external_object".to_string(),
       Error(e) => format!("error: {}", e),
     }
