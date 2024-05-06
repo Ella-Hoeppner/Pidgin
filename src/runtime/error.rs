@@ -11,6 +11,7 @@ pub enum PidginError {
   CantCastToNum,
   CantApply,
   InvalidArity,
+  CantCreateProcess(String),
   ExternalError(Rc<dyn Error>),
 }
 impl PartialEq for PidginError {
@@ -33,6 +34,7 @@ impl Display for PidginError {
       CantCastToNum => write!(f, "can't cast to number"),
       CantApply => write!(f, "can't apply"),
       InvalidArity => write!(f, "invalid arity"),
+      CantCreateProcess(s) => write!(f, "{}", s),
       ExternalError(external_error) => {
         write!(f, "external error: \"{}\"", external_error)
       }

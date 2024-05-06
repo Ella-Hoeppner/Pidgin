@@ -5,18 +5,18 @@ use minivec::{mini_vec, MiniVec};
 
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
-use crate::RuntimeInstructionBlock;
 use crate::{
   string_utils::indent_lines, CompositeFunction, Instruction, Num,
   RuntimeInstruction, Value,
 };
+use crate::{PausedProcess, RuntimeInstructionBlock};
 use Instruction::*;
 use Num::*;
 use Value::*;
 
 use super::error::{PidginError, PidginResult};
 
-const STACK_CAPACITY: usize = 30000; //u16::MAX as usize + 1;
+const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 
 pub type RegisterIndex = u8;
 pub type StackIndex = u16;
@@ -41,7 +41,8 @@ impl Program {
   }
 }
 
-struct StackFrame {
+#[derive(Debug)]
+pub struct StackFrame {
   beginning: StackIndex,
   calling_function: Option<Rc<CompositeFunction>>,
   instructions: RuntimeInstructionBlock,
@@ -49,7 +50,7 @@ struct StackFrame {
   return_stack_index: StackIndex,
 }
 impl StackFrame {
-  fn root(instructions: RuntimeInstructionBlock) -> Self {
+  pub fn root(instructions: RuntimeInstructionBlock) -> Self {
     Self {
       beginning: 0,
       calling_function: None,
@@ -78,16 +79,33 @@ impl StackFrame {
   }
 }
 
-fn unwrap_or_clone_list(list: Rc<Vec<Value>>) -> Vec<Value> {
-  Rc::try_unwrap(list).unwrap_or_else(|list| (*list).clone())
+#[derive(Debug)]
+pub struct ProcessState {
+  stack: Vec<Value>,
+  pub paused_frames: Vec<StackFrame>,
+  consumption: StackIndex,
+}
+impl ProcessState {
+  pub fn new() -> Self {
+    Self {
+      stack: std::iter::repeat(Value::Nil).take(STACK_CAPACITY).collect(),
+      paused_frames: vec![],
+      consumption: 0,
+    }
+  }
+  pub fn new_with_root_frame(root_frame: StackFrame) -> Self {
+    Self {
+      stack: std::iter::repeat(Value::Nil).take(STACK_CAPACITY).collect(),
+      paused_frames: vec![root_frame],
+      consumption: 0,
+    }
+  }
 }
 
 pub struct EvaluationState {
   constants: Vec<Value>,
-  stack: [Value; STACK_CAPACITY],
   current_frame: StackFrame,
-  paused_frames: Vec<StackFrame>,
-  consumption: StackIndex,
+  current_process: ProcessState,
   environment: HashMap<SymbolIndex, Value>,
 }
 
@@ -96,15 +114,14 @@ impl EvaluationState {
     const NIL: Value = Nil;
     Self {
       constants: program.constants,
-      stack: [NIL; STACK_CAPACITY],
       current_frame: StackFrame::root(program.instructions),
-      paused_frames: vec![],
-      consumption: 0,
+      current_process: ProcessState::new(),
       environment: HashMap::new(),
     }
   }
   fn describe_stack(&self) -> String {
     self
+      .current_process
       .paused_frames
       .iter()
       .chain(std::iter::once(&self.current_frame))
@@ -119,7 +136,7 @@ impl EvaluationState {
         let start = frame.beginning;
         let end = maybe_next_frame
           .map(|next_frame| next_frame.beginning)
-          .unwrap_or(self.consumption);
+          .unwrap_or(self.current_process.consumption);
         format!(
           "{}\n{}",
           pad(
@@ -162,22 +179,23 @@ impl EvaluationState {
   }
   fn push_frame(&mut self, mut frame: StackFrame) {
     std::mem::swap(&mut self.current_frame, &mut frame);
-    self.paused_frames.push(frame);
+    self.current_process.paused_frames.push(frame);
   }
   fn complete_frame(&mut self) -> StackFrame {
-    let mut x = self.paused_frames.pop().unwrap();
+    let mut x = self.current_process.paused_frames.pop().unwrap();
     std::mem::swap(&mut self.current_frame, &mut x);
     x
   }
   fn set_stack_usize(&mut self, index: usize, value: Value) {
-    self.stack[index] = value;
-    self.consumption = self.consumption.max(index as u16 + 1);
+    self.current_process.stack[index] = value;
+    self.current_process.consumption =
+      self.current_process.consumption.max(index as u16 + 1);
   }
   fn set_stack(&mut self, index: StackIndex, value: Value) {
     self.set_stack_usize(index as usize, value);
   }
   fn swap_stack_usize(&mut self, index: usize, value: Value) -> Value {
-    std::mem::replace(&mut self.stack[index], value)
+    std::mem::replace(&mut self.current_process.stack[index], value)
   }
   fn swap_stack(&mut self, index: StackIndex, value: Value) -> Value {
     self.swap_stack_usize(index as usize, value)
@@ -189,13 +207,13 @@ impl EvaluationState {
     self.steal_stack_usize(index as usize)
   }
   fn get_stack_usize(&self, index: usize) -> &Value {
-    &self.stack[index]
+    &self.current_process.stack[index]
   }
   fn get_stack(&self, index: StackIndex) -> &Value {
     self.get_stack_usize(index as usize)
   }
   fn get_stack_mut_usize(&mut self, index: usize) -> &mut Value {
-    &mut self.stack[index]
+    &mut self.current_process.stack[index]
   }
   fn get_stack_mut(&mut self, index: StackIndex) -> &mut Value {
     self.get_stack_mut_usize(index as usize)
@@ -222,14 +240,14 @@ impl EvaluationState {
   }
   fn get_register(&self, register: RegisterIndex) -> &Value {
     #[cfg(debug_assertions)]
-    if register as usize >= self.consumption as usize {
+    if register as usize >= self.current_process.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
     self.get_stack(self.register_stack_index(register))
   }
   fn get_register_mut(&mut self, register: RegisterIndex) -> &mut Value {
     #[cfg(debug_assertions)]
-    if register as usize >= self.consumption as usize {
+    if register as usize >= self.current_process.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
     self.get_stack_mut(self.register_stack_index(register))
@@ -239,7 +257,7 @@ impl EvaluationState {
     f: Rc<CompositeFunction>,
     return_stack_index: StackIndex,
   ) -> StackFrame {
-    StackFrame::for_fn(f, self.consumption, return_stack_index)
+    StackFrame::for_fn(f, self.current_process.consumption, return_stack_index)
   }
   fn start_fn_stack_frame(
     &mut self,
@@ -361,7 +379,7 @@ impl EvaluationState {
         Return(value) => {
           let return_value = self.get_register(value).clone();
           let completed_frame = self.complete_frame();
-          self.consumption = completed_frame.beginning;
+          self.current_process.consumption = completed_frame.beginning;
           self.set_stack(completed_frame.return_stack_index, return_value);
         }
         CopyArgument(f) => {
@@ -417,14 +435,14 @@ impl EvaluationState {
                 );
                 let provided_arg_count = arg_list.len();
                 #[cfg(debug_assertions)]
-                if composite_fn.arg_count as usize != provided_arg_count {
+                if composite_fn.args.can_accept(provided_arg_count) {
                   panic!(
                     "Apply called on CompositeFn that expects {} arguments, \
                      {} arguments provided",
-                    composite_fn.arg_count, provided_arg_count
+                    composite_fn.args, provided_arg_count
                   )
                 }
-                let x = unwrap_or_clone_list(arg_list);
+                let x = Rc::unwrap_or_clone(arg_list);
                 for (i, arg_value) in x.into_iter().enumerate() {
                   self.set_register(i as RegisterIndex, arg_value);
                 }
@@ -432,14 +450,14 @@ impl EvaluationState {
               CoreFn(core_fn_id) => {
                 self.set_register(
                   args_and_result,
-                  CORE_FUNCTIONS[core_fn_id](unwrap_or_clone_list(arg_list))?,
+                  CORE_FUNCTIONS[core_fn_id](Rc::unwrap_or_clone(arg_list))?,
                 );
               }
               ExternalFn(external_fn) => {
                 let f = (*external_fn).f;
                 self.set_register(
                   args_and_result,
-                  f(unwrap_or_clone_list(arg_list)).expect(
+                  f(Rc::unwrap_or_clone(arg_list)).expect(
                     "external_fn returned an error, and we don't have error \
                      handling yet :(",
                   ),
@@ -474,14 +492,14 @@ impl EvaluationState {
             );
             let provided_arg_count = arg_list.len();
             #[cfg(debug_assertions)]
-            if composite_fn.arg_count as usize != provided_arg_count {
+            if composite_fn.args.can_accept(provided_arg_count) {
               panic!(
                 "ApplySelf called on CompositeFn that expects {} arguments, \
                  {} arguments provided",
-                composite_fn.arg_count, provided_arg_count
+                composite_fn.args, provided_arg_count
               )
             }
-            let x = unwrap_or_clone_list(arg_list);
+            let x = Rc::unwrap_or_clone(arg_list);
             for (i, arg_value) in x.into_iter().enumerate() {
               self.set_register(i as RegisterIndex, arg_value);
             }
@@ -504,7 +522,7 @@ impl EvaluationState {
                 new_frame.beginning,
                 &mut completed_frame,
               );
-              self.consumption =
+              self.current_process.consumption =
                 completed_frame.beginning + arg_count as StackIndex;
               self.push_frame(new_frame);
             }
@@ -540,7 +558,7 @@ impl EvaluationState {
             new_frame.beginning,
             &mut completed_frame,
           );
-          self.consumption =
+          self.current_process.consumption =
             completed_frame.beginning + arg_count as StackIndex;
           self.push_frame(new_frame);
         }
@@ -883,20 +901,190 @@ impl EvaluationState {
         BoundedRepeatedly(result, f, count) => todo!(),
         InfiniteIterate(result, f, initial_value) => todo!(),
         BoundedIterate(bound_and_result, f, initial_value) => todo!(),
-        IsNil(result, value) => todo!(),
-        IsBool(result, value) => todo!(),
-        IsChar(result, value) => todo!(),
-        IsNum(result, value) => todo!(),
-        IsInt(result, value) => todo!(),
-        IsFloat(result, value) => todo!(),
-        IsSymbol(result, value) => todo!(),
-        IsString(result, value) => todo!(),
-        IsList(result, value) => todo!(),
-        IsMap(result, value) => todo!(),
-        IsSet(result, value) => todo!(),
-        IsCollection(result, value) => todo!(),
-        IsFn(result, value) => todo!(),
-        IsError(result, value) => todo!(),
+        CreateCell(result) => todo!(),
+        GetCellValue(result, cell) => todo!(),
+        SetCellValue(result, value) => todo!(),
+        UpdateCell(result, f) => todo!(),
+        CreateProcess(f_and_result) => {
+          let f_value = self.steal_register(f_and_result);
+          match f_value {
+            CompositeFn(f) => self.set_register(
+              f_and_result,
+              Process(Rc::new(Rc::unwrap_or_clone(f).into())),
+            ),
+            ExternalFn(_) => {
+              return Err(PidginError::CantCreateProcess(
+                "can't create a process from an external function".to_string(),
+              ))
+            }
+            CoreFn(_) => {
+              return Err(PidginError::CantCreateProcess(
+                "can't create a process from a core function".to_string(),
+              ))
+            }
+            other => {
+              return Err(PidginError::CantCreateProcess(format!(
+                "can't create a process from {}",
+                other
+              )))
+            }
+          }
+        }
+        IsProcessAlive(result, process) => todo!(),
+        Yield(result, value) => todo!(),
+        IsNil(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Nil = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsBool(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Bool(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsChar(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Char(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsNum(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Number(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsInt(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Number(Num::Int(_)) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsFloat(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Number(Num::Float(_)) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsSymbol(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Symbol(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsString(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Str(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsList(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let List(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsMap(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Hashmap(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsSet(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Hashset(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsCollection(result, value) => {
+          self.set_register(
+            result,
+            Bool(match self.get_register(value) {
+              List(_) => true,
+              Hashmap(_) => true,
+              Hashset(_) => true,
+              _ => false,
+            }),
+          );
+        }
+        IsFn(result, value) => {
+          self.set_register(
+            result,
+            Bool(match self.get_register(value) {
+              CoreFn(_) => true,
+              CompositeFn(_) => true,
+              ExternalFn(_) => true,
+              _ => false,
+            }),
+          );
+        }
+        IsError(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Error(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
+        IsCell(result, value) => todo!(),
+        IsProcess(result, value) => {
+          self.set_register(
+            result,
+            Bool(if let Process(_) = self.get_register(value) {
+              true
+            } else {
+              false
+            }),
+          );
+        }
         ToBool(result, value) => todo!(),
         ToChar(result, value) => todo!(),
         ToNum(result, value) => todo!(),
@@ -908,13 +1096,9 @@ impl EvaluationState {
         ToMap(result, value) => todo!(),
         ToSet(result, value) => todo!(),
         ToError(result, value) => todo!(),
-        CreateCell(result) => todo!(),
-        GetCellValue(result, cell) => todo!(),
-        SetCellValue(result, value) => todo!(),
-        UpdateCell(result, f) => todo!(),
       }
     }
-    if self.paused_frames.len() > 0 {
+    if self.current_process.paused_frames.len() > 0 {
       panic!(
         "Execution ended with paused stack frames remaining (maybe a \
          function didn't end with a `Return` instruction?)"
@@ -1397,57 +1581,55 @@ mod tests {
     (0, 0),
   );
 
-  #[test]
-  fn call_external_function() {
-    run_and_check_registers!(
-      Program::new(
-        vec![
-          Const(0, 0),
-          Const(1, 1),
-          Const(2, 2),
-          Call(0, 2, 2),
-          StealArgument(0),
-          StealArgument(1)
-        ],
-        vec![
-          1.into(),
-          2.into(),
-          ExternalFunction::unnamed(|args| {
-            Ok((args[0].as_num()? + args[1].as_num()?).into())
-          })
-          .into(),
-        ],
+  simple_register_test!(
+    call_external_function,
+    program![
+      Const(0, 1),
+      Const(1, 2),
+      Const(
+        2,
+        ExternalFunction::unnamed(|args| {
+          Ok((args[0].as_num()? + args[1].as_num()?).into())
+        })
       ),
-      (0, 3)
-    );
-  }
+      Call(0, 2, 2),
+      StealArgument(0),
+      StealArgument(1)
+    ],
+    (0, 3)
+  );
 
-  #[test]
-  fn external_object() {
-    run_and_check_registers!(
-      Program::new(
-        vec![
-          Const(0, 0),
-          Const(1, 1),
-          Const(2, 2),
-          Call(0, 2, 2),
-          StealArgument(0),
-          StealArgument(1)
-        ],
-        vec![
-          Value::external((1i64, 2i64)),
-          Value::external((3i64, 4i64)),
-          ExternalFunction::unnamed(|mut args| {
-            let a =
-              args.pop().unwrap().casted_external::<(i64, i64)>().unwrap();
-            let b =
-              args.pop().unwrap().casted_external::<(i64, i64)>().unwrap();
-            Ok(Number(Num::from(a.0 + b.0 + a.1 + b.1)))
-          })
-          .into(),
-        ],
+  simple_register_test!(
+    external_object,
+    program![
+      Const(0, Value::external((1i64, 2i64))),
+      Const(1, Value::external((3i64, 4i64))),
+      Const(
+        2,
+        ExternalFunction::unnamed(|mut args| {
+          let a = args.pop().unwrap().casted_external::<(i64, i64)>().unwrap();
+          let b = args.pop().unwrap().casted_external::<(i64, i64)>().unwrap();
+          Ok(Number(Num::from(a.0 + b.0 + a.1 + b.1)))
+        })
       ),
-      (0, 10)
-    );
-  }
+      Call(0, 2, 2),
+      StealArgument(0),
+      StealArgument(1)
+    ],
+    (0, 10)
+  );
+
+  simple_register_test!(
+    create_process,
+    program![
+      Const(
+        0,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          0,
+          vec![EmptyList(0), Return(0)]
+        )))
+      ),
+      CreateProcess(0),
+    ],
+  );
 }

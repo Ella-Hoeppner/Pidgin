@@ -172,6 +172,17 @@ pub enum Instruction<R, C> {
   InfiniteIterate(R, R, R),
   BoundedIterate(R, R, R),
 
+  // Cells
+  CreateCell(R),
+  GetCellValue(R, R),
+  SetCellValue(R, R),
+  UpdateCell(R, R),
+
+  // Processes (coroutines)
+  CreateProcess(R),
+  IsProcessAlive(R, R),
+  Yield(R, R),
+
   // Type checkers
   IsNil(R, R),
   IsBool(R, R),
@@ -187,6 +198,8 @@ pub enum Instruction<R, C> {
   IsCollection(R, R),
   IsFn(R, R),
   IsError(R, R),
+  IsCell(R, R),
+  IsProcess(R, R),
 
   // Type conversions
   ToBool(R, R),
@@ -200,12 +213,6 @@ pub enum Instruction<R, C> {
   ToMap(R, R),
   ToSet(R, R),
   ToError(R, R),
-
-  // Cells
-  CreateCell(R),
-  GetCellValue(R, R),
-  SetCellValue(R, R),
-  UpdateCell(R, R),
 }
 use Instruction::*;
 
@@ -376,6 +383,13 @@ impl IntermediateInstruction {
       BoundedRepeatedly(_, _, _) => todo!(),
       InfiniteIterate(_, _, _) => todo!(),
       BoundedIterate(_, _, _) => todo!(),
+      CreateCell(_) => todo!(),
+      GetCellValue(_, _) => todo!(),
+      SetCellValue(_, _) => todo!(),
+      UpdateCell(_, _) => todo!(),
+      CreateProcess(_) => todo!(),
+      IsProcessAlive(_, _) => todo!(),
+      Yield(_, _) => todo!(),
       IsNil(_, _) => todo!(),
       IsBool(_, _) => todo!(),
       IsChar(_, _) => todo!(),
@@ -390,6 +404,8 @@ impl IntermediateInstruction {
       IsCollection(_, _) => todo!(),
       IsFn(_, _) => todo!(),
       IsError(_, _) => todo!(),
+      IsCell(_, _) => todo!(),
+      IsProcess(_, _) => todo!(),
       ToBool(_, _) => todo!(),
       ToChar(_, _) => todo!(),
       ToNum(_, _) => todo!(),
@@ -401,10 +417,6 @@ impl IntermediateInstruction {
       ToMap(_, _) => todo!(),
       ToSet(_, _) => todo!(),
       ToError(_, _) => todo!(),
-      CreateCell(_) => todo!(),
-      GetCellValue(_, _) => todo!(),
-      SetCellValue(_, _) => todo!(),
-      UpdateCell(_, _) => todo!(),
     }
   }
 }

@@ -12,8 +12,8 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  ConstIndex, CoreFnIndex, Instruction, InstructionBlock, RegisterIndex,
-  RuntimeInstructionBlock,
+  ConstIndex, CoreFnIndex, Instruction, InstructionBlock, ProcessState,
+  RegisterIndex, RuntimeInstructionBlock, StackFrame,
 };
 
 use super::{
@@ -266,18 +266,54 @@ impl ExternalFunction {
 }
 
 #[derive(Clone, Debug)]
+pub struct ArgumentSpecifier {
+  pub count: u8,
+}
+impl ArgumentSpecifier {
+  pub fn can_accept(&self, count: usize) -> bool {
+    self.count as usize == count
+  }
+}
+impl Display for ArgumentSpecifier {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.count)
+  }
+}
+impl From<u8> for ArgumentSpecifier {
+  fn from(count: u8) -> Self {
+    Self { count }
+  }
+}
+
+#[derive(Clone, Debug)]
 pub struct CompositeFunction {
-  pub arg_count: u8,
+  pub args: ArgumentSpecifier,
   pub instructions: RuntimeInstructionBlock,
 }
 impl CompositeFunction {
-  pub fn new<T: Into<RuntimeInstructionBlock>>(
-    arg_count: u8,
-    instructions: T,
+  pub fn new<A: Into<ArgumentSpecifier>, I: Into<RuntimeInstructionBlock>>(
+    args: A,
+    instructions: I,
   ) -> Self {
     Self {
-      arg_count,
+      args: args.into(),
       instructions: instructions.into(),
+    }
+  }
+}
+
+#[derive(Debug)]
+pub struct PausedProcess {
+  pub args: Option<ArgumentSpecifier>,
+  pub state: ProcessState,
+}
+impl From<CompositeFunction> for PausedProcess {
+  fn from(f: CompositeFunction) -> Self {
+    Self {
+      args: Some(f.args),
+      state: ProcessState::new_with_root_frame(StackFrame::root(
+        f.instructions,
+      )),
     }
   }
 }
@@ -297,6 +333,7 @@ pub enum Value {
   CompositeFn(Rc<CompositeFunction>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
+  Process(Rc<PausedProcess>),
   Error(PidginError),
 }
 use Value::*;
@@ -317,6 +354,7 @@ impl PartialEq for Value {
       (Self::CompositeFn(a), Self::CompositeFn(b)) => Rc::ptr_eq(a, b),
       (Self::ExternalFn(a), Self::ExternalFn(b)) => Rc::ptr_eq(a, b),
       (Self::ExternalObject(a), Self::ExternalObject(b)) => Rc::ptr_eq(a, b),
+      (Self::Process(a), Self::Process(b)) => Rc::ptr_eq(a, b),
       (Self::Error(a), Self::Error(b)) => a == b,
       _ => false,
     }
@@ -391,7 +429,7 @@ impl Value {
       CompositeFn(composite_fn) => {
         format!(
           "fn( {} args, {} instructions )",
-          composite_fn.arg_count,
+          composite_fn.args.count,
           composite_fn.instructions.len()
         )
       }
@@ -408,6 +446,7 @@ impl Value {
           }
         )
       }
+      Process(_) => "process".to_string(),
       ExternalObject(_) => "external_object".to_string(),
       Error(e) => format!("error: {}", e),
     }

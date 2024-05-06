@@ -1,19 +1,52 @@
 Early WIP programming language. Intended to be a Clojure-like Lisp with a more powerful metaprogramming system, compiling to a register-based VM. Intended to be radically extensible, easily integrable with the Rust ecosystem, and ideal for creating DSLs (both DSLs hosted on it's own runtime, and DSLs that compile to entirely separate languages/runtimes). Following up on [Quoot](https://github.com/Ella-Hoeppner/Quoot).
 
 # to-do
-Compiler/Runtime stuff:
+Runtime stuff:
+* support coroutines
+  * when a coroutine encounters an error, it should yield that error, so that errors are handleable from the calling function
+  * how to handle the stacks for these?
+    * I have a collection of stacks on the heap, and just keep the one for the current routine on the os-stack?
+      * this would mean that calling a coroutine and yielding back to the main process would be pretty heavy tho...
+* support laziness
+  * add a new type for a lazy sequence (not sure what to call it... `Lazy`? `Iterator`?)
+    * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values
+      * a rust iterator would work for the realizers of built-in functions, but I want there to be a function to turn a coroutine into a lazy list, and I'm not sure a rust iter could capture that...
+        * I guess there could be a `Realizer` enum type with `Iterator` and `Coroutine` variants?
+* support partially-applied functions
+  * these should store a function and a vec of arguments passed to it
+  * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
+  * I guess the `Compose` and `Memoize` instructions might need special vm-level machinery too?
 * support multi-arity composite functions
-  * probably have a new `MultiArityCompositeFunction` type, rename the current `CompositeFunction`
+  * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
+* support cells
+* write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
+  * not sure exactly how to do this...`SingleArityCompositeFunction`
+* implement remaining instructions, and write tests
+* add an ability to overload certain core functions like `=` and `+` for specific `ExternalObject` types
+  * for `=`, for example, this would work by having a function like `EvaluationState::add_external_eq_type<T: PartialEq>` that adds the `TypeId` of the provided type to a `HashMap` mapping to a function that uses the type's `PartialEq` to do the comparison
+    * the same approach should work for pretty much anything else you'd want to overload, e.g. `Add` for `+`, `IntoIterator + FromIterator` to be callable with `map` and `filter`, etc.
+    * this function won't need to take any arguments, as the function definition is the same for every type
+    * example here: https://www.reddit.com/r/rust/comments/1ckgqrg/comment/l2nh7w5/
+* implement core fns
+
+Compiler stuff
 * Implement compiler from IR (using `Instruction<usize, Value>`) to bytecode
   * Compute lifetimes of all virtual registers
     * Add a new generic type parameter to `Instruction` for replacable registers, i.e. registers that are used for both input and output
       * in `RuntimeInstruction` this will just be the same
       * having registers be overwritable like this breaks SSA, so the intermediate 
-  * Reallocate all registers in block into `0-255`
+  * Reallocate all registers in a block into `0-255`
+    * I guess panic with "expression too complex" or something if this can't be done?
+      * I wonder how often this would come up...
+        * I feel like it would be pretty rare...
+          * the one situation I can think of where that might happen is a `(+ ...)` or `(list ...)` with >255 elements
+            * if compiled naively that would compute each of the arguments and store them in their own register, reduce them into one final value (by adding or pushing them into the list, respectively), and that would exhaust all the registers
+              * I guess this can be avoided if things like this are compiled to evaluate one arg at a time and then reduce into the register holding the final value rather than pre-evaluating all the args
+      * In principle I think when the compiler runs out of registers it could start storing values in a vector stored in the last register in the stack frame, and then shuffle values between that vector and the previous registers, but that sounds complex to implement correctly, and probably isn't that important for a first version
   * optimizations (not essential at first):
     * When a value is at the end of its lifetime and is about to be used in another instruction, don't copy it, just use it directly
     * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
-* get rid of `EvaluationState::consumption`, determine stack frame offsets via static analysis
+* get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
   * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
 * add IR-level optimizations (not essential at first):
   * [`Call`, `Return`] -> `CallAndReturn`
@@ -22,22 +55,6 @@ Compiler/Runtime stuff:
   * [`ApplySelf`, `Return`] -> `CallSelfAndReturn`
   * Function inlining
   * Functions ending with `CallSelfAndReturn` that can put their return values back into the corresponding input registers can just `Jump` back to the start of the function
-* write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
-  * not sure exactly how to do this...`SingleArityCompositeFunction`
-* figure out what to do about laziness...
-  * unsure of how to represent this.
-    * Should I go for the same approach as Quoot?
-      * i.e. have a `LazyList` type that consists of:
-        * a vec of current values
-        * a function that accepts the vec of current values and the index to produce the next value
-      * this approach felt pretty messy
-    * Maybe I could have an `Iter` type that mostly just wraps rust's iterator system? Though it would probably still need to be composed of both a `vec` of already realized values and an `iter` that can produce the rest of the values
-      * typing here might get tricky, probably would have to use `dyn Iter`, though the other approach would also need something like this
-* support coroutines
-* error handling
-  * I guess all that's really necessary for this is for coroutines to return error values when they crash...
-    * try/catch blocks will be implementable from inside the language as long as this is the case
-* implement remaining instructions, and write tests
 * start on a compiler from ASTs into IR
 * Once GSE is ready, specify a basic grammer, and set up a function that accepts a GSE string, parses it, compiles it to the IR, compiles that to the bytecode, and then runs it.
 
