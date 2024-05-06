@@ -74,8 +74,20 @@ pub struct PausedProcess {
   pub state: ProcessState,
 }
 impl PausedProcess {
+  pub fn begin(
+    mut self,
+    return_index: StackIndex,
+  ) -> (StackFrame, ProcessState) {
+    let mut active_frame = self
+      .state
+      .paused_frames
+      .pop()
+      .expect("attempting to resume a PausedProcess with no paused_frames");
+    active_frame.return_stack_index = return_index;
+    (active_frame, self.state)
+  }
   pub fn resume(mut self) -> (StackFrame, ProcessState) {
-    let active_frame = self
+    let mut active_frame = self
       .state
       .paused_frames
       .pop()

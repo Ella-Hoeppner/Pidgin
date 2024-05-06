@@ -124,12 +124,21 @@ impl EvaluationState {
     std::mem::swap(&mut self.current_frame, &mut frame);
     self.current_process.paused_frames.push(frame);
   }
+  fn complete_process(&mut self) -> StackFrame {
+    let mut next_process = self
+      .process_stack
+      .pop()
+      .expect("attempted to complete_process with no paused processes");
+    let (frame, process_state) = next_process.resume();
+    self.current_process = process_state;
+    frame
+  }
   fn complete_frame(&mut self) -> StackFrame {
     let mut next_frame = self
       .current_process
       .paused_frames
       .pop()
-      .expect("attempted to complete frame, but no other frames are left!");
+      .unwrap_or_else(|| self.complete_process());
     std::mem::swap(&mut self.current_frame, &mut next_frame);
     next_frame
   }
@@ -224,11 +233,12 @@ impl EvaluationState {
       }
     }
   }
-  fn replace_current_process(&mut self, process: PausedProcess) {
-    let (mut active_frame, process_state) = process.resume();
+  fn push_process(&mut self, process: PausedProcess, return_index: StackIndex) {
+    let (mut active_frame, process_state) = process.begin(return_index);
     std::mem::swap(&mut self.current_frame, &mut active_frame);
     take(&mut self.current_process, |old_process| {
       let paused_old_process = old_process.pause(active_frame);
+      self.process_stack.push(paused_old_process);
       process_state
     });
   }
@@ -333,8 +343,13 @@ impl EvaluationState {
         }
         Return(value) => {
           let return_value = self.get_register(value).clone();
+          println!(
+            "Return called!\nprocess_stack count: {}",
+            self.process_stack.len()
+          );
           let completed_frame = self.complete_frame();
           self.current_process.consumption = completed_frame.beginning;
+          println!("return setting {}", completed_frame.return_stack_index);
           self.set_stack(completed_frame.return_stack_index, return_value);
         }
         CopyArgument(f) => {
@@ -374,7 +389,7 @@ impl EvaluationState {
             Process(maybe_process) => {
               if let Some(process_ref) = &*maybe_process {
                 if let Some(process) = process_ref.replace(None) {
-                  self.replace_current_process(process);
+                  self.push_process(process, self.register_stack_index(target));
                 } else {
                   return Err(PidginError::ProcessAlreadyRunning);
                 }
