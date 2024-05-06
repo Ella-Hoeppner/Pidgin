@@ -420,18 +420,3 @@ impl IntermediateInstruction {
     }
   }
 }
-
-pub type RuntimeInstruction = Instruction<RegisterIndex, ConstIndex>;
-pub type RuntimeInstructionBlock =
-  InstructionBlock<RegisterIndex, ConstIndex, ()>;
-
-impl From<Vec<Instruction<RegisterIndex, ConstIndex>>>
-  for RuntimeInstructionBlock
-{
-  fn from(instructions: Vec<RuntimeInstruction>) -> Self {
-    Self {
-      instructions: instructions.into(),
-      metadata: (),
-    }
-  }
-}

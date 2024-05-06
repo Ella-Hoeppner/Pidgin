@@ -1,6 +1,7 @@
 use minivec::MiniVec;
 use std::{
   any::Any,
+  cell::RefCell,
   collections::{HashMap, HashSet},
   error::Error,
   fmt::{Debug, Display},
@@ -13,10 +14,11 @@ use ordered_float::OrderedFloat;
 
 use crate::{
   ConstIndex, CoreFnIndex, Instruction, InstructionBlock, ProcessState,
-  RegisterIndex, RuntimeInstructionBlock, StackFrame,
+  RegisterIndex, StackFrame,
 };
 
 use super::{
+  control::{CompositeFunction, PausedProcess, RuntimeInstructionBlock},
   core_functions::CoreFnId,
   error::{PidginError, PidginResult},
   vm::SymbolIndex,
@@ -286,39 +288,6 @@ impl From<u8> for ArgumentSpecifier {
 }
 
 #[derive(Clone, Debug)]
-pub struct CompositeFunction {
-  pub args: ArgumentSpecifier,
-  pub instructions: RuntimeInstructionBlock,
-}
-impl CompositeFunction {
-  pub fn new<A: Into<ArgumentSpecifier>, I: Into<RuntimeInstructionBlock>>(
-    args: A,
-    instructions: I,
-  ) -> Self {
-    Self {
-      args: args.into(),
-      instructions: instructions.into(),
-    }
-  }
-}
-
-#[derive(Debug)]
-pub struct PausedProcess {
-  pub args: Option<ArgumentSpecifier>,
-  pub state: ProcessState,
-}
-impl From<CompositeFunction> for PausedProcess {
-  fn from(f: CompositeFunction) -> Self {
-    Self {
-      args: Some(f.args),
-      state: ProcessState::new_with_root_frame(StackFrame::root(
-        f.instructions,
-      )),
-    }
-  }
-}
-
-#[derive(Clone, Debug)]
 pub enum Value {
   Nil,
   Bool(bool),
@@ -333,7 +302,7 @@ pub enum Value {
   CompositeFn(Rc<CompositeFunction>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
-  Process(Rc<PausedProcess>),
+  Process(Rc<RefCell<PausedProcess>>),
   Error(PidginError),
 }
 use Value::*;

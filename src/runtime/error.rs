@@ -12,6 +12,7 @@ pub enum PidginError {
   CantApply,
   InvalidArity,
   CantCreateProcess(String),
+  DeadProcess,
   ExternalError(Rc<dyn Error>),
 }
 impl PartialEq for PidginError {
@@ -35,6 +36,7 @@ impl Display for PidginError {
       CantApply => write!(f, "can't apply"),
       InvalidArity => write!(f, "invalid arity"),
       CantCreateProcess(s) => write!(f, "{}", s),
+      DeadProcess => write!(f, "attempt to run dead process"),
       ExternalError(external_error) => {
         write!(f, "external error: \"{}\"", external_error)
       }

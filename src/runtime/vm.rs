@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -5,24 +6,23 @@ use minivec::{mini_vec, MiniVec};
 
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
-use crate::{
-  string_utils::indent_lines, CompositeFunction, Instruction, Num,
-  RuntimeInstruction, Value,
-};
-use crate::{PausedProcess, RuntimeInstructionBlock};
+use crate::{string_utils::indent_lines, Instruction, Num, Value};
+use crate::{ProcessState, StackFrame};
 use Instruction::*;
 use Num::*;
 use Value::*;
 
+use super::control::{
+  CompositeFunction, PausedProcess, RuntimeInstructionBlock,
+};
 use super::error::{PidginError, PidginResult};
-
-const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 
 pub type RegisterIndex = u8;
 pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
 pub type CoreFnIndex = u8;
+pub type RuntimeInstruction = Instruction<RegisterIndex, ConstIndex>;
 
 #[derive(Debug)]
 pub struct Program {
@@ -41,71 +41,11 @@ impl Program {
   }
 }
 
-#[derive(Debug)]
-pub struct StackFrame {
-  beginning: StackIndex,
-  calling_function: Option<Rc<CompositeFunction>>,
-  instructions: RuntimeInstructionBlock,
-  instruction_index: usize,
-  return_stack_index: StackIndex,
-}
-impl StackFrame {
-  pub fn root(instructions: RuntimeInstructionBlock) -> Self {
-    Self {
-      beginning: 0,
-      calling_function: None,
-      instructions,
-      instruction_index: 0,
-      return_stack_index: 0,
-    }
-  }
-  fn for_fn(
-    f: Rc<CompositeFunction>,
-    beginning: StackIndex,
-    return_stack_index: StackIndex,
-  ) -> Self {
-    Self {
-      beginning,
-      instructions: f.instructions.clone(),
-      instruction_index: 0,
-      calling_function: Some(f),
-      return_stack_index,
-    }
-  }
-  fn next_instruction(&mut self) -> RuntimeInstruction {
-    let instruction = self.instructions[self.instruction_index].clone();
-    self.instruction_index += 1;
-    instruction
-  }
-}
-
-#[derive(Debug)]
-pub struct ProcessState {
-  stack: Vec<Value>,
-  pub paused_frames: Vec<StackFrame>,
-  consumption: StackIndex,
-}
-impl ProcessState {
-  pub fn new() -> Self {
-    Self {
-      stack: std::iter::repeat(Value::Nil).take(STACK_CAPACITY).collect(),
-      paused_frames: vec![],
-      consumption: 0,
-    }
-  }
-  pub fn new_with_root_frame(root_frame: StackFrame) -> Self {
-    Self {
-      stack: std::iter::repeat(Value::Nil).take(STACK_CAPACITY).collect(),
-      paused_frames: vec![root_frame],
-      consumption: 0,
-    }
-  }
-}
-
 pub struct EvaluationState {
   constants: Vec<Value>,
   current_frame: StackFrame,
   current_process: ProcessState,
+  process_stack: Vec<PausedProcess>,
   environment: HashMap<SymbolIndex, Value>,
 }
 
@@ -116,6 +56,7 @@ impl EvaluationState {
       constants: program.constants,
       current_frame: StackFrame::root(program.instructions),
       current_process: ProcessState::new(),
+      process_stack: vec![],
       environment: HashMap::new(),
     }
   }
@@ -415,6 +356,14 @@ impl EvaluationState {
                    handling yet :(",
                 ),
               );
+            }
+            Process(process_ref) => {
+              let process = (*process_ref).borrow_mut();
+              if let Some(args) = &process.args {
+                todo!()
+              } else {
+                return Err(PidginError::DeadProcess);
+              }
             }
             List(list) => todo!(),
             Hashmap(map) => todo!(),
@@ -910,7 +859,7 @@ impl EvaluationState {
           match f_value {
             CompositeFn(f) => self.set_register(
               f_and_result,
-              Process(Rc::new(Rc::unwrap_or_clone(f).into())),
+              Process(Rc::new(RefCell::new(Rc::unwrap_or_clone(f).into()))),
             ),
             ExternalFn(_) => {
               return Err(PidginError::CantCreateProcess(
@@ -1113,9 +1062,10 @@ mod tests {
   use std::rc::Rc;
 
   use super::EvaluationState;
+  use crate::runtime::control::CompositeFunction;
   use crate::{
     runtime::core_functions::CoreFnId,
-    CompositeFunction, ConstIndex, ExternalFunction,
+    ConstIndex, ExternalFunction,
     Instruction::*,
     Num::{self, *},
     Program, RegisterIndex,
@@ -1631,5 +1581,21 @@ mod tests {
       ),
       CreateProcess(0),
     ],
+  );
+
+  simple_register_test!(
+    run_process,
+    program![
+      Const(
+        0,
+        CompositeFn(Rc::new(CompositeFunction::new(
+          0,
+          vec![EmptyList(0), Return(0)]
+        )))
+      ),
+      CreateProcess(0),
+      Call(1, 0, 0)
+    ],
+    (1, List(Rc::new(vec![])))
   );
 }

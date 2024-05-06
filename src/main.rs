@@ -11,7 +11,7 @@ use ordered_float::OrderedFloat;
 use program_macro::program;
 
 use crate::instructions::*;
-use crate::runtime::{data::*, vm::*};
+use crate::runtime::{control::*, data::*, vm::*};
 use std::rc::Rc;
 use Instruction::*;
 use Num::*;
