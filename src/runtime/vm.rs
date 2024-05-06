@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -11,6 +11,8 @@ use crate::{ProcessState, StackFrame};
 use Instruction::*;
 use Num::*;
 use Value::*;
+
+use take_mut::take;
 
 use super::control::{
   CompositeFunction, PausedProcess, RuntimeInstructionBlock,
@@ -123,9 +125,13 @@ impl EvaluationState {
     self.current_process.paused_frames.push(frame);
   }
   fn complete_frame(&mut self) -> StackFrame {
-    let mut x = self.current_process.paused_frames.pop().unwrap();
-    std::mem::swap(&mut self.current_frame, &mut x);
-    x
+    let mut next_frame = self
+      .current_process
+      .paused_frames
+      .pop()
+      .expect("attempted to complete frame, but no other frames are left!");
+    std::mem::swap(&mut self.current_frame, &mut next_frame);
+    next_frame
   }
   fn set_stack_usize(&mut self, index: usize, value: Value) {
     self.current_process.stack[index] = value;
@@ -217,6 +223,14 @@ impl EvaluationState {
         break;
       }
     }
+  }
+  fn replace_current_process(&mut self, process: PausedProcess) {
+    let (mut active_frame, process_state) = process.resume();
+    std::mem::swap(&mut self.current_frame, &mut active_frame);
+    take(&mut self.current_process, |old_process| {
+      let paused_old_process = old_process.pause(active_frame);
+      process_state
+    });
   }
   fn move_args_from(
     &mut self,
@@ -357,10 +371,13 @@ impl EvaluationState {
                 ),
               );
             }
-            Process(process_ref) => {
-              let process = (*process_ref).borrow_mut();
-              if let Some(args) = &process.args {
-                todo!()
+            Process(maybe_process) => {
+              if let Some(process_ref) = &*maybe_process {
+                if let Some(process) = process_ref.replace(None) {
+                  self.replace_current_process(process);
+                } else {
+                  return Err(PidginError::ProcessAlreadyRunning);
+                }
               } else {
                 return Err(PidginError::DeadProcess);
               }
@@ -859,7 +876,7 @@ impl EvaluationState {
           match f_value {
             CompositeFn(f) => self.set_register(
               f_and_result,
-              Process(Rc::new(RefCell::new(Rc::unwrap_or_clone(f).into()))),
+              Value::fn_process(Rc::unwrap_or_clone(f)),
             ),
             ExternalFn(_) => {
               return Err(PidginError::CantCreateProcess(
@@ -1590,7 +1607,7 @@ mod tests {
         0,
         CompositeFn(Rc::new(CompositeFunction::new(
           0,
-          vec![EmptyList(0), Return(0)]
+          vec![EmptyList(0), DebugPrint(0), Return(0)]
         )))
       ),
       CreateProcess(0),

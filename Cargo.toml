@@ -8,3 +8,4 @@ enum-map = "2.7.3"
 minivec = "0.4.0"
 ordered-float = "4.2.0"
 program_macro = { path = "program_macro" }
+take_mut = "0.2.2"

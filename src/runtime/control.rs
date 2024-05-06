@@ -59,17 +59,34 @@ impl ProcessState {
       consumption: 0,
     }
   }
+  pub fn pause(mut self, active_stack_frame: StackFrame) -> PausedProcess {
+    self.paused_frames.push(active_stack_frame);
+    PausedProcess {
+      args: 0.into(),
+      state: self,
+    }
+  }
 }
 
 #[derive(Debug)]
 pub struct PausedProcess {
-  pub args: Option<ArgumentSpecifier>,
+  pub args: ArgumentSpecifier,
   pub state: ProcessState,
+}
+impl PausedProcess {
+  pub fn resume(mut self) -> (StackFrame, ProcessState) {
+    let active_frame = self
+      .state
+      .paused_frames
+      .pop()
+      .expect("attempting to resume a PausedProcess with no paused_frames");
+    (active_frame, self.state)
+  }
 }
 impl From<CompositeFunction> for PausedProcess {
   fn from(f: CompositeFunction) -> Self {
     Self {
-      args: Some(f.args),
+      args: f.args,
       state: ProcessState::new_with_root_frame(StackFrame::root(
         f.instructions,
       )),

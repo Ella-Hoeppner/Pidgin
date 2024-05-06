@@ -302,7 +302,7 @@ pub enum Value {
   CompositeFn(Rc<CompositeFunction>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
-  Process(Rc<RefCell<PausedProcess>>),
+  Process(Rc<Option<RefCell<Option<PausedProcess>>>>),
   Error(PidginError),
 }
 use Value::*;
@@ -430,6 +430,9 @@ impl Value {
     } else {
       None
     }
+  }
+  pub fn fn_process(f: CompositeFunction) -> Value {
+    Process(Rc::new(Some(RefCell::new(Some(f.into())))))
   }
 }
 

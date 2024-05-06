@@ -3,10 +3,13 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 Runtime stuff:
 * support coroutines
+  * support arguments
+  * support yield
+  * support resuming after a yield
+  * support passing arguments into a resumption
   * when a coroutine encounters an error, it should yield that error, so that errors are handleable from the calling function
-  * how to handle the stacks for these?
-    * I have a collection of stacks on the heap, and just keep the one for the current routine on the os-stack?
-      * this would mean that calling a coroutine and yielding back to the main process would be pretty heavy tho...
+* support multi-arity composite functions
+  * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
 * support laziness
   * add a new type for a lazy sequence (not sure what to call it... `Lazy`? `Iterator`?)
     * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values
@@ -16,8 +19,6 @@ Runtime stuff:
   * these should store a function and a vec of arguments passed to it
   * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
   * I guess the `Compose` and `Memoize` instructions might need special vm-level machinery too?
-* support multi-arity composite functions
-  * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
 * support cells
 * write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
   * not sure exactly how to do this...`SingleArityCompositeFunction`
