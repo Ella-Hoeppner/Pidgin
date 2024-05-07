@@ -124,12 +124,13 @@ impl EvaluationState {
     self.current_process.paused_frames.push(frame);
   }
   fn complete_child_process(&mut self) -> StackFrame {
-    let (_child_process_stack_index, mut parent_process) =
+    let (child_process_stack_index, mut parent_process) =
       self.parent_process_stack.pop().expect(
         "attempted to complete_child_process with no paused parent processes",
       );
     let (frame, process_state) = parent_process.resume_from_child();
     self.current_process = process_state;
+    self.set_stack(child_process_stack_index, Value::Process(Rc::new(None)));
     frame
   }
   fn complete_frame(&mut self) -> StackFrame {
@@ -150,6 +151,7 @@ impl EvaluationState {
     &mut self,
     yielded_value: Value,
     new_arg_count_and_offset: Option<(ArgumentSpecifier, u8)>,
+    kill: bool,
   ) {
     let return_stack_index = self.current_frame.return_stack_index;
     let (child_process_stack_index, mut parent_process) = self
@@ -182,10 +184,12 @@ impl EvaluationState {
     } else {
       panic!(
         "value pointed to by child_process_stack_index when attempting to \
-         yield_value is not a Process"
+        yield_value is not a Process"
       )
     }
-    //self.set_stack(index, value)
+    if kill {
+      self.set_stack(child_process_stack_index, Value::Process(Rc::new(None)));
+    }
   }
   fn set_stack_usize(&mut self, index: usize, value: Value) {
     self.current_process.stack[index] = value;
@@ -380,10 +384,10 @@ impl EvaluationState {
           DebugPrint(id) => {
             println!(
               "{}\n\
-             paused processes: {}\n\
-             stack:\n{}\n\n\n\
-             environment:\n{}\n\
-             ----------------------------------------\n\n\n",
+              paused processes: {}\n\
+              stack:\n{}\n\n\n\
+              environment:\n{}\n\
+              ----------------------------------------\n\n\n",
               pad(40, '-', format!("DEBUG {} ", id)),
               self.parent_process_stack.len(),
               self.describe_stack(),
@@ -427,7 +431,7 @@ impl EvaluationState {
               CoreFn(_) => {
                 panic!(
                   "Call instruction called with CoreFn value, this should \
-                 never happen"
+                  never happen"
                 )
               }
               ExternalFn(external_fn) => {
@@ -437,7 +441,7 @@ impl EvaluationState {
                   target,
                   f(args).expect(
                     "external_fn returned an error, and we don't have error \
-                   handling yet :(",
+                    handling yet :(",
                   ),
                 );
               }
@@ -484,7 +488,7 @@ impl EvaluationState {
                   if !composite_fn.args.can_accept(provided_arg_count) {
                     panic!(
                       "Apply called on CompositeFn that expects {} arguments, \
-                     {} arguments provided",
+                      {} arguments provided",
                       composite_fn.args, provided_arg_count
                     )
                   }
@@ -502,7 +506,7 @@ impl EvaluationState {
                     args_and_result,
                     f(Rc::unwrap_or_clone(arg_list)).expect(
                       "external_fn returned an error, and we don't have error \
-                     handling yet :(",
+                      handling yet :(",
                     ),
                   );
                 }
@@ -539,7 +543,7 @@ impl EvaluationState {
               if composite_fn.args.can_accept(provided_arg_count) {
                 panic!(
                   "ApplySelf called on CompositeFn that expects {} arguments, \
-                 {} arguments provided",
+                  {} arguments provided",
                   composite_fn.args, provided_arg_count
                 )
               }
@@ -574,7 +578,7 @@ impl EvaluationState {
               CoreFn(_) => {
                 panic!(
                   "CallAndReturn instruction called with CoreFn value, this \
-                 should never happen"
+                  should never happen"
                 )
               }
               Process(maybe_process) => todo!(),
@@ -1044,16 +1048,23 @@ impl EvaluationState {
               }
             }
           }
-          IsProcessAlive(result, process) => todo!(),
+          IsProcessAlive(result, process) => {
+            if let Process(maybe_process) = self.get_register(process) {
+              self.set_register(result, (**maybe_process).is_some());
+            } else {
+              break 'instruction Err(PidginError::IsntProcess);
+            }
+          }
           Yield(value) => {
             let yielded_value = self.get_register(value).clone();
-            self.yield_value(yielded_value, None);
+            self.yield_value(yielded_value, None, false);
           }
           YieldAndAccept(value, arg_count, new_args_first_register) => {
             let yielded_value = self.get_register(value).clone();
             self.yield_value(
               yielded_value,
               Some((arg_count.into(), new_args_first_register)),
+              false,
             );
           }
           IsNil(result, value) => {
@@ -1230,7 +1241,7 @@ impl EvaluationState {
           if self.parent_process_stack.is_empty() {
             return Err(error);
           } else {
-            self.yield_value(error.into(), None)
+            self.yield_value(error.into(), None, true)
           }
         }
       }
@@ -1238,7 +1249,7 @@ impl EvaluationState {
     if self.current_process.paused_frames.len() > 0 {
       panic!(
         "Execution ended with paused stack frames remaining (maybe a \
-         function didn't end with a `Return` instruction?)"
+        function didn't end with a `Return` instruction?)"
       )
     }
     Ok(None)
@@ -1350,10 +1361,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        Value::composite_fn(
-          1,
-          vec![DebugPrint(0), Multiply(0, 0, 0), Return(0)]
-        )
+        Value::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
       ),
       Call(2, 1, 1),
       CopyArgument(0)
@@ -1924,13 +1932,31 @@ mod tests {
       CreateProcess(0),
       Const(1, "this isn't a number!!!"),
       Const(2, "this isn't either! so adding these will throw an error"),
-      DebugPrint(0),
       Call(3, 0, 2),
       StealArgument(1),
       StealArgument(2),
-      IsError(4, 3)
+      IsError(4, 3),
+      DebugPrint(0),
+      IsProcessAlive(5, 0)
     ],
     (3, PidginError::CantCastToNum),
-    (4, true)
+    (4, true),
+    (5, false)
+  );
+
+  simple_register_test!(
+    process_is_alive,
+    program![
+      Const(0, Value::composite_fn(1, vec![Yield(0), Return(0)])),
+      CreateProcess(0),
+      Const(1, 1),
+      Call(1, 0, 1),
+      CopyArgument(1),
+      IsProcessAlive(2, 0),
+      Call(1, 0, 0),
+      IsProcessAlive(3, 0),
+    ],
+    (2, true),
+    (3, false),
   );
 }

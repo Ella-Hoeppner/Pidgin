@@ -2,6 +2,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Runtime stuff:
+* handle external errors
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
 * support laziness
@@ -23,6 +24,7 @@ Runtime stuff:
     * this function won't need to take any arguments, as the function definition is the same for every type
     * example here: https://www.reddit.com/r/rust/comments/1ckgqrg/comment/l2nh7w5/
 * implement core fns
+* think about how to support parallelism
 
 Compiler stuff
 * Implement compiler from IR (using `Instruction<usize, Value>`) to bytecode
