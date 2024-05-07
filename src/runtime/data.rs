@@ -444,7 +444,6 @@ impl Value {
   }
   pub fn casted_external<T: Any>(self) -> Option<Rc<T>> {
     if let ExternalObject(external_object) = self {
-      println!("castin'!!");
       external_object.downcast::<T>().ok()
     } else {
       None
@@ -523,5 +522,10 @@ impl From<Rc<Vec<Value>>> for Value {
 impl From<ExternalFunction> for Value {
   fn from(f: ExternalFunction) -> Self {
     ExternalFn(Rc::new(f))
+  }
+}
+impl From<PidginError> for Value {
+  fn from(e: PidginError) -> Self {
+    Error(e)
   }
 }

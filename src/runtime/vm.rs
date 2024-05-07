@@ -368,790 +368,871 @@ impl EvaluationState {
       self.set_register(i as RegisterIndex + arg_offset, arg_value);
     }
   }
-  pub fn evaluate(&mut self) -> PidginResult<()> {
+  pub fn evaluate(&mut self) -> PidginResult<Option<Value>> {
     loop {
       if self.current_frame.instruction_index
         >= self.current_frame.instructions.len()
       {
         break;
       }
-      let instruction = self.next_instruction();
-      match instruction {
-        DebugPrint(id) => {
-          println!(
-            "{}\n\
+      let instruction_result: PidginResult<Option<Value>> = 'instruction: {
+        match self.next_instruction() {
+          DebugPrint(id) => {
+            println!(
+              "{}\n\
              paused processes: {}\n\
              stack:\n{}\n\n\n\
              environment:\n{}\n\
              ----------------------------------------\n\n\n",
-            pad(40, '-', format!("DEBUG {} ", id)),
-            self.parent_process_stack.len(),
-            self.describe_stack(),
-            indent_lines(2, self.describe_environment())
-          );
-        }
-        Clear(register) => self.set_register(register, Nil),
-        Copy(result, value) => {
-          self.set_register(result, self.get_register(value).clone())
-        }
-        Const(result, const_index) => {
-          self
-            .set_register(result, self.constants[const_index as usize].clone());
-        }
-        Print(value) => {
-          println!("{}", self.get_register(value).description())
-        }
-        Return(value) => {
-          let return_value = self.steal_register(value);
-          self.return_value(return_value);
-        }
-        CopyArgument(f) => {
-          panic!("CopyArgument instruction called, this should never happen")
-        }
-        StealArgument(f) => {
-          panic!("CopyArgument instruction called, this should never happen")
-        }
-        Call(target, f, arg_count) => {
-          println!("Call({})", arg_count);
-          let f_value = self.get_register(f).clone();
-          match f_value {
-            CompositeFn(composite_fn) => {
-              let new_frame = self.create_fn_stack_frame(
-                composite_fn,
-                self.register_stack_index(target),
-              );
-              self.move_args(arg_count, new_frame.beginning);
-              self.push_frame(new_frame);
-            }
-            CoreFn(_) => {
-              panic!(
-                "Call instruction called with CoreFn value, this should \
-                 never happen"
-              )
-            }
-            ExternalFn(external_fn) => {
-              let f = (*external_fn).f;
-              let args = self.take_args(arg_count);
-              self.set_register(
-                target,
-                f(args).expect(
-                  "external_fn returned an error, and we don't have error \
-                   handling yet :(",
-                ),
-              );
-            }
-            Process(maybe_process) => {
-              if let Some(process_ref) = &*maybe_process {
-                if let Some(process) = process_ref.replace(None) {
-                  if !process.args.can_accept(arg_count as usize) {
-                    return Err(PidginError::InvalidArity);
-                  }
-                  println!("taking args!!");
-                  let args = self.take_args(arg_count);
-                  println!("{:?}", args);
-                  let arg_offset = process.arg_offset;
-                  self.push_child_process(
-                    process,
-                    self.register_stack_index(f),
-                    self.register_stack_index(target),
-                  );
-                  self.set_args(args, arg_offset);
-                } else {
-                  return Err(PidginError::ProcessAlreadyRunning);
-                }
-              } else {
-                return Err(PidginError::DeadProcess);
-              }
-            }
-            List(list) => todo!(),
-            Hashmap(map) => todo!(),
-            Hashset(set) => todo!(),
-            _ => {
-              return Err(PidginError::CantApply);
-            }
+              pad(40, '-', format!("DEBUG {} ", id)),
+              self.parent_process_stack.len(),
+              self.describe_stack(),
+              indent_lines(2, self.describe_environment())
+            );
           }
-        }
-        Apply(args_and_result, f) => {
-          let f_value = self.get_register(f).clone();
-          if let List(arg_list) = self.steal_register(args_and_result) {
+          Clear(register) => self.set_register(register, Nil),
+          Copy(result, value) => {
+            self.set_register(result, self.get_register(value).clone())
+          }
+          Const(result, const_index) => {
+            self.set_register(
+              result,
+              self.constants[const_index as usize].clone(),
+            );
+          }
+          Print(value) => {
+            println!("{}", self.get_register(value).description())
+          }
+          Return(value) => {
+            let return_value = self.steal_register(value);
+            self.return_value(return_value);
+          }
+          CopyArgument(f) => {
+            panic!("CopyArgument instruction called, this should never happen")
+          }
+          StealArgument(f) => {
+            panic!("CopyArgument instruction called, this should never happen")
+          }
+          Call(target, f, arg_count) => {
+            let f_value = self.get_register(f).clone();
             match f_value {
               CompositeFn(composite_fn) => {
-                self.start_fn_stack_frame(
-                  composite_fn.clone(),
-                  self.register_stack_index(args_and_result),
+                let new_frame = self.create_fn_stack_frame(
+                  composite_fn,
+                  self.register_stack_index(target),
                 );
-                let provided_arg_count = arg_list.len();
-                #[cfg(debug_assertions)]
-                if !composite_fn.args.can_accept(provided_arg_count) {
-                  panic!(
-                    "Apply called on CompositeFn that expects {} arguments, \
-                     {} arguments provided",
-                    composite_fn.args, provided_arg_count
-                  )
-                }
-                self.set_args(Rc::unwrap_or_clone(arg_list), 0)
+                self.move_args(arg_count, new_frame.beginning);
+                self.push_frame(new_frame);
               }
-              CoreFn(core_fn_id) => {
-                self.set_register(
-                  args_and_result,
-                  CORE_FUNCTIONS[core_fn_id](Rc::unwrap_or_clone(arg_list))?,
-                );
+              CoreFn(_) => {
+                panic!(
+                  "Call instruction called with CoreFn value, this should \
+                 never happen"
+                )
               }
               ExternalFn(external_fn) => {
                 let f = (*external_fn).f;
+                let args = self.take_args(arg_count);
                 self.set_register(
-                  args_and_result,
-                  f(Rc::unwrap_or_clone(arg_list)).expect(
+                  target,
+                  f(args).expect(
                     "external_fn returned an error, and we don't have error \
-                     handling yet :(",
+                   handling yet :(",
                   ),
                 );
+              }
+              Process(maybe_process) => {
+                if let Some(process_ref) = &*maybe_process {
+                  if let Some(process) = process_ref.replace(None) {
+                    if !process.args.can_accept(arg_count as usize) {
+                      break 'instruction Err(PidginError::InvalidArity);
+                    }
+                    let args = self.take_args(arg_count);
+                    let arg_offset = process.arg_offset;
+                    self.push_child_process(
+                      process,
+                      self.register_stack_index(f),
+                      self.register_stack_index(target),
+                    );
+                    self.set_args(args, arg_offset);
+                  } else {
+                    break 'instruction Err(PidginError::ProcessAlreadyRunning);
+                  }
+                } else {
+                  break 'instruction Err(PidginError::DeadProcess);
+                }
               }
               List(list) => todo!(),
               Hashmap(map) => todo!(),
               Hashset(set) => todo!(),
-              Process(maybe_process) => todo!(),
               _ => {
-                return Err(PidginError::CantApply);
+                break 'instruction Err(PidginError::CantApply);
               }
             }
-          } else {
-            panic!("Apply called with non-List value");
           }
-        }
-        CallSelf(target, arg_count) => {
-          let new_frame = self.create_fn_stack_frame(
-            self.current_frame.calling_function.clone().unwrap(),
-            self.register_stack_index(target),
-          );
-          self.move_args(arg_count, new_frame.beginning);
-          self.push_frame(new_frame);
-        }
-        ApplySelf(args_and_result) => {
-          if let List(arg_list) = self.steal_register(args_and_result) {
+          Apply(args_and_result, f) => {
+            let f_value = self.get_register(f).clone();
+            if let List(arg_list) = self.steal_register(args_and_result) {
+              match f_value {
+                CompositeFn(composite_fn) => {
+                  self.start_fn_stack_frame(
+                    composite_fn.clone(),
+                    self.register_stack_index(args_and_result),
+                  );
+                  let provided_arg_count = arg_list.len();
+                  #[cfg(debug_assertions)]
+                  if !composite_fn.args.can_accept(provided_arg_count) {
+                    panic!(
+                      "Apply called on CompositeFn that expects {} arguments, \
+                     {} arguments provided",
+                      composite_fn.args, provided_arg_count
+                    )
+                  }
+                  self.set_args(Rc::unwrap_or_clone(arg_list), 0)
+                }
+                CoreFn(core_fn_id) => match CORE_FUNCTIONS[core_fn_id](
+                  Rc::unwrap_or_clone(arg_list),
+                ) {
+                  Ok(value) => self.set_register(args_and_result, value),
+                  Err(error) => break 'instruction Err(error),
+                },
+                ExternalFn(external_fn) => {
+                  let f = (*external_fn).f;
+                  self.set_register(
+                    args_and_result,
+                    f(Rc::unwrap_or_clone(arg_list)).expect(
+                      "external_fn returned an error, and we don't have error \
+                     handling yet :(",
+                    ),
+                  );
+                }
+                List(list) => todo!(),
+                Hashmap(map) => todo!(),
+                Hashset(set) => todo!(),
+                Process(maybe_process) => todo!(),
+                _ => {
+                  break 'instruction Err(PidginError::CantApply);
+                }
+              }
+            } else {
+              panic!("Apply called with non-List value");
+            }
+          }
+          CallSelf(target, arg_count) => {
+            let new_frame = self.create_fn_stack_frame(
+              self.current_frame.calling_function.clone().unwrap(),
+              self.register_stack_index(target),
+            );
+            self.move_args(arg_count, new_frame.beginning);
+            self.push_frame(new_frame);
+          }
+          ApplySelf(args_and_result) => {
+            if let List(arg_list) = self.steal_register(args_and_result) {
+              let composite_fn =
+                self.current_frame.calling_function.clone().unwrap();
+              self.start_fn_stack_frame(
+                composite_fn.clone(),
+                self.register_stack_index(args_and_result),
+              );
+              let provided_arg_count = arg_list.len();
+              #[cfg(debug_assertions)]
+              if composite_fn.args.can_accept(provided_arg_count) {
+                panic!(
+                  "ApplySelf called on CompositeFn that expects {} arguments, \
+                 {} arguments provided",
+                  composite_fn.args, provided_arg_count
+                )
+              }
+              let x = Rc::unwrap_or_clone(arg_list);
+              for (i, arg_value) in x.into_iter().enumerate() {
+                self.set_register(i as RegisterIndex, arg_value);
+              }
+            } else {
+              panic!("Apply called with non-List value");
+            }
+          }
+          CallAndReturn(f, arg_count) => {
+            let f_value = self.get_register(f).clone();
+            let mut completed_frame = self.complete_frame();
+            match f_value {
+              CompositeFn(composite_fn) => {
+                let new_frame = StackFrame::for_fn(
+                  composite_fn,
+                  completed_frame.beginning,
+                  completed_frame.return_stack_index,
+                );
+                self.move_args_from(
+                  arg_count,
+                  new_frame.beginning,
+                  &mut completed_frame,
+                );
+                self.current_process.consumption =
+                  completed_frame.beginning + arg_count as StackIndex;
+                self.push_frame(new_frame);
+              }
+              ExternalFn(_) => todo!(),
+              CoreFn(_) => {
+                panic!(
+                  "CallAndReturn instruction called with CoreFn value, this \
+                 should never happen"
+                )
+              }
+              Process(maybe_process) => todo!(),
+              List(list) => todo!(),
+              Hashmap(map) => todo!(),
+              Hashset(set) => todo!(),
+              other => {
+                break 'instruction Err(PidginError::CantApply);
+              }
+            }
+          }
+          ApplyAndReturn(args, f) => {
+            todo!()
+          }
+          CallSelfAndReturn(arg_count) => {
             let composite_fn =
               self.current_frame.calling_function.clone().unwrap();
-            self.start_fn_stack_frame(
-              composite_fn.clone(),
-              self.register_stack_index(args_and_result),
+            let mut completed_frame = self.complete_frame();
+            let new_frame = StackFrame::for_fn(
+              composite_fn,
+              completed_frame.beginning,
+              completed_frame.return_stack_index,
             );
-            let provided_arg_count = arg_list.len();
-            #[cfg(debug_assertions)]
-            if composite_fn.args.can_accept(provided_arg_count) {
-              panic!(
-                "ApplySelf called on CompositeFn that expects {} arguments, \
-                 {} arguments provided",
-                composite_fn.args, provided_arg_count
-              )
-            }
-            let x = Rc::unwrap_or_clone(arg_list);
-            for (i, arg_value) in x.into_iter().enumerate() {
-              self.set_register(i as RegisterIndex, arg_value);
-            }
-          } else {
-            panic!("Apply called with non-List value");
+            self.move_args_from(
+              arg_count,
+              new_frame.beginning,
+              &mut completed_frame,
+            );
+            self.current_process.consumption =
+              completed_frame.beginning + arg_count as StackIndex;
+            self.push_frame(new_frame);
           }
-        }
-        CallAndReturn(f, arg_count) => {
-          let f_value = self.get_register(f).clone();
-          let mut completed_frame = self.complete_frame();
-          match f_value {
-            CompositeFn(composite_fn) => {
-              let new_frame = StackFrame::for_fn(
-                composite_fn,
-                completed_frame.beginning,
-                completed_frame.return_stack_index,
-              );
-              self.move_args_from(
-                arg_count,
-                new_frame.beginning,
-                &mut completed_frame,
-              );
-              self.current_process.consumption =
-                completed_frame.beginning + arg_count as StackIndex;
-              self.push_frame(new_frame);
-            }
-            ExternalFn(_) => todo!(),
-            CoreFn(_) => {
-              panic!(
-                "CallAndReturn instruction called with CoreFn value, this \
-                 should never happen"
-              )
-            }
-            Process(maybe_process) => todo!(),
-            List(list) => todo!(),
-            Hashmap(map) => todo!(),
-            Hashset(set) => todo!(),
-            other => {
-              return Err(PidginError::CantApply);
-            }
+          ApplySelfAndReturn(args) => todo!(),
+          Lookup(register, symbol_index) => {
+            self
+              .set_register(register, self.environment[&symbol_index].clone());
           }
-        }
-        ApplyAndReturn(args, f) => {
-          todo!()
-        }
-        CallSelfAndReturn(arg_count) => {
-          let composite_fn =
-            self.current_frame.calling_function.clone().unwrap();
-          let mut completed_frame = self.complete_frame();
-          let new_frame = StackFrame::for_fn(
-            composite_fn,
-            completed_frame.beginning,
-            completed_frame.return_stack_index,
-          );
-          self.move_args_from(
-            arg_count,
-            new_frame.beginning,
-            &mut completed_frame,
-          );
-          self.current_process.consumption =
-            completed_frame.beginning + arg_count as StackIndex;
-          self.push_frame(new_frame);
-        }
-        ApplySelfAndReturn(args) => todo!(),
-        Lookup(register, symbol_index) => {
-          self.set_register(register, self.environment[&symbol_index].clone());
-        }
-        If(condition) => {
-          if !self.get_register(condition).as_bool() {
-            // skip to next Else, ElseIf, or EndIf instruction
-            loop {
-              match self.next_instruction() {
-                Else => break,
-                ElseIf(other_condition) => {
-                  if self.get_register(other_condition).as_bool() {
-                    break;
+          If(condition) => {
+            if !self.get_register(condition).as_bool() {
+              // skip to next Else, ElseIf, or EndIf instruction
+              loop {
+                match self.next_instruction() {
+                  Else => break,
+                  ElseIf(other_condition) => {
+                    if self.get_register(other_condition).as_bool() {
+                      break;
+                    }
                   }
+                  EndIf => break,
+                  _ => {}
                 }
-                EndIf => break,
-                _ => {}
               }
             }
           }
-        }
-        CallingFunction(result) => {
-          // This instruction puts a reference to the current calling function
-          // in a register, which is necessary to support recursion.
-          if let Some(calling_function) =
-            self.current_frame.calling_function.clone()
-          {
-            self.set_register(result, CompositeFn(calling_function));
-          } else {
-            panic!(
+          CallingFunction(result) => {
+            // This instruction puts a reference to the current calling function
+            // in a register, which is necessary to support recursion.
+            if let Some(calling_function) =
+              self.current_frame.calling_function.clone()
+            {
+              self.set_register(result, CompositeFn(calling_function));
+            } else {
+              panic!(
               "CallingFunction invoked with no calling_function in StackFrame"
             )
-          }
-        }
-        Jump(instruction_index) => {
-          self.current_frame.instruction_index = instruction_index as usize;
-        }
-        Else => self.skip_to_endif(),
-        ElseIf(condition) => self.skip_to_endif(),
-        EndIf => {}
-        Partial(result, f, arg) => todo!(),
-        Compose(result, f_1, f_2) => todo!(),
-        FindSome(result, f, collection) => todo!(),
-        ReduceWithoutInitialValue(result, f, collection) => todo!(),
-        ReduceWithInitialValue(initial_value_and_result, f, collection) => {
-          todo!()
-        }
-        Memoize(result, f) => todo!(),
-        Constantly(result, value) => todo!(),
-        NumericalEqual(result, num_1, num_2) => self.set_register(
-          result,
-          match (self.get_register(num_1), self.get_register(num_2)) {
-            (Number(a), Number(b)) => a.numerical_equal(b),
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        IsZero(result, num) => self.set_register(
-          result,
-          match self.get_register(num) {
-            Number(Float(f)) => *f == 0.,
-            Number(Int(i)) => *i == 0,
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        IsNan(result, num) => self.set_register(
-          result,
-          match self.get_register(num) {
-            Number(Float(f)) => f.is_nan(),
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        IsInf(result, num) => self.set_register(
-          result,
-          match self.get_register(num) {
-            Number(Float(f)) => f.is_infinite(),
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        IsEven(result, num) => self.set_register(
-          result,
-          match self.get_register(num) {
-            Number(n) => n.as_int_lossless()? % 2 == 0,
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        IsOdd(result, num) => self.set_register(
-          result,
-          match self.get_register(num) {
-            Number(n) => n.as_int_lossless()? % 2 == 1,
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        IsPos(result, num) => self.set_register(
-          result,
-          match self.get_register(num) {
-            Number(Float(f)) => **f > 0.,
-            Number(Int(i)) => *i > 0,
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        IsNeg(result, num) => self.set_register(
-          result,
-          match self.get_register(num) {
-            Number(Float(f)) => **f < 0.,
-            Number(Int(i)) => *i < 0,
-            _ => return Err(PidginError::ArgumentNotNum),
-          },
-        ),
-        Inc(result, num) => {
-          self.set_register(result, self.get_register(num).as_num()?.inc())
-        }
-        Dec(result, num) => {
-          self.set_register(result, self.get_register(num).as_num()?.dec())
-        }
-        Negate(result, num) => {
-          self.set_register(result, -*self.get_register(num).as_num()?)
-        }
-        Abs(result, num) => {
-          self.set_register(result, self.get_register(num).as_num()?.abs())
-        }
-        Floor(result, num) => {
-          self.set_register(result, self.get_register(num).as_num()?.floor())
-        }
-        Ceil(result, num) => {
-          self.set_register(result, self.get_register(num).as_num()?.ceil())
-        }
-        Sqrt(result, num) => self.set_register(
-          result,
-          self.get_register(num).as_num()?.as_float().sqrt(),
-        ),
-        Exp(result, num) => self.set_register(
-          result,
-          self.get_register(num).as_num()?.as_float().exp(),
-        ),
-        Exp2(result, num) => self.set_register(
-          result,
-          self.get_register(num).as_num()?.as_float().exp2(),
-        ),
-        Ln(result, num) => self.set_register(
-          result,
-          self.get_register(num).as_num()?.as_float().ln(),
-        ),
-        Log2(result, num) => self.set_register(
-          result,
-          self.get_register(num).as_num()?.as_float().log2(),
-        ),
-        Add(result, num_1, num_2) => self.set_register(
-          result,
-          *self.get_register(num_1).as_num()?
-            + *self.get_register(num_2).as_num()?,
-        ),
-        Subtract(result, num_1, num_2) => self.set_register(
-          result,
-          *self.get_register(num_1).as_num()?
-            - *self.get_register(num_2).as_num()?,
-        ),
-        Multiply(result, num_1, num_2) => {
-          self.set_register(
-            result,
-            *self.get_register(num_1).as_num()?
-              * *self.get_register(num_2).as_num()?,
-          );
-        }
-        Divide(result, num_1, num_2) => self.set_register(
-          result,
-          *self.get_register(num_1).as_num()?
-            / *self.get_register(num_2).as_num()?,
-        ),
-        Pow(result, num_1, num_2) => todo!(),
-        Mod(result, num_1, num_2) => todo!(),
-        Quot(result, num_1, num_2) => todo!(),
-        Min(result, num_1, num_2) => todo!(),
-        Max(result, num_1, num_2) => todo!(),
-        GreaterThan(result, num_1, num_2) => todo!(),
-        GreaterThanOrEqual(result, num_1, num_2) => todo!(),
-        LessThan(result, num_1, num_2) => todo!(),
-        LessThanOrEqual(result, num_1, num_2) => todo!(),
-        Rand(result) => todo!(),
-        UpperBoundedRand(result, upper_bound) => todo!(),
-        LowerUpperBoundedRand(result, lower_bound, upper_bound) => todo!(),
-        RandInt(result, upper_bound) => todo!(),
-        LowerBoundedRandInt(result, lower_bound, upper_bound) => todo!(),
-        Equal(result, value_1, value_2) => todo!(),
-        NotEqual(result, value_1, value_2) => todo!(),
-        Not(result, value) => todo!(),
-        And(result, bool_1, bool_2) => todo!(),
-        Or(result, bool_1, bool_2) => todo!(),
-        Xor(result, bool_1, bool_2) => todo!(),
-        IsEmpty(result, collection) => todo!(),
-        First(result, collection) => self.set_register(
-          result,
-          match self.get_register(collection) {
-            List(list) => list.first().cloned().unwrap_or(Nil),
-            Hashset(set) => set.iter().next().cloned().unwrap_or(Nil),
-            Hashmap(hashmap) => hashmap
-              .iter()
-              .next()
-              .map(|(key, value)| vec![key.clone(), value.clone()].into())
-              .unwrap_or(Nil),
-            Nil => Nil,
-            _ => return Err(PidginError::ArgumentNotList),
-          },
-        ),
-        Count(result, collection) => todo!(),
-        Flatten(result, collection) => todo!(),
-        Remove(collection, key) => todo!(),
-        Filter(collection, f) => todo!(),
-        Map(collection, f) => todo!(),
-        DoubleMap(collection, other_collection, f) => {
-          // Special case of multi-collection map with just 2 collections.
-          // This special case comes up often enough (e.g. mapping with
-          // `(range)` as a second argument for indexing) that the optimization
-          // from having this instruction seems worthwhile
-          todo!()
-        }
-        MultiCollectionMap(raw_vec_of_collections, f) => todo!(),
-        Set(collection, value, key) => todo!(),
-        SetIn(collection, value, path) => todo!(),
-        Get(result, collection, key) => todo!(),
-        GetIn(result, collection, path) => todo!(),
-        Update(collection, f, key) => todo!(),
-        UpdateIn(collection, f, path) => todo!(),
-        MinKey(result, collection, f) => todo!(),
-        MaxKey(result, collection, f) => todo!(),
-        Push(collection, value) => {
-          let value = self.get_register(value).clone();
-          let collection_value = self.steal_register(collection);
-          match collection_value {
-            List(mut list_value) => {
-              self.set_register(
-                collection,
-                if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
-                  owned_list_value.push(value);
-                  list_value
-                } else {
-                  let mut list_value_clone = (*list_value).clone();
-                  list_value_clone.push(value);
-                  Rc::new(list_value_clone)
-                },
-              );
-            }
-            Hashmap(hashmap) => todo!(),
-            Hashset(set) => todo!(),
-            Nil => self.set_register(collection, Nil),
-            _ => return Err(PidginError::ArgumentNotList),
-          };
-        }
-        Sort(collection) => todo!(),
-        SortBy(collection, f) => todo!(),
-        EmptyList(result) => {
-          self.set_register(result, Vec::new());
-        }
-        Last(result, list) => self.set_register(
-          result,
-          match self.get_register(list) {
-            List(list) => list.last().cloned().unwrap_or(Nil),
-            Nil => Nil,
-            _ => return Err(PidginError::ArgumentNotList),
-          },
-        ),
-        Rest(list) => {
-          let list_value = self.steal_register(list);
-          match list_value {
-            List(mut list_value) => {
-              self.set_register(
-                list,
-                if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
-                  owned_list_value.remove(0);
-                  list_value
-                } else {
-                  let mut list_value_clone = (*list_value).clone();
-                  list_value_clone.remove(0);
-                  Rc::new(list_value_clone)
-                },
-              );
-            }
-            Nil => self.set_register(list, Nil),
-            _ => return Err(PidginError::ArgumentNotList),
-          };
-        }
-        ButLast(list) => {
-          let list_value = self.steal_register(list);
-          match list_value {
-            List(mut list_value) => {
-              self.set_register(
-                list,
-                if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
-                  owned_list_value.pop();
-                  list_value
-                } else {
-                  let mut list_value_clone = (*list_value).clone();
-                  list_value_clone.pop();
-                  Rc::new(list_value_clone)
-                },
-              );
-            }
-            Nil => self.set_register(list, Nil),
-            _ => return Err(PidginError::ArgumentNotList),
-          };
-        }
-        Nth(result, list, n) => {
-          // While `Get` returns nil for a list when index is OOB, `Nth` throws
-          todo!()
-        }
-        NthFromLast(result, list, n) => todo!(),
-        Cons(list, value) => todo!(),
-        Concat(list, other_list) => todo!(),
-        Take(list, n) => todo!(),
-        Drop(list, n) => todo!(),
-        Reverse(list) => todo!(),
-        Distinct(list) => todo!(),
-        Sub(list, start_index, end_index) => todo!(),
-        Partition(result, list, size) => todo!(),
-        SteppedPartition(step_and_return, list, size) => todo!(),
-        Pad(value_and_result, list, size) => todo!(),
-        EmptyMap(result) => todo!(),
-        Keys(result, map) => todo!(),
-        Values(result, map) => todo!(),
-        Zip(result, key_list, value_list) => todo!(),
-        Invert(result, map) => todo!(),
-        Merge(result, map_1, map_2) => todo!(),
-        MergeWith(merge_f_and_result, map_1, map_2) => todo!(),
-        MapKeys(result, f, map) => todo!(),
-        MapValues(result, f, map) => todo!(),
-        SelectKeys(map, keys) => todo!(),
-        EmptySet(result) => todo!(),
-        Union(result, set_1, set_2) => todo!(),
-        Intersection(result, set_1, set_2) => todo!(),
-        Difference(result, set_1, set_2) => todo!(),
-        SymmetricDifference(result, set_1, set_2) => todo!(),
-        InfiniteRange(result) => todo!(),
-        UpperBoundedRange(result, size) => todo!(),
-        LowerUpperBoundedRange(result, lower_bound, upper_bound) => todo!(),
-        InfiniteRepeat(result, value) => todo!(),
-        BoundedRepeat(result, value, count) => todo!(),
-        InfiniteRepeatedly(result, f) => todo!(),
-        BoundedRepeatedly(result, f, count) => todo!(),
-        InfiniteIterate(result, f, initial_value) => todo!(),
-        BoundedIterate(bound_and_result, f, initial_value) => todo!(),
-        CreateCell(result) => todo!(),
-        GetCellValue(result, cell) => todo!(),
-        SetCellValue(result, value) => todo!(),
-        UpdateCell(result, f) => todo!(),
-        CreateProcess(f_and_result) => {
-          let f_value = self.steal_register(f_and_result);
-          match f_value {
-            CompositeFn(f) => self.set_register(
-              f_and_result,
-              Value::fn_process(Rc::unwrap_or_clone(f)),
-            ),
-            ExternalFn(_) => {
-              return Err(PidginError::CantCreateProcess(
-                "can't create a process from an external function".to_string(),
-              ))
-            }
-            CoreFn(_) => {
-              return Err(PidginError::CantCreateProcess(
-                "can't create a process from a core function".to_string(),
-              ))
-            }
-            other => {
-              return Err(PidginError::CantCreateProcess(format!(
-                "can't create a process from {}",
-                other
-              )))
             }
           }
-        }
-        IsProcessAlive(result, process) => todo!(),
-        Yield(value) => {
-          let yielded_value = self.get_register(value).clone();
-          self.yield_value(yielded_value, None);
-        }
-        YieldAndAccept(value, arg_count, new_args_first_register) => {
-          let yielded_value = self.get_register(value).clone();
-          self.yield_value(
-            yielded_value,
-            Some((arg_count.into(), new_args_first_register)),
-          );
-        }
-        IsNil(result, value) => {
-          self.set_register(
+          Jump(instruction_index) => {
+            self.current_frame.instruction_index = instruction_index as usize;
+          }
+          Else => self.skip_to_endif(),
+          ElseIf(condition) => self.skip_to_endif(),
+          EndIf => {}
+          Partial(result, f, arg) => todo!(),
+          Compose(result, f_1, f_2) => todo!(),
+          FindSome(result, f, collection) => todo!(),
+          ReduceWithoutInitialValue(result, f, collection) => todo!(),
+          ReduceWithInitialValue(initial_value_and_result, f, collection) => {
+            todo!()
+          }
+          Memoize(result, f) => todo!(),
+          Constantly(result, value) => todo!(),
+          NumericalEqual(result, num_1, num_2) => self.set_register(
             result,
-            Bool(if let Nil = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsBool(result, value) => {
-          self.set_register(
+            match (self.get_register(num_1), self.get_register(num_2)) {
+              (Number(a), Number(b)) => a.numerical_equal(b),
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          IsZero(result, num) => self.set_register(
             result,
-            Bool(if let Bool(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsChar(result, value) => {
-          self.set_register(
+            match self.get_register(num) {
+              Number(Float(f)) => *f == 0.,
+              Number(Int(i)) => *i == 0,
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          IsNan(result, num) => self.set_register(
             result,
-            Bool(if let Char(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsNum(result, value) => {
-          self.set_register(
+            match self.get_register(num) {
+              Number(Float(f)) => f.is_nan(),
+              Number(Int(_)) => false,
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          IsInf(result, num) => self.set_register(
             result,
-            Bool(if let Number(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsInt(result, value) => {
-          self.set_register(
+            match self.get_register(num) {
+              Number(Float(f)) => f.is_infinite(),
+              Number(Int(_)) => false,
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          IsEven(result, num) => self.set_register(
             result,
-            Bool(if let Number(Num::Int(_)) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsFloat(result, value) => {
-          self.set_register(
+            match self.get_register(num) {
+              Number(n) => match n.as_int_lossless() {
+                Ok(i) => i % 2 == 0,
+                Err(error) => break 'instruction Err(error),
+              },
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          IsOdd(result, num) => self.set_register(
             result,
-            Bool(if let Number(Num::Float(_)) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsSymbol(result, value) => {
-          self.set_register(
+            match self.get_register(num) {
+              Number(n) => match n.as_int_lossless() {
+                Ok(i) => i % 2 == 1,
+                Err(error) => break 'instruction Err(error),
+              },
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          IsPos(result, num) => self.set_register(
             result,
-            Bool(if let Symbol(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsString(result, value) => {
-          self.set_register(
+            match self.get_register(num) {
+              Number(Float(f)) => **f > 0.,
+              Number(Int(i)) => *i > 0,
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          IsNeg(result, num) => self.set_register(
             result,
-            Bool(if let Str(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsList(result, value) => {
-          self.set_register(
+            match self.get_register(num) {
+              Number(Float(f)) => **f < 0.,
+              Number(Int(i)) => *i < 0,
+              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+            },
+          ),
+          Inc(result, num) => self.set_register(
             result,
-            Bool(if let List(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsMap(result, value) => {
-          self.set_register(
+            match self.get_register(num).as_num() {
+              Ok(n) => n.inc(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Dec(result, num) => self.set_register(
             result,
-            Bool(if let Hashmap(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsSet(result, value) => {
-          self.set_register(
+            match self.get_register(num).as_num() {
+              Ok(n) => n.dec(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Negate(result, num) => self.set_register(
             result,
-            Bool(if let Hashset(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsCollection(result, value) => {
-          self.set_register(
+            match self.get_register(num).as_num() {
+              Ok(n) => -*n,
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Abs(result, num) => self.set_register(
             result,
-            Bool(match self.get_register(value) {
-              List(_) => true,
-              Hashmap(_) => true,
-              Hashset(_) => true,
-              _ => false,
-            }),
-          );
-        }
-        IsFn(result, value) => {
-          self.set_register(
+            match self.get_register(num).as_num() {
+              Ok(n) => n.abs(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Floor(result, num) => self.set_register(
             result,
-            Bool(match self.get_register(value) {
-              CoreFn(_) => true,
-              CompositeFn(_) => true,
-              ExternalFn(_) => true,
-              _ => false,
-            }),
-          );
-        }
-        IsError(result, value) => {
-          self.set_register(
+            match self.get_register(num).as_num() {
+              Ok(n) => n.floor(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Ceil(result, num) => self.set_register(
             result,
-            Bool(if let Error(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
-        }
-        IsCell(result, value) => todo!(),
-        IsProcess(result, value) => {
-          self.set_register(
+            match self.get_register(num).as_num() {
+              Ok(n) => n.ceil(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Sqrt(result, num) => self.set_register(
             result,
-            Bool(if let Process(_) = self.get_register(value) {
-              true
-            } else {
-              false
-            }),
-          );
+            match self.get_register(num).as_num() {
+              Ok(n) => n.as_float().sqrt(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Exp(result, num) => self.set_register(
+            result,
+            match self.get_register(num).as_num() {
+              Ok(n) => n.as_float().exp(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Exp2(result, num) => self.set_register(
+            result,
+            match self.get_register(num).as_num() {
+              Ok(n) => n.as_float().exp2(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Ln(result, num) => self.set_register(
+            result,
+            match self.get_register(num).as_num() {
+              Ok(n) => n.as_float().ln(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Log2(result, num) => self.set_register(
+            result,
+            match self.get_register(num).as_num() {
+              Ok(n) => n.as_float().log2(),
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Add(result, num_1, num_2) => self.set_register(
+            result,
+            match self.get_register(num_1).as_num() {
+              Ok(n) => *n,
+              Err(error) => break 'instruction Err(error),
+            } + match self.get_register(num_2).as_num() {
+              Ok(n) => *n,
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Subtract(result, num_1, num_2) => self.set_register(
+            result,
+            match self.get_register(num_1).as_num() {
+              Ok(n) => *n,
+              Err(error) => break 'instruction Err(error),
+            } - match self.get_register(num_2).as_num() {
+              Ok(n) => *n,
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Multiply(result, num_1, num_2) => {
+            self.set_register(
+              result,
+              match self.get_register(num_1).as_num() {
+                Ok(n) => *n,
+                Err(error) => break 'instruction Err(error),
+              } * match self.get_register(num_2).as_num() {
+                Ok(n) => *n,
+                Err(error) => break 'instruction Err(error),
+              },
+            );
+          }
+          Divide(result, num_1, num_2) => self.set_register(
+            result,
+            match self.get_register(num_1).as_num() {
+              Ok(n) => *n,
+              Err(error) => break 'instruction Err(error),
+            } / match self.get_register(num_2).as_num() {
+              Ok(n) => *n,
+              Err(error) => break 'instruction Err(error),
+            },
+          ),
+          Pow(result, num_1, num_2) => todo!(),
+          Mod(result, num_1, num_2) => todo!(),
+          Quot(result, num_1, num_2) => todo!(),
+          Min(result, num_1, num_2) => todo!(),
+          Max(result, num_1, num_2) => todo!(),
+          GreaterThan(result, num_1, num_2) => todo!(),
+          GreaterThanOrEqual(result, num_1, num_2) => todo!(),
+          LessThan(result, num_1, num_2) => todo!(),
+          LessThanOrEqual(result, num_1, num_2) => todo!(),
+          Rand(result) => todo!(),
+          UpperBoundedRand(result, upper_bound) => todo!(),
+          LowerUpperBoundedRand(result, lower_bound, upper_bound) => todo!(),
+          RandInt(result, upper_bound) => todo!(),
+          LowerBoundedRandInt(result, lower_bound, upper_bound) => todo!(),
+          Equal(result, value_1, value_2) => todo!(),
+          NotEqual(result, value_1, value_2) => todo!(),
+          Not(result, value) => todo!(),
+          And(result, bool_1, bool_2) => todo!(),
+          Or(result, bool_1, bool_2) => todo!(),
+          Xor(result, bool_1, bool_2) => todo!(),
+          IsEmpty(result, collection) => todo!(),
+          First(result, collection) => self.set_register(
+            result,
+            match self.get_register(collection) {
+              List(list) => list.first().cloned().unwrap_or(Nil),
+              Hashset(set) => set.iter().next().cloned().unwrap_or(Nil),
+              Hashmap(hashmap) => hashmap
+                .iter()
+                .next()
+                .map(|(key, value)| vec![key.clone(), value.clone()].into())
+                .unwrap_or(Nil),
+              Nil => Nil,
+              _ => break 'instruction Err(PidginError::ArgumentNotList),
+            },
+          ),
+          Count(result, collection) => todo!(),
+          Flatten(result, collection) => todo!(),
+          Remove(collection, key) => todo!(),
+          Filter(collection, f) => todo!(),
+          Map(collection, f) => todo!(),
+          DoubleMap(collection, other_collection, f) => {
+            // Special case of multi-collection map with just 2 collections.
+            // This special case comes up often enough (e.g. mapping with
+            // `(range)` as a second argument for indexing) that the
+            // optimization from having this instruction seems worthwhile
+            todo!()
+          }
+          MultiCollectionMap(raw_vec_of_collections, f) => todo!(),
+          Set(collection, value, key) => todo!(),
+          SetIn(collection, value, path) => todo!(),
+          Get(result, collection, key) => todo!(),
+          GetIn(result, collection, path) => todo!(),
+          Update(collection, f, key) => todo!(),
+          UpdateIn(collection, f, path) => todo!(),
+          MinKey(result, collection, f) => todo!(),
+          MaxKey(result, collection, f) => todo!(),
+          Push(collection, value) => {
+            let value = self.get_register(value).clone();
+            let collection_value = self.steal_register(collection);
+            match collection_value {
+              List(mut list_value) => {
+                self.set_register(
+                  collection,
+                  if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
+                    owned_list_value.push(value);
+                    list_value
+                  } else {
+                    let mut list_value_clone = (*list_value).clone();
+                    list_value_clone.push(value);
+                    Rc::new(list_value_clone)
+                  },
+                );
+              }
+              Hashmap(hashmap) => todo!(),
+              Hashset(set) => todo!(),
+              Nil => self.set_register(collection, Nil),
+              _ => break 'instruction Err(PidginError::ArgumentNotList),
+            };
+          }
+          Sort(collection) => todo!(),
+          SortBy(collection, f) => todo!(),
+          EmptyList(result) => {
+            self.set_register(result, Vec::new());
+          }
+          Last(result, list) => self.set_register(
+            result,
+            match self.get_register(list) {
+              List(list) => list.last().cloned().unwrap_or(Nil),
+              Nil => Nil,
+              _ => break 'instruction Err(PidginError::ArgumentNotList),
+            },
+          ),
+          Rest(list) => {
+            let list_value = self.steal_register(list);
+            match list_value {
+              List(mut list_value) => {
+                self.set_register(
+                  list,
+                  if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
+                    owned_list_value.remove(0);
+                    list_value
+                  } else {
+                    let mut list_value_clone = (*list_value).clone();
+                    list_value_clone.remove(0);
+                    Rc::new(list_value_clone)
+                  },
+                );
+              }
+              Nil => self.set_register(list, Nil),
+              _ => break 'instruction Err(PidginError::ArgumentNotList),
+            };
+          }
+          ButLast(list) => {
+            let list_value = self.steal_register(list);
+            match list_value {
+              List(mut list_value) => {
+                self.set_register(
+                  list,
+                  if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
+                    owned_list_value.pop();
+                    list_value
+                  } else {
+                    let mut list_value_clone = (*list_value).clone();
+                    list_value_clone.pop();
+                    Rc::new(list_value_clone)
+                  },
+                );
+              }
+              Nil => self.set_register(list, Nil),
+              _ => break 'instruction Err(PidginError::ArgumentNotList),
+            };
+          }
+          Nth(result, list, n) => {
+            // While `Get` returns nil for a list when index is OOB, `Nth`
+            // throws
+            todo!()
+          }
+          NthFromLast(result, list, n) => todo!(),
+          Cons(list, value) => todo!(),
+          Concat(list, other_list) => todo!(),
+          Take(list, n) => todo!(),
+          Drop(list, n) => todo!(),
+          Reverse(list) => todo!(),
+          Distinct(list) => todo!(),
+          Sub(list, start_index, end_index) => todo!(),
+          Partition(result, list, size) => todo!(),
+          SteppedPartition(step_and_return, list, size) => todo!(),
+          Pad(value_and_result, list, size) => todo!(),
+          EmptyMap(result) => todo!(),
+          Keys(result, map) => todo!(),
+          Values(result, map) => todo!(),
+          Zip(result, key_list, value_list) => todo!(),
+          Invert(result, map) => todo!(),
+          Merge(result, map_1, map_2) => todo!(),
+          MergeWith(merge_f_and_result, map_1, map_2) => todo!(),
+          MapKeys(result, f, map) => todo!(),
+          MapValues(result, f, map) => todo!(),
+          SelectKeys(map, keys) => todo!(),
+          EmptySet(result) => todo!(),
+          Union(result, set_1, set_2) => todo!(),
+          Intersection(result, set_1, set_2) => todo!(),
+          Difference(result, set_1, set_2) => todo!(),
+          SymmetricDifference(result, set_1, set_2) => todo!(),
+          InfiniteRange(result) => todo!(),
+          UpperBoundedRange(result, size) => todo!(),
+          LowerUpperBoundedRange(result, lower_bound, upper_bound) => todo!(),
+          InfiniteRepeat(result, value) => todo!(),
+          BoundedRepeat(result, value, count) => todo!(),
+          InfiniteRepeatedly(result, f) => todo!(),
+          BoundedRepeatedly(result, f, count) => todo!(),
+          InfiniteIterate(result, f, initial_value) => todo!(),
+          BoundedIterate(bound_and_result, f, initial_value) => todo!(),
+          CreateCell(result) => todo!(),
+          GetCellValue(result, cell) => todo!(),
+          SetCellValue(result, value) => todo!(),
+          UpdateCell(result, f) => todo!(),
+          CreateProcess(f_and_result) => {
+            let f_value = self.steal_register(f_and_result);
+            match f_value {
+              CompositeFn(f) => self.set_register(
+                f_and_result,
+                Value::fn_process(Rc::unwrap_or_clone(f)),
+              ),
+              ExternalFn(_) => {
+                break 'instruction Err(PidginError::CantCreateProcess(
+                  "can't create a process from an external function"
+                    .to_string(),
+                ))
+              }
+              CoreFn(_) => {
+                break 'instruction Err(PidginError::CantCreateProcess(
+                  "can't create a process from a core function".to_string(),
+                ))
+              }
+              other => {
+                break 'instruction Err(PidginError::CantCreateProcess(
+                  format!("can't create a process from {}", other),
+                ))
+              }
+            }
+          }
+          IsProcessAlive(result, process) => todo!(),
+          Yield(value) => {
+            let yielded_value = self.get_register(value).clone();
+            self.yield_value(yielded_value, None);
+          }
+          YieldAndAccept(value, arg_count, new_args_first_register) => {
+            let yielded_value = self.get_register(value).clone();
+            self.yield_value(
+              yielded_value,
+              Some((arg_count.into(), new_args_first_register)),
+            );
+          }
+          IsNil(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Nil = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsBool(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Bool(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsChar(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Char(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsNum(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Number(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsInt(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Number(Num::Int(_)) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsFloat(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Number(Num::Float(_)) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsSymbol(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Symbol(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsString(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Str(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsList(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let List(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsMap(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Hashmap(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsSet(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Hashset(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsCollection(result, value) => {
+            self.set_register(
+              result,
+              Bool(match self.get_register(value) {
+                List(_) => true,
+                Hashmap(_) => true,
+                Hashset(_) => true,
+                _ => false,
+              }),
+            );
+          }
+          IsFn(result, value) => {
+            self.set_register(
+              result,
+              Bool(match self.get_register(value) {
+                CoreFn(_) => true,
+                CompositeFn(_) => true,
+                ExternalFn(_) => true,
+                _ => false,
+              }),
+            );
+          }
+          IsError(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Error(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          IsCell(result, value) => todo!(),
+          IsProcess(result, value) => {
+            self.set_register(
+              result,
+              Bool(if let Process(_) = self.get_register(value) {
+                true
+              } else {
+                false
+              }),
+            );
+          }
+          ToBool(result, value) => todo!(),
+          ToChar(result, value) => todo!(),
+          ToNum(result, value) => todo!(),
+          ToInt(result, value) => todo!(),
+          ToFloat(result, value) => todo!(),
+          ToSymbol(result, value) => todo!(),
+          ToString(result, value) => todo!(),
+          ToList(result, value) => todo!(),
+          ToMap(result, value) => todo!(),
+          ToSet(result, value) => todo!(),
+          ToError(result, value) => todo!(),
         }
-        ToBool(result, value) => todo!(),
-        ToChar(result, value) => todo!(),
-        ToNum(result, value) => todo!(),
-        ToInt(result, value) => todo!(),
-        ToFloat(result, value) => todo!(),
-        ToSymbol(result, value) => todo!(),
-        ToString(result, value) => todo!(),
-        ToList(result, value) => todo!(),
-        ToMap(result, value) => todo!(),
-        ToSet(result, value) => todo!(),
-        ToError(result, value) => todo!(),
+        Ok(None)
+      };
+      match instruction_result {
+        Ok(None) => {}
+        Ok(Some(value)) => return Ok(Some(value)),
+        Err(error) => {
+          if self.parent_process_stack.is_empty() {
+            return Err(error);
+          } else {
+            self.yield_value(error.into(), None)
+          }
+        }
       }
     }
     if self.current_process.paused_frames.len() > 0 {
@@ -1160,7 +1241,7 @@ impl EvaluationState {
          function didn't end with a `Return` instruction?)"
       )
     }
-    Ok(())
+    Ok(None)
   }
 }
 
@@ -1170,6 +1251,7 @@ mod tests {
 
   use super::EvaluationState;
   use crate::runtime::control::CompositeFunction;
+  use crate::runtime::error::PidginError;
   use crate::{
     runtime::core_functions::CoreFnId,
     ConstIndex, ExternalFunction,
@@ -1833,5 +1915,22 @@ mod tests {
     ],
     (1, 3),
     (2, 10)
+  );
+
+  simple_register_test!(
+    process_returns_error,
+    program![
+      Const(0, Value::composite_fn(2, vec![Add(0, 0, 1), Return(0)])),
+      CreateProcess(0),
+      Const(1, "this isn't a number!!!"),
+      Const(2, "this isn't either! so adding these will throw an error"),
+      DebugPrint(0),
+      Call(3, 0, 2),
+      StealArgument(1),
+      StealArgument(2),
+      IsError(4, 3)
+    ],
+    (3, PidginError::CantCastToNum),
+    (4, true)
   );
 }
