@@ -6,7 +6,7 @@ use minivec::{mini_vec, MiniVec};
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
 use crate::{string_utils::indent_lines, Instruction, Num, Value};
-use crate::{ArgumentSpecifier, ProcessState, StackFrame};
+use crate::{ArgumentSpecifier, CoroutineState, StackFrame};
 use Instruction::*;
 use Num::*;
 use Value::*;
@@ -14,7 +14,7 @@ use Value::*;
 use take_mut::take;
 
 use super::control::{
-  CompositeFunction, PausedProcess, RuntimeInstructionBlock,
+  CompositeFunction, PausedCoroutine, RuntimeInstructionBlock,
 };
 use super::error::{PidginError, PidginResult};
 
@@ -45,8 +45,8 @@ impl Program {
 pub struct EvaluationState {
   constants: Vec<Value>,
   current_frame: StackFrame,
-  current_process: ProcessState,
-  parent_process_stack: Vec<(StackIndex, PausedProcess)>,
+  current_coroutine: CoroutineState,
+  parent_coroutine_stack: Vec<(StackIndex, PausedCoroutine)>,
   environment: HashMap<SymbolIndex, Value>,
 }
 
@@ -56,14 +56,14 @@ impl EvaluationState {
     Self {
       constants: program.constants,
       current_frame: StackFrame::root(program.instructions),
-      current_process: ProcessState::new(),
-      parent_process_stack: vec![],
+      current_coroutine: CoroutineState::new(),
+      parent_coroutine_stack: vec![],
       environment: HashMap::new(),
     }
   }
   fn describe_stack(&self) -> String {
     self
-      .current_process
+      .current_coroutine
       .paused_frames
       .iter()
       .chain(std::iter::once(&self.current_frame))
@@ -78,7 +78,7 @@ impl EvaluationState {
         let start = frame.beginning;
         let end = maybe_next_frame
           .map(|next_frame| next_frame.beginning)
-          .unwrap_or(self.current_process.consumption);
+          .unwrap_or(self.current_coroutine.consumption);
         format!(
           "{}\n{}",
           pad(
@@ -121,30 +121,31 @@ impl EvaluationState {
   }
   fn push_frame(&mut self, mut frame: StackFrame) {
     std::mem::swap(&mut self.current_frame, &mut frame);
-    self.current_process.paused_frames.push(frame);
+    self.current_coroutine.paused_frames.push(frame);
   }
-  fn complete_child_process(&mut self) -> StackFrame {
-    let (child_process_stack_index, mut parent_process) =
-      self.parent_process_stack.pop().expect(
-        "attempted to complete_child_process with no paused parent processes",
+  fn complete_child_coroutine(&mut self) -> StackFrame {
+    let (child_coroutine_stack_index, mut parent_coroutine) =
+      self.parent_coroutine_stack.pop().expect(
+        "attempted to complete_child_coroutine with no paused parent coroutinees",
       );
-    let (frame, process_state) = parent_process.resume_from_child();
-    self.current_process = process_state;
-    self.set_stack(child_process_stack_index, Value::Process(Rc::new(None)));
+    let (frame, coroutine_state) = parent_coroutine.resume_from_child();
+    self.current_coroutine = coroutine_state;
+    self
+      .set_stack(child_coroutine_stack_index, Value::Coroutine(Rc::new(None)));
     frame
   }
   fn complete_frame(&mut self) -> StackFrame {
     let mut next_frame = self
-      .current_process
+      .current_coroutine
       .paused_frames
       .pop()
-      .unwrap_or_else(|| self.complete_child_process());
+      .unwrap_or_else(|| self.complete_child_coroutine());
     std::mem::swap(&mut self.current_frame, &mut next_frame);
     next_frame
   }
   fn return_value(&mut self, value: Value) {
     let completed_frame = self.complete_frame();
-    self.current_process.consumption = completed_frame.beginning;
+    self.current_coroutine.consumption = completed_frame.beginning;
     self.set_stack(completed_frame.return_stack_index, value);
   }
   fn yield_value(
@@ -154,53 +155,57 @@ impl EvaluationState {
     kill: bool,
   ) {
     let return_stack_index = self.current_frame.return_stack_index;
-    let (child_process_stack_index, mut parent_process) = self
-      .parent_process_stack
+    let (child_coroutine_stack_index, mut parent_coroutine) = self
+      .parent_coroutine_stack
       .pop()
-      .expect("attempted to yield_process with no paused parent processes");
-    let (mut resumed_frame, mut process_state) =
-      parent_process.resume_from_child();
-    std::mem::swap(&mut process_state, &mut self.current_process);
-    let child_process_value = self.get_stack(child_process_stack_index).clone();
-    if let Process(process) = child_process_value {
-      if let Some(active_process_ref) = &*process {
+      .expect("attempted to yield_coroutine with no paused parent coroutinees");
+    let (mut resumed_frame, mut coroutine_state) =
+      parent_coroutine.resume_from_child();
+    std::mem::swap(&mut coroutine_state, &mut self.current_coroutine);
+    let child_coroutine_value =
+      self.get_stack(child_coroutine_stack_index).clone();
+    if let Coroutine(coroutine) = child_coroutine_value {
+      if let Some(active_coroutine_ref) = &*coroutine {
         #[cfg(debug_assertions)]
         assert!(
-          (*active_process_ref).borrow().is_none(),
-          "process pointed to by child_process_stack_index when attempting to \
+          (*active_coroutine_ref).borrow().is_none(),
+          "coroutine pointed to by child_coroutine_stack_index when attempting to \
           yield_value isn't inactive"
         );
         std::mem::swap(&mut resumed_frame, &mut self.current_frame);
-        active_process_ref.replace(Some(
-          process_state.pause(resumed_frame, new_arg_count_and_offset),
+        active_coroutine_ref.replace(Some(
+          coroutine_state.pause(resumed_frame, new_arg_count_and_offset),
         ));
         self.set_stack(return_stack_index, yielded_value);
       } else {
         panic!(
-          "process pointed to by child_process_stack_index when attempting to \
+          "coroutine pointed to by child_coroutine_stack_index when attempting to \
           yield_value is dead"
         )
       }
     } else {
       panic!(
-        "value pointed to by child_process_stack_index when attempting to \
-        yield_value is not a Process"
+        "value pointed to by child_coroutine_stack_index when attempting to \
+        yield_value is not a Coroutine"
       )
     }
     if kill {
-      self.set_stack(child_process_stack_index, Value::Process(Rc::new(None)));
+      self.set_stack(
+        child_coroutine_stack_index,
+        Value::Coroutine(Rc::new(None)),
+      );
     }
   }
   fn set_stack_usize(&mut self, index: usize, value: Value) {
-    self.current_process.stack[index] = value;
-    self.current_process.consumption =
-      self.current_process.consumption.max(index as u16 + 1);
+    self.current_coroutine.stack[index] = value;
+    self.current_coroutine.consumption =
+      self.current_coroutine.consumption.max(index as u16 + 1);
   }
   fn set_stack(&mut self, index: StackIndex, value: Value) {
     self.set_stack_usize(index as usize, value);
   }
   fn swap_stack_usize(&mut self, index: usize, value: Value) -> Value {
-    std::mem::replace(&mut self.current_process.stack[index], value)
+    std::mem::replace(&mut self.current_coroutine.stack[index], value)
   }
   fn swap_stack(&mut self, index: StackIndex, value: Value) -> Value {
     self.swap_stack_usize(index as usize, value)
@@ -212,13 +217,13 @@ impl EvaluationState {
     self.steal_stack_usize(index as usize)
   }
   fn get_stack_usize(&self, index: usize) -> &Value {
-    &self.current_process.stack[index]
+    &self.current_coroutine.stack[index]
   }
   fn get_stack(&self, index: StackIndex) -> &Value {
     self.get_stack_usize(index as usize)
   }
   fn get_stack_mut_usize(&mut self, index: usize) -> &mut Value {
-    &mut self.current_process.stack[index]
+    &mut self.current_coroutine.stack[index]
   }
   fn get_stack_mut(&mut self, index: StackIndex) -> &mut Value {
     self.get_stack_mut_usize(index as usize)
@@ -245,14 +250,14 @@ impl EvaluationState {
   }
   fn get_register(&self, register: RegisterIndex) -> &Value {
     #[cfg(debug_assertions)]
-    if register as usize >= self.current_process.consumption as usize {
+    if register as usize >= self.current_coroutine.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
     self.get_stack(self.register_stack_index(register))
   }
   fn get_register_mut(&mut self, register: RegisterIndex) -> &mut Value {
     #[cfg(debug_assertions)]
-    if register as usize >= self.current_process.consumption as usize {
+    if register as usize >= self.current_coroutine.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
     self.get_stack_mut(self.register_stack_index(register))
@@ -262,7 +267,11 @@ impl EvaluationState {
     f: Rc<CompositeFunction>,
     return_stack_index: StackIndex,
   ) -> StackFrame {
-    StackFrame::for_fn(f, self.current_process.consumption, return_stack_index)
+    StackFrame::for_fn(
+      f,
+      self.current_coroutine.consumption,
+      return_stack_index,
+    )
   }
   fn start_fn_stack_frame(
     &mut self,
@@ -282,21 +291,21 @@ impl EvaluationState {
       }
     }
   }
-  fn push_child_process(
+  fn push_child_coroutine(
     &mut self,
-    process: PausedProcess,
+    coroutine: PausedCoroutine,
     parent_stack_reference_index: StackIndex,
     return_index: StackIndex,
   ) {
-    let (mut active_frame, process_state) =
-      process.begin_as_child(return_index);
+    let (mut active_frame, coroutine_state) =
+      coroutine.begin_as_child(return_index);
     std::mem::swap(&mut self.current_frame, &mut active_frame);
-    take(&mut self.current_process, |parent_process| {
-      let paused_parent_process = parent_process.pause(active_frame, None);
+    take(&mut self.current_coroutine, |parent_coroutine| {
+      let paused_parent_coroutine = parent_coroutine.pause(active_frame, None);
       self
-        .parent_process_stack
-        .push((parent_stack_reference_index, paused_parent_process));
-      process_state
+        .parent_coroutine_stack
+        .push((parent_stack_reference_index, paused_parent_coroutine));
+      coroutine_state
     });
   }
   fn move_args_from(
@@ -384,12 +393,12 @@ impl EvaluationState {
           DebugPrint(id) => {
             println!(
               "{}\n\
-              paused processes: {}\n\
+              paused coroutinees: {}\n\
               stack:\n{}\n\n\n\
               environment:\n{}\n\
               ----------------------------------------\n\n\n",
               pad(40, '-', format!("DEBUG {} ", id)),
-              self.parent_process_stack.len(),
+              self.parent_coroutine_stack.len(),
               self.describe_stack(),
               indent_lines(2, self.describe_environment())
             );
@@ -445,25 +454,27 @@ impl EvaluationState {
                   ),
                 );
               }
-              Process(maybe_process) => {
-                if let Some(process_ref) = &*maybe_process {
-                  if let Some(process) = process_ref.replace(None) {
-                    if !process.args.can_accept(arg_count as usize) {
+              Coroutine(maybe_coroutine) => {
+                if let Some(coroutine_ref) = &*maybe_coroutine {
+                  if let Some(coroutine) = coroutine_ref.replace(None) {
+                    if !coroutine.args.can_accept(arg_count as usize) {
                       break 'instruction Err(PidginError::InvalidArity);
                     }
                     let args = self.take_args(arg_count);
-                    let arg_offset = process.arg_offset;
-                    self.push_child_process(
-                      process,
+                    let arg_offset = coroutine.arg_offset;
+                    self.push_child_coroutine(
+                      coroutine,
                       self.register_stack_index(f),
                       self.register_stack_index(target),
                     );
                     self.set_args(args, arg_offset);
                   } else {
-                    break 'instruction Err(PidginError::ProcessAlreadyRunning);
+                    break 'instruction Err(
+                      PidginError::CoroutineAlreadyRunning,
+                    );
                   }
                 } else {
-                  break 'instruction Err(PidginError::DeadProcess);
+                  break 'instruction Err(PidginError::DeadCoroutine);
                 }
               }
               List(list) => todo!(),
@@ -513,7 +524,7 @@ impl EvaluationState {
                 List(list) => todo!(),
                 Hashmap(map) => todo!(),
                 Hashset(set) => todo!(),
-                Process(maybe_process) => todo!(),
+                Coroutine(maybe_coroutine) => todo!(),
                 _ => {
                   break 'instruction Err(PidginError::CantApply);
                 }
@@ -570,7 +581,7 @@ impl EvaluationState {
                   new_frame.beginning,
                   &mut completed_frame,
                 );
-                self.current_process.consumption =
+                self.current_coroutine.consumption =
                   completed_frame.beginning + arg_count as StackIndex;
                 self.push_frame(new_frame);
               }
@@ -581,7 +592,7 @@ impl EvaluationState {
                   should never happen"
                 )
               }
-              Process(maybe_process) => todo!(),
+              Coroutine(maybe_coroutine) => todo!(),
               List(list) => todo!(),
               Hashmap(map) => todo!(),
               Hashset(set) => todo!(),
@@ -607,7 +618,7 @@ impl EvaluationState {
               new_frame.beginning,
               &mut completed_frame,
             );
-            self.current_process.consumption =
+            self.current_coroutine.consumption =
               completed_frame.beginning + arg_count as StackIndex;
             self.push_frame(new_frame);
           }
@@ -1023,36 +1034,36 @@ impl EvaluationState {
           GetCellValue(result, cell) => todo!(),
           SetCellValue(result, value) => todo!(),
           UpdateCell(result, f) => todo!(),
-          CreateProcess(f_and_result) => {
+          CreateCoroutine(f_and_result) => {
             let f_value = self.steal_register(f_and_result);
             match f_value {
               CompositeFn(f) => self.set_register(
                 f_and_result,
-                Value::fn_process(Rc::unwrap_or_clone(f)),
+                Value::fn_coroutine(Rc::unwrap_or_clone(f)),
               ),
               ExternalFn(_) => {
-                break 'instruction Err(PidginError::CantCreateProcess(
-                  "can't create a process from an external function"
+                break 'instruction Err(PidginError::CantCreateCoroutine(
+                  "can't create a coroutine from an external function"
                     .to_string(),
                 ))
               }
               CoreFn(_) => {
-                break 'instruction Err(PidginError::CantCreateProcess(
-                  "can't create a process from a core function".to_string(),
+                break 'instruction Err(PidginError::CantCreateCoroutine(
+                  "can't create a coroutine from a core function".to_string(),
                 ))
               }
               other => {
-                break 'instruction Err(PidginError::CantCreateProcess(
-                  format!("can't create a process from {}", other),
+                break 'instruction Err(PidginError::CantCreateCoroutine(
+                  format!("can't create a coroutine from {}", other),
                 ))
               }
             }
           }
-          IsProcessAlive(result, process) => {
-            if let Process(maybe_process) = self.get_register(process) {
-              self.set_register(result, (**maybe_process).is_some());
+          IsCoroutineAlive(result, coroutine) => {
+            if let Coroutine(maybe_coroutine) = self.get_register(coroutine) {
+              self.set_register(result, (**maybe_coroutine).is_some());
             } else {
-              break 'instruction Err(PidginError::IsntProcess);
+              break 'instruction Err(PidginError::IsntCoroutine);
             }
           }
           Yield(value) => {
@@ -1210,10 +1221,10 @@ impl EvaluationState {
             );
           }
           IsCell(result, value) => todo!(),
-          IsProcess(result, value) => {
+          IsCoroutine(result, value) => {
             self.set_register(
               result,
-              Bool(if let Process(_) = self.get_register(value) {
+              Bool(if let Coroutine(_) = self.get_register(value) {
                 true
               } else {
                 false
@@ -1238,7 +1249,7 @@ impl EvaluationState {
         Ok(None) => {}
         Ok(Some(value)) => return Ok(Some(value)),
         Err(error) => {
-          if self.parent_process_stack.is_empty() {
+          if self.parent_coroutine_stack.is_empty() {
             return Err(error);
           } else {
             self.yield_value(error.into(), None, true)
@@ -1246,7 +1257,7 @@ impl EvaluationState {
         }
       }
     }
-    if self.current_process.paused_frames.len() > 0 {
+    if self.current_coroutine.paused_frames.len() > 0 {
       panic!(
         "Execution ended with paused stack frames remaining (maybe a \
         function didn't end with a `Return` instruction?)"
@@ -1774,33 +1785,33 @@ mod tests {
   );
 
   simple_register_test!(
-    create_process,
+    create_coroutine,
     program![
       Const(0, Value::composite_fn(0, vec![EmptyList(0), Return(0)])),
-      CreateProcess(0),
+      CreateCoroutine(0),
     ],
   );
 
   simple_register_test!(
-    run_process,
+    run_coroutine,
     program![
       Const(0, Value::composite_fn(0, vec![EmptyList(0), Return(0)])),
-      CreateProcess(0),
+      CreateCoroutine(0),
       Call(1, 0, 0)
     ],
     (1, List(Rc::new(vec![])))
   );
 
   #[test]
-  fn run_nested_processes() {
+  fn run_nested_coroutinees() {
     run_and_check_registers!(
       Program::new(
-        vec![Const(0, 1), CreateProcess(0), Call(1, 0, 0)],
+        vec![Const(0, 1), CreateCoroutine(0), Call(1, 0, 0)],
         vec![
           Value::composite_fn(0, vec![EmptyList(0), Return(0)]).into(),
           Value::composite_fn(
             0,
-            vec![Const(0, 0), CreateProcess(0), Call(1, 0, 0), Return(1)],
+            vec![Const(0, 0), CreateCoroutine(0), Call(1, 0, 0), Return(1)],
           )
           .into(),
         ],
@@ -1810,10 +1821,15 @@ mod tests {
   }
 
   #[test]
-  fn process_yield() {
+  fn coroutine_yield() {
     run_and_check_registers!(
       Program::new(
-        vec![Const(0, 0), CreateProcess(0), Call(1, 0, 0), Call(2, 0, 0)],
+        vec![
+          Const(0, 0),
+          CreateCoroutine(0),
+          Call(1, 0, 0),
+          Call(2, 0, 0)
+        ],
         vec![
           Value::composite_fn(
             0,
@@ -1829,12 +1845,12 @@ mod tests {
   }
 
   #[test]
-  fn nested_process_yield() {
+  fn nested_coroutine_yield() {
     run_and_check_registers!(
       Program::new(
         vec![
           Const(0, 6),
-          CreateProcess(0),
+          CreateCoroutine(0),
           Call(1, 0, 0),
           Call(2, 0, 0),
           Call(3, 0, 0),
@@ -1857,13 +1873,13 @@ mod tests {
             0,
             vec![
               Const(0, 4),
-              CreateProcess(0),
+              CreateCoroutine(0),
               Call(1, 0, 0),
               Yield(1),
               Call(2, 0, 0),
               Yield(2),
               Const(0, 5),
-              CreateProcess(0),
+              CreateCoroutine(0),
               Call(1, 0, 0),
               Yield(1),
               Call(2, 0, 0),
@@ -1880,10 +1896,10 @@ mod tests {
   }
 
   simple_register_test!(
-    run_process_with_args,
+    run_coroutine_with_args,
     program![
       Const(0, Value::composite_fn(2, vec![Add(2, 0, 1), Return(2)])),
-      CreateProcess(0),
+      CreateCoroutine(0),
       Const(1, 1),
       Const(2, 2),
       Call(1, 0, 2),
@@ -1894,7 +1910,7 @@ mod tests {
   );
 
   simple_register_test!(
-    resume_process_with_args,
+    resume_coroutine_with_args,
     program![
       Const(
         0,
@@ -1909,7 +1925,7 @@ mod tests {
           ]
         )
       ),
-      CreateProcess(0),
+      CreateCoroutine(0),
       Const(1, 1),
       Const(2, 2),
       Call(1, 0, 2),
@@ -1926,10 +1942,10 @@ mod tests {
   );
 
   simple_register_test!(
-    process_returns_error,
+    coroutine_returns_error,
     program![
       Const(0, Value::composite_fn(2, vec![Add(0, 0, 1), Return(0)])),
-      CreateProcess(0),
+      CreateCoroutine(0),
       Const(1, "this isn't a number!!!"),
       Const(2, "this isn't either! so adding these will throw an error"),
       Call(3, 0, 2),
@@ -1937,7 +1953,7 @@ mod tests {
       StealArgument(2),
       IsError(4, 3),
       DebugPrint(0),
-      IsProcessAlive(5, 0)
+      IsCoroutineAlive(5, 0)
     ],
     (3, PidginError::CantCastToNum),
     (4, true),
@@ -1945,16 +1961,16 @@ mod tests {
   );
 
   simple_register_test!(
-    process_is_alive,
+    coroutine_is_alive,
     program![
       Const(0, Value::composite_fn(1, vec![Yield(0), Return(0)])),
-      CreateProcess(0),
+      CreateCoroutine(0),
       Const(1, 1),
       Call(1, 0, 1),
       CopyArgument(1),
-      IsProcessAlive(2, 0),
+      IsCoroutineAlive(2, 0),
       Call(1, 0, 0),
-      IsProcessAlive(3, 0),
+      IsCoroutineAlive(3, 0),
     ],
     (2, true),
     (3, false),

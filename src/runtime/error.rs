@@ -11,10 +11,10 @@ pub enum PidginError {
   CantCastToNum,
   CantApply,
   InvalidArity,
-  CantCreateProcess(String),
-  DeadProcess,
-  ProcessAlreadyRunning,
-  IsntProcess,
+  CantCreateCoroutine(String),
+  DeadCoroutine,
+  CoroutineAlreadyRunning,
+  IsntCoroutine,
   ExternalError(Rc<dyn Error>),
 }
 impl PartialEq for PidginError {
@@ -37,12 +37,12 @@ impl Display for PidginError {
       CantCastToNum => write!(f, "can't cast to number"),
       CantApply => write!(f, "can't apply"),
       InvalidArity => write!(f, "invalid arity"),
-      CantCreateProcess(s) => write!(f, "{}", s),
-      ProcessAlreadyRunning => {
-        write!(f, "attempt to run process that is already running")
+      CantCreateCoroutine(s) => write!(f, "{}", s),
+      CoroutineAlreadyRunning => {
+        write!(f, "attempt to run coroutine that is already running")
       }
-      IsntProcess => write!(f, "argument is not a process"),
-      DeadProcess => write!(f, "attempt to run dead process"),
+      IsntCoroutine => write!(f, "argument is not a coroutine"),
+      DeadCoroutine => write!(f, "attempt to run dead coroutine"),
       ExternalError(external_error) => {
         write!(f, "external error: \"{}\"", external_error)
       }

@@ -39,12 +39,12 @@ impl CompositeFunction {
 }
 
 #[derive(Debug)]
-pub struct ProcessState {
+pub struct CoroutineState {
   pub stack: Vec<Value>,
   pub paused_frames: Vec<StackFrame>,
   pub consumption: StackIndex,
 }
-impl ProcessState {
+impl CoroutineState {
   pub fn new() -> Self {
     Self {
       stack: std::iter::repeat(Value::Nil).take(STACK_CAPACITY).collect(),
@@ -63,10 +63,10 @@ impl ProcessState {
     mut self,
     active_stack_frame: StackFrame,
     new_arg_count_and_offset: Option<(ArgumentSpecifier, u8)>,
-  ) -> PausedProcess {
+  ) -> PausedCoroutine {
     self.paused_frames.push(active_stack_frame);
     let (args, arg_offset) = new_arg_count_and_offset.unwrap_or((0.into(), 0));
-    PausedProcess {
+    PausedCoroutine {
       started: true,
       args,
       arg_offset,
@@ -76,42 +76,42 @@ impl ProcessState {
 }
 
 #[derive(Debug)]
-pub struct PausedProcess {
+pub struct PausedCoroutine {
   pub started: bool,
   pub args: ArgumentSpecifier,
   pub arg_offset: u8,
-  pub state: ProcessState,
+  pub state: CoroutineState,
 }
-impl PausedProcess {
+impl PausedCoroutine {
   pub fn begin_as_child(
     mut self,
     return_index: StackIndex,
-  ) -> (StackFrame, ProcessState) {
+  ) -> (StackFrame, CoroutineState) {
     self.started = true;
     let mut active_frame = self
       .state
       .paused_frames
       .pop()
-      .expect("attempting to resume a PausedProcess with no paused_frames");
+      .expect("attempting to resume a PausedCoroutine with no paused_frames");
     active_frame.return_stack_index = return_index;
     (active_frame, self.state)
   }
-  pub fn resume_from_child(mut self) -> (StackFrame, ProcessState) {
+  pub fn resume_from_child(mut self) -> (StackFrame, CoroutineState) {
     let mut active_frame = self
       .state
       .paused_frames
       .pop()
-      .expect("attempting to resume a PausedProcess with no paused_frames");
+      .expect("attempting to resume a PausedCoroutine with no paused_frames");
     (active_frame, self.state)
   }
 }
-impl From<CompositeFunction> for PausedProcess {
+impl From<CompositeFunction> for PausedCoroutine {
   fn from(f: CompositeFunction) -> Self {
     Self {
       started: false,
       args: f.args,
       arg_offset: 0,
-      state: ProcessState::new_with_root_frame(StackFrame::root(
+      state: CoroutineState::new_with_root_frame(StackFrame::root(
         f.instructions,
       )),
     }

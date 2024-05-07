@@ -13,12 +13,12 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  ConstIndex, CoreFnIndex, Instruction, InstructionBlock, ProcessState,
+  ConstIndex, CoreFnIndex, CoroutineState, Instruction, InstructionBlock,
   RegisterIndex, StackFrame,
 };
 
 use super::{
-  control::{CompositeFunction, PausedProcess, RuntimeInstructionBlock},
+  control::{CompositeFunction, PausedCoroutine, RuntimeInstructionBlock},
   core_functions::CoreFnId,
   error::{PidginError, PidginResult},
   vm::SymbolIndex,
@@ -302,7 +302,7 @@ pub enum Value {
   CompositeFn(Rc<CompositeFunction>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
-  Process(Rc<Option<RefCell<Option<PausedProcess>>>>),
+  Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(PidginError),
 }
 use Value::*;
@@ -323,7 +323,7 @@ impl PartialEq for Value {
       (Self::CompositeFn(a), Self::CompositeFn(b)) => Rc::ptr_eq(a, b),
       (Self::ExternalFn(a), Self::ExternalFn(b)) => Rc::ptr_eq(a, b),
       (Self::ExternalObject(a), Self::ExternalObject(b)) => Rc::ptr_eq(a, b),
-      (Self::Process(a), Self::Process(b)) => Rc::ptr_eq(a, b),
+      (Self::Coroutine(a), Self::Coroutine(b)) => Rc::ptr_eq(a, b),
       (Self::Error(a), Self::Error(b)) => a == b,
       _ => false,
     }
@@ -415,18 +415,19 @@ impl Value {
           }
         )
       }
-      Process(x) => format!(
-        "process ({})",
-        if let Some(maybe_paused_process) = &**x {
-          if let Some(paused_process) = (&*(*maybe_paused_process).borrow()) {
+      Coroutine(x) => format!(
+        "coroutine ({})",
+        if let Some(maybe_paused_coroutine) = &**x {
+          if let Some(paused_coroutine) = (&*(*maybe_paused_coroutine).borrow())
+          {
             format!(
               "{}, awaiting {} arguments",
-              if paused_process.started {
+              if paused_coroutine.started {
                 "paused"
               } else {
                 "unstarted"
               },
-              paused_process.args
+              paused_coroutine.args
             )
           } else {
             "active".to_string()
@@ -458,8 +459,8 @@ impl Value {
   ) -> Value {
     CompositeFn(Rc::new(CompositeFunction::new(args, instructions)))
   }
-  pub fn fn_process(f: CompositeFunction) -> Value {
-    Process(Rc::new(Some(RefCell::new(Some(f.into())))))
+  pub fn fn_coroutine(f: CompositeFunction) -> Value {
+    Coroutine(Rc::new(Some(RefCell::new(Some(f.into())))))
   }
 }
 

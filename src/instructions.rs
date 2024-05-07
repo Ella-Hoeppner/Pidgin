@@ -178,9 +178,9 @@ pub enum Instruction<R, C> {
   SetCellValue(R, R),
   UpdateCell(R, R),
 
-  // Processes (coroutines)
-  CreateProcess(R),
-  IsProcessAlive(R, R),
+  // Coroutines
+  CreateCoroutine(R),
+  IsCoroutineAlive(R, R),
   Yield(R),
   YieldAndAccept(R, R, u8),
 
@@ -200,7 +200,7 @@ pub enum Instruction<R, C> {
   IsFn(R, R),
   IsError(R, R),
   IsCell(R, R),
-  IsProcess(R, R),
+  IsCoroutine(R, R),
 
   // Type conversions
   ToBool(R, R),
@@ -388,8 +388,8 @@ impl IntermediateInstruction {
       GetCellValue(_, _) => todo!(),
       SetCellValue(_, _) => todo!(),
       UpdateCell(_, _) => todo!(),
-      CreateProcess(_) => todo!(),
-      IsProcessAlive(_, _) => todo!(),
+      CreateCoroutine(_) => todo!(),
+      IsCoroutineAlive(_, _) => todo!(),
       Yield(_) => todo!(),
       YieldAndAccept(_, _, _) => todo!(),
       IsNil(_, _) => todo!(),
@@ -407,7 +407,7 @@ impl IntermediateInstruction {
       IsFn(_, _) => todo!(),
       IsError(_, _) => todo!(),
       IsCell(_, _) => todo!(),
-      IsProcess(_, _) => todo!(),
+      IsCoroutine(_, _) => todo!(),
       ToBool(_, _) => todo!(),
       ToChar(_, _) => todo!(),
       ToNum(_, _) => todo!(),
