@@ -62,6 +62,7 @@ impl ProcessState {
   pub fn pause(mut self, active_stack_frame: StackFrame) -> PausedProcess {
     self.paused_frames.push(active_stack_frame);
     PausedProcess {
+      started: true,
       args: 0.into(),
       state: self,
     }
@@ -70,6 +71,7 @@ impl ProcessState {
 
 #[derive(Debug)]
 pub struct PausedProcess {
+  pub started: bool,
   pub args: ArgumentSpecifier,
   pub state: ProcessState,
 }
@@ -78,6 +80,7 @@ impl PausedProcess {
     mut self,
     return_index: StackIndex,
   ) -> (StackFrame, ProcessState) {
+    self.started = true;
     let mut active_frame = self
       .state
       .paused_frames
@@ -98,6 +101,7 @@ impl PausedProcess {
 impl From<CompositeFunction> for PausedProcess {
   fn from(f: CompositeFunction) -> Self {
     Self {
+      started: false,
       args: f.args,
       state: ProcessState::new_with_root_frame(StackFrame::root(
         f.instructions,

@@ -357,6 +357,11 @@ impl EvaluationState {
       })
       .collect()
   }
+  fn set_args(&mut self, args: Vec<Value>) {
+    for (i, arg_value) in args.into_iter().enumerate() {
+      self.set_register(i as RegisterIndex, arg_value);
+    }
+  }
   pub fn evaluate(&mut self) -> PidginResult<()> {
     loop {
       if self.current_frame.instruction_index
@@ -431,11 +436,16 @@ impl EvaluationState {
             Process(maybe_process) => {
               if let Some(process_ref) = &*maybe_process {
                 if let Some(process) = process_ref.replace(None) {
+                  if !process.args.can_accept(arg_count as usize) {
+                    return Err(PidginError::InvalidArity);
+                  }
+                  let args = self.take_args(arg_count);
                   self.push_child_process(
                     process,
                     self.register_stack_index(f),
                     self.register_stack_index(target),
                   );
+                  self.set_args(args);
                 } else {
                   return Err(PidginError::ProcessAlreadyRunning);
                 }
@@ -462,17 +472,14 @@ impl EvaluationState {
                 );
                 let provided_arg_count = arg_list.len();
                 #[cfg(debug_assertions)]
-                if composite_fn.args.can_accept(provided_arg_count) {
+                if !composite_fn.args.can_accept(provided_arg_count) {
                   panic!(
                     "Apply called on CompositeFn that expects {} arguments, \
                      {} arguments provided",
                     composite_fn.args, provided_arg_count
                   )
                 }
-                let x = Rc::unwrap_or_clone(arg_list);
-                for (i, arg_value) in x.into_iter().enumerate() {
-                  self.set_register(i as RegisterIndex, arg_value);
-                }
+                self.set_args(Rc::unwrap_or_clone(arg_list))
               }
               CoreFn(core_fn_id) => {
                 self.set_register(
@@ -493,6 +500,7 @@ impl EvaluationState {
               List(list) => todo!(),
               Hashmap(map) => todo!(),
               Hashset(set) => todo!(),
+              Process(maybe_process) => todo!(),
               _ => {
                 return Err(PidginError::CantApply);
               }
@@ -560,6 +568,7 @@ impl EvaluationState {
                  should never happen"
               )
             }
+            Process(maybe_process) => todo!(),
             List(list) => todo!(),
             Hashmap(map) => todo!(),
             Hashset(set) => todo!(),
@@ -1337,6 +1346,22 @@ mod tests {
   );
 
   simple_register_test!(
+    apply_fn,
+    program![
+      Const(0, vec![2.into(), 3.into(), 4.into()]),
+      Const(
+        1,
+        Value::composite_fn(
+          3,
+          vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
+        )
+      ),
+      Apply(0, 1)
+    ],
+    (0, 24)
+  );
+
+  simple_register_test!(
     apply_core_fn_add,
     program![
       Const(0, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
@@ -1747,4 +1772,42 @@ mod tests {
       (4, "second return!")
     );
   }
+
+  simple_register_test!(
+    run_process_with_args,
+    program![
+      Const(0, Value::composite_fn(2, vec![Add(2, 0, 1), Return(2)])),
+      CreateProcess(0),
+      Const(1, 1),
+      Const(2, 2),
+      Call(1, 0, 2),
+      StealArgument(1),
+      StealArgument(2)
+    ],
+    (1, 3)
+  );
+
+  simple_register_test!(
+    resume_process_with_args,
+    program![
+      Const(
+        0,
+        Value::composite_fn(
+          2,
+          vec![Add(0, 0, 1), YieldAndAccept(1, 0), Add(0, 0, 1), Return(0)]
+        )
+      ),
+      CreateProcess(0),
+      Const(1, 1),
+      Const(2, 2),
+      Call(1, 0, 2),
+      StealArgument(1),
+      StealArgument(2),
+      Const(2, 5),
+      Call(2, 0, 1),
+      StealArgument(1),
+    ],
+    (1, 3),
+    (2, 8)
+  );
 }
