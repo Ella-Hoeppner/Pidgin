@@ -182,7 +182,7 @@ pub enum Instruction<R, C> {
   CreateProcess(R),
   IsProcessAlive(R, R),
   Yield(R),
-  YieldAndAccept(R, R),
+  YieldAndAccept(R, R, u8),
 
   // Type checkers
   IsNil(R, R),
@@ -391,7 +391,7 @@ impl IntermediateInstruction {
       CreateProcess(_) => todo!(),
       IsProcessAlive(_, _) => todo!(),
       Yield(_) => todo!(),
-      YieldAndAccept(_, _) => todo!(),
+      YieldAndAccept(_, _, _) => todo!(),
       IsNil(_, _) => todo!(),
       IsBool(_, _) => todo!(),
       IsChar(_, _) => todo!(),

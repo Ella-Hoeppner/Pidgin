@@ -3,7 +3,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 Runtime stuff:
 * support coroutines
-  * support passing arguments into a resumption
   * when a coroutine encounters an error, it should yield that error, so that errors are handleable from the calling function
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range

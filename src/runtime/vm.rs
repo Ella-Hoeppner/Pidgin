@@ -6,7 +6,7 @@ use minivec::{mini_vec, MiniVec};
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
 use crate::{string_utils::indent_lines, Instruction, Num, Value};
-use crate::{ProcessState, StackFrame};
+use crate::{ArgumentSpecifier, ProcessState, StackFrame};
 use Instruction::*;
 use Num::*;
 use Value::*;
@@ -146,7 +146,11 @@ impl EvaluationState {
     self.current_process.consumption = completed_frame.beginning;
     self.set_stack(completed_frame.return_stack_index, value);
   }
-  fn yield_value(&mut self, yielded_value: Value) {
+  fn yield_value(
+    &mut self,
+    yielded_value: Value,
+    new_arg_count_and_offset: Option<(ArgumentSpecifier, u8)>,
+  ) {
     let return_stack_index = self.current_frame.return_stack_index;
     let (child_process_stack_index, mut parent_process) = self
       .parent_process_stack
@@ -165,7 +169,9 @@ impl EvaluationState {
           yield_value isn't inactive"
         );
         std::mem::swap(&mut resumed_frame, &mut self.current_frame);
-        active_process_ref.replace(Some(process_state.pause(resumed_frame)));
+        active_process_ref.replace(Some(
+          process_state.pause(resumed_frame, new_arg_count_and_offset),
+        ));
         self.set_stack(return_stack_index, yielded_value);
       } else {
         panic!(
@@ -281,11 +287,11 @@ impl EvaluationState {
     let (mut active_frame, process_state) =
       process.begin_as_child(return_index);
     std::mem::swap(&mut self.current_frame, &mut active_frame);
-    take(&mut self.current_process, |old_process| {
-      let paused_old_process = old_process.pause(active_frame);
+    take(&mut self.current_process, |parent_process| {
+      let paused_parent_process = parent_process.pause(active_frame, None);
       self
         .parent_process_stack
-        .push((parent_stack_reference_index, paused_old_process));
+        .push((parent_stack_reference_index, paused_parent_process));
       process_state
     });
   }
@@ -357,9 +363,9 @@ impl EvaluationState {
       })
       .collect()
   }
-  fn set_args(&mut self, args: Vec<Value>) {
+  fn set_args(&mut self, args: Vec<Value>, arg_offset: u8) {
     for (i, arg_value) in args.into_iter().enumerate() {
-      self.set_register(i as RegisterIndex, arg_value);
+      self.set_register(i as RegisterIndex + arg_offset, arg_value);
     }
   }
   pub fn evaluate(&mut self) -> PidginResult<()> {
@@ -406,6 +412,7 @@ impl EvaluationState {
           panic!("CopyArgument instruction called, this should never happen")
         }
         Call(target, f, arg_count) => {
+          println!("Call({})", arg_count);
           let f_value = self.get_register(f).clone();
           match f_value {
             CompositeFn(composite_fn) => {
@@ -439,13 +446,16 @@ impl EvaluationState {
                   if !process.args.can_accept(arg_count as usize) {
                     return Err(PidginError::InvalidArity);
                   }
+                  println!("taking args!!");
                   let args = self.take_args(arg_count);
+                  println!("{:?}", args);
+                  let arg_offset = process.arg_offset;
                   self.push_child_process(
                     process,
                     self.register_stack_index(f),
                     self.register_stack_index(target),
                   );
-                  self.set_args(args);
+                  self.set_args(args, arg_offset);
                 } else {
                   return Err(PidginError::ProcessAlreadyRunning);
                 }
@@ -479,7 +489,7 @@ impl EvaluationState {
                     composite_fn.args, provided_arg_count
                   )
                 }
-                self.set_args(Rc::unwrap_or_clone(arg_list))
+                self.set_args(Rc::unwrap_or_clone(arg_list), 0)
               }
               CoreFn(core_fn_id) => {
                 self.set_register(
@@ -969,9 +979,15 @@ impl EvaluationState {
         IsProcessAlive(result, process) => todo!(),
         Yield(value) => {
           let yielded_value = self.get_register(value).clone();
-          self.yield_value(yielded_value);
+          self.yield_value(yielded_value, None);
         }
-        YieldAndAccept(new_args, value) => todo!(),
+        YieldAndAccept(value, arg_count, new_args_first_register) => {
+          let yielded_value = self.get_register(value).clone();
+          self.yield_value(
+            yielded_value,
+            Some((arg_count.into(), new_args_first_register)),
+          );
+        }
         IsNil(result, value) => {
           self.set_register(
             result,
@@ -1794,20 +1810,28 @@ mod tests {
         0,
         Value::composite_fn(
           2,
-          vec![Add(0, 0, 1), YieldAndAccept(1, 0), Add(0, 0, 1), Return(0)]
+          vec![
+            Add(0, 0, 1),
+            YieldAndAccept(0, 2, 1),
+            Add(0, 0, 1),
+            Add(0, 0, 2),
+            Return(0)
+          ]
         )
       ),
       CreateProcess(0),
       Const(1, 1),
       Const(2, 2),
       Call(1, 0, 2),
-      StealArgument(1),
-      StealArgument(2),
-      Const(2, 5),
-      Call(2, 0, 1),
-      StealArgument(1),
+      CopyArgument(1),
+      CopyArgument(2),
+      Const(2, 3),
+      Const(3, 4),
+      Call(2, 0, 2),
+      CopyArgument(2),
+      CopyArgument(3),
     ],
     (1, 3),
-    (2, 8)
+    (2, 10)
   );
 }
