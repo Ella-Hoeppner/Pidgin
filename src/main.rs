@@ -1,8 +1,8 @@
 #![allow(warnings)]
 #![feature(stmt_expr_attributes)]
 
-mod compiler;
 mod instructions;
+mod intermediate;
 mod runtime;
 mod string_utils;
 

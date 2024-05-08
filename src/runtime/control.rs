@@ -10,17 +10,6 @@ const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 pub type RuntimeInstructionBlock =
   InstructionBlock<RegisterIndex, ConstIndex, ()>;
 
-impl From<Vec<Instruction<RegisterIndex, ConstIndex>>>
-  for RuntimeInstructionBlock
-{
-  fn from(instructions: Vec<RuntimeInstruction>) -> Self {
-    Self {
-      instructions: instructions.into(),
-      metadata: (),
-    }
-  }
-}
-
 #[derive(Clone, Debug)]
 pub struct CompositeFunction {
   pub args: ArgumentSpecifier,

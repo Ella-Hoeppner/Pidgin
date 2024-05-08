@@ -3,6 +3,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 Runtime stuff:
 * handle external errors
+* destructuring
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
 * support laziness
@@ -25,6 +26,11 @@ Runtime stuff:
     * example here: https://www.reddit.com/r/rust/comments/1ckgqrg/comment/l2nh7w5/
 * implement core fns
 * think about how to support parallelism
+  * I guess it might be simple to just piggyback on rusts threads... maybe passing a coroutine or function into a `Spawn` instruction and having a `Await` instruction to join?
+  * I don't wanna have to use `Arc`s everywhere...
+    * might be time to implement my own `Rc` replacement at this point
+  * clojure's channels API seems pretty nice, maybe just try to copy that
+    * go blocks seem like maybe the tough part
 
 Compiler stuff
 * Implement compiler from IR (using `Instruction<usize, Value>`) to bytecode
