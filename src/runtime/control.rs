@@ -11,10 +11,14 @@ pub type RuntimeInstructionBlock =
   InstructionBlock<RegisterIndex, ConstIndex, ()>;
 
 #[derive(Clone, Debug)]
-pub struct CompositeFunction {
+pub struct GeneralizedCompositeFunction<R, C, M> {
   pub args: ArgumentSpecifier,
-  pub instructions: RuntimeInstructionBlock,
+  pub instructions: InstructionBlock<R, C, M>,
 }
+
+pub type CompositeFunction =
+  GeneralizedCompositeFunction<RegisterIndex, ConstIndex, ()>;
+
 impl CompositeFunction {
   pub fn new<A: Into<ArgumentSpecifier>, I: Into<RuntimeInstructionBlock>>(
     args: A,

@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
 use crate::runtime::error::PidginResult;
-use crate::{Num, Value};
+use crate::{GeneralizedValue, Num, Value};
 use enum_map::{enum_map, Enum, EnumMap};
+use GeneralizedValue::*;
 use Num::*;
-use Value::*;
 
 #[derive(Debug, Enum, PartialEq, Eq, Hash, Clone)]
 pub(crate) enum CoreFnId {

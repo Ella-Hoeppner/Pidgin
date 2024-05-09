@@ -5,11 +5,13 @@ use minivec::{mini_vec, MiniVec};
 
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
-use crate::{string_utils::indent_lines, Instruction, Num, Value};
+use crate::{
+  string_utils::indent_lines, GeneralizedValue, Instruction, Num, Value,
+};
 use crate::{ArgumentSpecifier, CoroutineState, StackFrame};
+use GeneralizedValue::*;
 use Instruction::*;
 use Num::*;
-use Value::*;
 
 use take_mut::take;
 
@@ -1277,10 +1279,10 @@ mod tests {
   use crate::{
     runtime::core_functions::CoreFnId,
     ConstIndex, ExternalFunction,
+    GeneralizedValue::{self, *},
     Instruction::*,
     Num::{self, *},
     Program, RegisterIndex,
-    Value::{self, *},
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
@@ -1358,7 +1360,7 @@ mod tests {
       Program::new(
         vec![Const(0, 0), Call(1, 0, 0)],
         vec![
-          Value::composite_fn(0, vec![Const(0, 1), Return(0)]),
+          GeneralizedValue::composite_fn(0, vec![Const(0, 1), Return(0)]),
           5.into()
         ],
       ),
@@ -1372,7 +1374,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        Value::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
+        GeneralizedValue::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
       ),
       Call(2, 1, 1),
       CopyArgument(0)
@@ -1387,7 +1389,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        Value::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
+        GeneralizedValue::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
       ),
       Call(0, 1, 1),
       StealArgument(0),
@@ -1404,8 +1406,8 @@ mod tests {
         vec![Const(0, 0), Const(1, 2), Call(0, 1, 1), StealArgument(0)],
         vec![
           10.into(),
-          Value::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)]),
-          Value::composite_fn(
+          GeneralizedValue::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)]),
+          GeneralizedValue::composite_fn(
             1,
             vec![
               Const(1, 1),
@@ -1429,7 +1431,7 @@ mod tests {
       Const(1, 3),
       Const(
         2,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           2,
           vec![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
         )
@@ -1449,7 +1451,7 @@ mod tests {
       Const(2, 4),
       Const(
         4,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           3,
           vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )
@@ -1468,7 +1470,7 @@ mod tests {
       Const(0, vec![2.into(), 3.into(), 4.into()]),
       Const(
         1,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           3,
           vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )
@@ -1633,7 +1635,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1659,7 +1661,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1684,7 +1686,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1710,7 +1712,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           1,
           vec![
             IsPos(1, 0),
@@ -1735,7 +1737,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           1,
           vec![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
         )
@@ -1767,8 +1769,8 @@ mod tests {
   simple_register_test!(
     external_object,
     program![
-      Const(0, Value::external((1i64, 2i64))),
-      Const(1, Value::external((3i64, 4i64))),
+      Const(0, GeneralizedValue::external((1i64, 2i64))),
+      Const(1, GeneralizedValue::external((3i64, 4i64))),
       Const(
         2,
         ExternalFunction::unnamed(|mut args| {
@@ -1787,7 +1789,10 @@ mod tests {
   simple_register_test!(
     create_coroutine,
     program![
-      Const(0, Value::composite_fn(0, vec![EmptyList(0), Return(0)])),
+      Const(
+        0,
+        GeneralizedValue::composite_fn(0, vec![EmptyList(0), Return(0)])
+      ),
       CreateCoroutine(0),
     ],
   );
@@ -1795,7 +1800,10 @@ mod tests {
   simple_register_test!(
     run_coroutine,
     program![
-      Const(0, Value::composite_fn(0, vec![EmptyList(0), Return(0)])),
+      Const(
+        0,
+        GeneralizedValue::composite_fn(0, vec![EmptyList(0), Return(0)])
+      ),
       CreateCoroutine(0),
       Call(1, 0, 0)
     ],
@@ -1808,8 +1816,9 @@ mod tests {
       Program::new(
         vec![Const(0, 1), CreateCoroutine(0), Call(1, 0, 0)],
         vec![
-          Value::composite_fn(0, vec![EmptyList(0), Return(0)]).into(),
-          Value::composite_fn(
+          GeneralizedValue::composite_fn(0, vec![EmptyList(0), Return(0)])
+            .into(),
+          GeneralizedValue::composite_fn(
             0,
             vec![Const(0, 0), CreateCoroutine(0), Call(1, 0, 0), Return(1)],
           )
@@ -1831,7 +1840,7 @@ mod tests {
           Call(2, 0, 0)
         ],
         vec![
-          Value::composite_fn(
+          GeneralizedValue::composite_fn(
             0,
             vec![Const(0, 1), Yield(0), Const(1, 2), Return(1)],
           ),
@@ -1861,15 +1870,15 @@ mod tests {
           "first return!".into(),
           "second yield!".into(),
           "second return!".into(),
-          Value::composite_fn(
+          GeneralizedValue::composite_fn(
             0,
             vec![Const(0, 0), Yield(0), Const(1, 1), Yield(1)],
           ),
-          Value::composite_fn(
+          GeneralizedValue::composite_fn(
             0,
             vec![Const(0, 2), Yield(0), Const(1, 3), Yield(1)],
           ),
-          Value::composite_fn(
+          GeneralizedValue::composite_fn(
             0,
             vec![
               Const(0, 4),
@@ -1898,7 +1907,10 @@ mod tests {
   simple_register_test!(
     run_coroutine_with_args,
     program![
-      Const(0, Value::composite_fn(2, vec![Add(2, 0, 1), Return(2)])),
+      Const(
+        0,
+        GeneralizedValue::composite_fn(2, vec![Add(2, 0, 1), Return(2)])
+      ),
       CreateCoroutine(0),
       Const(1, 1),
       Const(2, 2),
@@ -1914,7 +1926,7 @@ mod tests {
     program![
       Const(
         0,
-        Value::composite_fn(
+        GeneralizedValue::composite_fn(
           2,
           vec![
             Add(0, 0, 1),
@@ -1944,7 +1956,10 @@ mod tests {
   simple_register_test!(
     coroutine_returns_error,
     program![
-      Const(0, Value::composite_fn(2, vec![Add(0, 0, 1), Return(0)])),
+      Const(
+        0,
+        GeneralizedValue::composite_fn(2, vec![Add(0, 0, 1), Return(0)])
+      ),
       CreateCoroutine(0),
       Const(1, "this isn't a number!!!"),
       Const(2, "this isn't either! so adding these will throw an error"),
@@ -1963,7 +1978,10 @@ mod tests {
   simple_register_test!(
     coroutine_is_alive,
     program![
-      Const(0, Value::composite_fn(1, vec![Yield(0), Return(0)])),
+      Const(
+        0,
+        GeneralizedValue::composite_fn(1, vec![Yield(0), Return(0)])
+      ),
       CreateCoroutine(0),
       Const(1, 1),
       Call(1, 0, 1),

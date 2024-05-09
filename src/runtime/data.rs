@@ -13,8 +13,8 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  ConstIndex, CoreFnIndex, CoroutineState, Instruction, InstructionBlock,
-  RegisterIndex, StackFrame,
+  ConstIndex, CoreFnIndex, CoroutineState, GeneralizedCompositeFunction,
+  Instruction, InstructionBlock, RegisterIndex, StackFrame,
 };
 
 use super::{
@@ -288,7 +288,7 @@ impl From<u8> for ArgumentSpecifier {
 }
 
 #[derive(Clone, Debug)]
-pub enum Value {
+pub enum GeneralizedValue<R, C, M> {
   Nil,
   Bool(bool),
   Char(char),
@@ -299,13 +299,15 @@ pub enum Value {
   Hashmap(Rc<HashMap<Value, Value>>),
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnId),
-  CompositeFn(Rc<CompositeFunction>),
+  CompositeFn(Rc<GeneralizedCompositeFunction<R, C, M>>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(PidginError),
 }
-use Value::*;
+
+pub type Value = GeneralizedValue<RegisterIndex, ConstIndex, ()>;
+use GeneralizedValue::*;
 
 impl PartialEq for Value {
   fn eq(&self, other: &Self) -> bool {

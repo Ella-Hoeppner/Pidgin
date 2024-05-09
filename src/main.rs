@@ -13,9 +13,9 @@ use program_macro::program;
 use crate::instructions::*;
 use crate::runtime::{control::*, data::*, vm::*};
 use std::rc::Rc;
+use GeneralizedValue::*;
 use Instruction::*;
 use Num::*;
-use Value::*;
 
 fn main() {
   let time = std::time::Instant::now();
