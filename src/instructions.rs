@@ -251,21 +251,25 @@ impl<R, O, M> GeneralizedBlock<R, O, M> {
 impl<R: Clone, O: Clone, M> GeneralizedBlock<R, O, M> {
   pub fn replace_metadata<
     NewM: Clone,
-    F: Fn(&[Instruction<R, O>], &[GeneralizedValue<R, O, M>], &M) -> NewM,
+    E,
+    F: Fn(
+      &[Instruction<R, O>],
+      &[GeneralizedValue<R, O, M>],
+      &M,
+    ) -> Result<NewM, E>,
   >(
     &self,
     replacer: &F,
-  ) -> GeneralizedBlock<R, O, NewM> {
+  ) -> Result<GeneralizedBlock<R, O, NewM>, E> {
     let new_metadata =
-      replacer(&*self.instructions, &*self.constants, &self.metadata);
-    let translated_constants: Vec<GeneralizedValue<R, O, NewM>> = self
-      .constants
-      .into_iter()
-      .map(|value| match value {
+      replacer(&*self.instructions, &*self.constants, &self.metadata)?;
+    let mut translated_constants = vec![];
+    for value in self.constants.into_iter() {
+      translated_constants.push(match value {
         CompositeFn(f_ref) => {
           CompositeFn(Rc::new(GeneralizedCompositeFunction::new(
             (*f_ref).args.clone(),
-            (*f_ref).instructions.replace_metadata(replacer),
+            (*f_ref).instructions.replace_metadata(replacer)?,
           )))
         }
         Nil => Nil,
@@ -283,11 +287,11 @@ impl<R: Clone, O: Clone, M> GeneralizedBlock<R, O, M> {
         Coroutine(a) => Coroutine(a.clone()),
         Error(a) => Error(a.clone()),
       })
-      .collect();
-    GeneralizedBlock {
+    }
+    Ok(GeneralizedBlock {
       instructions: self.instructions.clone(),
       constants: (&*translated_constants).into(),
       metadata: new_metadata,
-    }
+    })
   }
 }

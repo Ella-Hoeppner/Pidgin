@@ -149,8 +149,8 @@ impl EvaluationState {
         #[cfg(debug_assertions)]
         assert!(
           (*active_coroutine_ref).borrow().is_none(),
-          "coroutine pointed to by child_coroutine_stack_index when attempting to \
-          yield_value isn't inactive"
+          "coroutine pointed to by child_coroutine_stack_index when attempting \
+          to yield_value isn't inactive"
         );
         std::mem::swap(&mut resumed_frame, &mut self.current_frame);
         active_coroutine_ref.replace(Some(
@@ -159,8 +159,8 @@ impl EvaluationState {
         self.set_stack(return_stack_index, yielded_value);
       } else {
         panic!(
-          "coroutine pointed to by child_coroutine_stack_index when attempting to \
-          yield_value is dead"
+          "coroutine pointed to by child_coroutine_stack_index when attempting \
+          to yield_value is dead"
         )
       }
     } else {

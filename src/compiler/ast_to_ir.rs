@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display};
 
 use crate::{AritySpecifier, GeneralizedValue, Instruction, Num};
 
-use super::ir_instructions::{SSABlock, SSAInstruction, SSARegister, SSAValue};
+use super::{SSABlock, SSAInstruction, SSARegister, SSAValue};
 
 use GeneralizedValue::*;
 use Instruction::*;
