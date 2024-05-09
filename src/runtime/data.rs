@@ -268,20 +268,20 @@ impl ExternalFunction {
 }
 
 #[derive(Clone, Debug)]
-pub struct ArgumentSpecifier {
+pub struct AritySpecifier {
   pub count: u8,
 }
-impl ArgumentSpecifier {
+impl AritySpecifier {
   pub fn can_accept(&self, count: usize) -> bool {
     self.count as usize == count
   }
 }
-impl Display for ArgumentSpecifier {
+impl Display for AritySpecifier {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}", self.count)
   }
 }
-impl From<u8> for ArgumentSpecifier {
+impl From<u8> for AritySpecifier {
   fn from(count: u8) -> Self {
     Self { count }
   }
@@ -452,7 +452,7 @@ impl Value {
       None
     }
   }
-  pub fn composite_fn<A: Into<ArgumentSpecifier>, I: Into<Block>>(
+  pub fn composite_fn<A: Into<AritySpecifier>, I: Into<Block>>(
     args: A,
     instructions: I,
   ) -> Value {
@@ -463,7 +463,7 @@ impl Value {
   }
 }
 
-pub fn composite_fn<A: Into<ArgumentSpecifier>, I: Into<Block>>(
+pub fn composite_fn<A: Into<AritySpecifier>, I: Into<Block>>(
   args: A,
   instructions: I,
 ) -> Value {

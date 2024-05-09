@@ -8,7 +8,7 @@ use crate::string_utils::pad;
 use crate::{
   string_utils::indent_lines, GeneralizedValue, Instruction, Num, Value,
 };
-use crate::{ArgumentSpecifier, CoroutineState, StackFrame};
+use crate::{AritySpecifier, CoroutineState, StackFrame};
 use GeneralizedValue::*;
 use Instruction::*;
 use Num::*;
@@ -131,7 +131,7 @@ impl EvaluationState {
   fn yield_value(
     &mut self,
     yielded_value: Value,
-    new_arg_count_and_offset: Option<(ArgumentSpecifier, u8)>,
+    new_arg_count_and_offset: Option<(AritySpecifier, u8)>,
     kill: bool,
   ) {
     let return_stack_index = self.current_frame.return_stack_index;

@@ -5,9 +5,9 @@ use crate::{
   Value,
 };
 
-use super::ir_instructions::{SSABlock, VirtualRegister};
+use super::ir_instructions::{SSABlock, SSARegister};
 
-pub type RegisterLifetimes = HashMap<VirtualRegister, (usize, usize)>;
+pub type RegisterLifetimes = HashMap<SSARegister, (usize, usize)>;
 
 use GeneralizedValue::*;
 use Instruction::*;

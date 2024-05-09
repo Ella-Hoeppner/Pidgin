@@ -1,8 +1,8 @@
 #![allow(warnings)]
 #![feature(stmt_expr_attributes)]
 
+mod compiler;
 mod instructions;
-mod intermediate;
 mod runtime;
 mod string_utils;
 
@@ -10,6 +10,8 @@ use minivec::mini_vec;
 use ordered_float::OrderedFloat;
 use program_macro::block;
 
+use crate::compiler::ast_to_ir::{ast_to_ir, token_to_value};
+use crate::compiler::parse::parse_sexp;
 use crate::instructions::*;
 use crate::runtime::{control::*, data::*, vm::*};
 use std::rc::Rc;
@@ -18,7 +20,7 @@ use Instruction::*;
 use Num::*;
 
 fn main() {
-  let time = std::time::Instant::now();
+  /*let time = std::time::Instant::now();
   let program = block![
     Const(0, 100000000),
     Const(
@@ -34,5 +36,7 @@ fn main() {
   ];
   let mut state = EvaluationState::new(program);
   state.evaluate().unwrap();
-  println!("{}", time.elapsed().as_secs_f64());
+  println!("{}", time.elapsed().as_secs_f64());*/
+
+  println!("{:?}", ast_to_ir(parse_sexp("(+ 1 2)")));
 }

@@ -1,18 +1,19 @@
-use crate::{GeneralizedBlock, Instruction, Value};
+use crate::{GeneralizedBlock, GeneralizedValue, Instruction, Value};
 
-pub type VirtualRegister = usize;
+pub type SSARegister = usize;
 
 use Instruction::*;
 
-pub type SSAInstruction =
-  Instruction<VirtualRegister, (VirtualRegister, VirtualRegister)>;
+pub type SSAInstruction = Instruction<SSARegister, (SSARegister, SSARegister)>;
 pub type SSABlock<M> =
-  GeneralizedBlock<VirtualRegister, (VirtualRegister, VirtualRegister), M>;
+  GeneralizedBlock<SSARegister, (SSARegister, SSARegister), M>;
+pub type SSAValue<M> =
+  GeneralizedValue<SSARegister, (SSARegister, SSARegister), M>;
 
 impl SSAInstruction {
   pub fn input_and_output_registers(
     &self,
-  ) -> (Vec<VirtualRegister>, Vec<VirtualRegister>) {
+  ) -> (Vec<SSARegister>, Vec<SSARegister>) {
     let (x, y) = match self {
       DebugPrint(_) => (vec![], vec![]),
       Clear(to) => (vec![], vec![to]),

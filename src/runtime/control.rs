@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-  ArgumentSpecifier, ConstIndex, GeneralizedBlock, Instruction, RegisterIndex,
+  AritySpecifier, ConstIndex, GeneralizedBlock, Instruction, RegisterIndex,
   RuntimeInstruction, StackIndex, Value,
 };
 
@@ -11,12 +11,12 @@ pub type Block = GeneralizedBlock<RegisterIndex, RegisterIndex, ()>;
 
 #[derive(Clone, Debug)]
 pub struct GeneralizedCompositeFunction<R, O, M> {
-  pub args: ArgumentSpecifier,
+  pub args: AritySpecifier,
   pub instructions: GeneralizedBlock<R, O, M>,
 }
 
 impl<R, O, M> GeneralizedCompositeFunction<R, O, M> {
-  pub fn new<A: Into<ArgumentSpecifier>, I: Into<GeneralizedBlock<R, O, M>>>(
+  pub fn new<A: Into<AritySpecifier>, I: Into<GeneralizedBlock<R, O, M>>>(
     args: A,
     instructions: I,
   ) -> Self {
@@ -54,7 +54,7 @@ impl CoroutineState {
   pub fn pause(
     mut self,
     active_stack_frame: StackFrame,
-    new_arg_count_and_offset: Option<(ArgumentSpecifier, u8)>,
+    new_arg_count_and_offset: Option<(AritySpecifier, u8)>,
   ) -> PausedCoroutine {
     self.paused_frames.push(active_stack_frame);
     let (args, arg_offset) = new_arg_count_and_offset.unwrap_or((0.into(), 0));
@@ -70,7 +70,7 @@ impl CoroutineState {
 #[derive(Debug)]
 pub struct PausedCoroutine {
   pub started: bool,
-  pub args: ArgumentSpecifier,
+  pub args: AritySpecifier,
   pub arg_offset: u8,
   pub state: CoroutineState,
 }
