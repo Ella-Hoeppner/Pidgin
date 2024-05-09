@@ -1,10 +1,10 @@
-use crate::{Instruction, InstructionBlock, Value};
+use crate::{GeneralizedBlock, Instruction, Value};
 
 pub type VirtualRegister = usize;
 
 use Instruction::*;
 
-impl<V> Instruction<VirtualRegister, V> {
+impl Instruction<VirtualRegister> {
   pub fn input_and_output_registers(
     &self,
   ) -> (Vec<VirtualRegister>, Vec<VirtualRegister>) {

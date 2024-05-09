@@ -1,15 +1,15 @@
 use std::{ops::Index, rc::Rc};
 
-use crate::{ConstIndex, RegisterIndex, SymbolIndex, Value};
+use crate::{ConstIndex, GeneralizedValue, RegisterIndex, SymbolIndex, Value};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Instruction<R, C> {
+pub enum Instruction<R> {
   DebugPrint(u8),
 
   // Register manipulation
   Clear(R),
   Copy(R, R),
-  Const(R, C),
+  Const(R, ConstIndex),
 
   // Output
   Print(R),
@@ -215,47 +215,61 @@ pub enum Instruction<R, C> {
 }
 use Instruction::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct InstructionBlock<R, C, M> {
-  pub instructions: Rc<[Instruction<R, C>]>,
+#[derive(Debug, Clone)]
+pub struct GeneralizedBlock<R, M> {
+  pub instructions: Rc<[Instruction<R>]>,
+  pub constants: Rc<[GeneralizedValue<R, M>]>,
   pub metadata: M,
 }
-impl<R, C, M> Index<usize> for InstructionBlock<R, C, M> {
-  type Output = Instruction<R, C>;
+impl<R, M> Index<usize> for GeneralizedBlock<R, M> {
+  type Output = Instruction<R>;
   fn index(&self, index: usize) -> &Self::Output {
     &self.instructions[index]
   }
 }
-impl<R, C, M> InstructionBlock<R, C, M> {
-  pub fn len(&self) -> usize {
-    self.instructions.len()
-  }
-  pub fn replace_metadata<NewM>(
-    &self,
-    metadata: NewM,
-  ) -> InstructionBlock<R, C, NewM> {
-    InstructionBlock {
-      instructions: self.instructions.clone(),
-      metadata,
+impl<R> GeneralizedBlock<R, ()> {
+  pub fn new(
+    instructions: Vec<Instruction<R>>,
+    constants: Vec<GeneralizedValue<R, ()>>,
+  ) -> Self {
+    Self {
+      instructions: instructions.into(),
+      constants: constants.into(),
+      metadata: (),
     }
   }
 }
-impl<R, C> From<Vec<Instruction<R, C>>> for InstructionBlock<R, C, ()> {
-  fn from(instructions: Vec<Instruction<R, C>>) -> Self {
+impl<R, M> GeneralizedBlock<R, M> {
+  pub fn len(&self) -> usize {
+    self.instructions.len()
+  }
+  /*pub fn replace_metadata<NewM>(
+    self,
+    metadata: NewM,
+  ) -> GeneralizedBlock<R, NewM> {
+    GeneralizedBlock {
+      instructions: self.instructions,
+      constants: self.constants,
+      metadata,
+    }
+  }*/
+}
+/*impl<R> From<Vec<Instruction<R>>> for GeneralizedBlock<R, ()> {
+  fn from(instructions: Vec<Instruction<R>>) -> Self {
     Self {
       instructions: instructions.into(),
       metadata: (),
     }
   }
-}
-impl<R, C, OldM> InstructionBlock<R, C, OldM> {
+}*/
+/*impl<R, OldM> GeneralizedBlock<R, OldM> {
   pub fn with_metadata<NewM>(
     self,
     metadata: NewM,
-  ) -> InstructionBlock<R, C, NewM> {
-    InstructionBlock {
+  ) -> GeneralizedBlock<R, NewM> {
+    GeneralizedBlock {
       instructions: self.instructions,
       metadata,
     }
   }
-}
+}*/

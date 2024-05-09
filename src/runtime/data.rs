@@ -14,11 +14,11 @@ use ordered_float::OrderedFloat;
 
 use crate::{
   ConstIndex, CoreFnIndex, CoroutineState, GeneralizedCompositeFunction,
-  Instruction, InstructionBlock, RegisterIndex, StackFrame,
+  Instruction, RegisterIndex, StackFrame,
 };
 
 use super::{
-  control::{CompositeFunction, PausedCoroutine, RuntimeInstructionBlock},
+  control::{CompositeFunction, PausedCoroutine, Block},
   core_functions::CoreFnId,
   error::{PidginError, PidginResult},
   vm::SymbolIndex,
@@ -288,7 +288,7 @@ impl From<u8> for ArgumentSpecifier {
 }
 
 #[derive(Clone, Debug)]
-pub enum GeneralizedValue<R, C, M> {
+pub enum GeneralizedValue<R, M> {
   Nil,
   Bool(bool),
   Char(char),
@@ -299,14 +299,14 @@ pub enum GeneralizedValue<R, C, M> {
   Hashmap(Rc<HashMap<Value, Value>>),
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnId),
-  CompositeFn(Rc<GeneralizedCompositeFunction<R, C, M>>),
+  CompositeFn(Rc<GeneralizedCompositeFunction<R, M>>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(PidginError),
 }
 
-pub type Value = GeneralizedValue<RegisterIndex, ConstIndex, ()>;
+pub type Value = GeneralizedValue<RegisterIndex, ()>;
 use GeneralizedValue::*;
 
 impl PartialEq for Value {
@@ -454,7 +454,7 @@ impl Value {
   }
   pub fn composite_fn<
     A: Into<ArgumentSpecifier>,
-    I: Into<RuntimeInstructionBlock>,
+    I: Into<Block>,
   >(
     args: A,
     instructions: I,

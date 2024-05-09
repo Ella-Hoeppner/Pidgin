@@ -1,26 +1,24 @@
 use std::rc::Rc;
 
 use crate::{
-  ArgumentSpecifier, ConstIndex, Instruction, InstructionBlock, RegisterIndex,
+  ArgumentSpecifier, ConstIndex, GeneralizedBlock, Instruction, RegisterIndex,
   RuntimeInstruction, StackIndex, Value,
 };
 
 const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 
-pub type RuntimeInstructionBlock =
-  InstructionBlock<RegisterIndex, ConstIndex, ()>;
+pub type Block = GeneralizedBlock<RegisterIndex, ()>;
 
 #[derive(Clone, Debug)]
-pub struct GeneralizedCompositeFunction<R, C, M> {
+pub struct GeneralizedCompositeFunction<R, M> {
   pub args: ArgumentSpecifier,
-  pub instructions: InstructionBlock<R, C, M>,
+  pub instructions: GeneralizedBlock<R, M>,
 }
 
-pub type CompositeFunction =
-  GeneralizedCompositeFunction<RegisterIndex, ConstIndex, ()>;
+pub type CompositeFunction = GeneralizedCompositeFunction<RegisterIndex, ()>;
 
 impl CompositeFunction {
-  pub fn new<A: Into<ArgumentSpecifier>, I: Into<RuntimeInstructionBlock>>(
+  pub fn new<A: Into<ArgumentSpecifier>, I: Into<Block>>(
     args: A,
     instructions: I,
   ) -> Self {
@@ -115,12 +113,12 @@ impl From<CompositeFunction> for PausedCoroutine {
 pub struct StackFrame {
   pub beginning: StackIndex,
   pub calling_function: Option<Rc<CompositeFunction>>,
-  pub instructions: RuntimeInstructionBlock,
+  pub instructions: Block,
   pub instruction_index: usize,
   pub return_stack_index: StackIndex,
 }
 impl StackFrame {
-  pub fn root(instructions: RuntimeInstructionBlock) -> Self {
+  pub fn root(instructions: Block) -> Self {
     Self {
       beginning: 0,
       calling_function: None,
