@@ -288,7 +288,7 @@ impl From<u8> for ArgumentSpecifier {
 }
 
 #[derive(Clone, Debug)]
-pub enum GeneralizedValue<R, M> {
+pub enum GeneralizedValue<R, O, M> {
   Nil,
   Bool(bool),
   Char(char),
@@ -299,14 +299,14 @@ pub enum GeneralizedValue<R, M> {
   Hashmap(Rc<HashMap<Value, Value>>),
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnId),
-  CompositeFn(Rc<GeneralizedCompositeFunction<R, M>>),
+  CompositeFn(Rc<GeneralizedCompositeFunction<R, O, M>>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(PidginError),
 }
 
-pub type Value = GeneralizedValue<RegisterIndex, ()>;
+pub type Value = GeneralizedValue<RegisterIndex, RegisterIndex, ()>;
 use GeneralizedValue::*;
 
 impl PartialEq for Value {

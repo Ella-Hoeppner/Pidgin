@@ -7,16 +7,16 @@ use crate::{
 
 const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 
-pub type Block = GeneralizedBlock<RegisterIndex, ()>;
+pub type Block = GeneralizedBlock<RegisterIndex, RegisterIndex, ()>;
 
 #[derive(Clone, Debug)]
-pub struct GeneralizedCompositeFunction<R, M> {
+pub struct GeneralizedCompositeFunction<R, O, M> {
   pub args: ArgumentSpecifier,
-  pub instructions: GeneralizedBlock<R, M>,
+  pub instructions: GeneralizedBlock<R, O, M>,
 }
 
-impl<R, M> GeneralizedCompositeFunction<R, M> {
-  pub fn new<A: Into<ArgumentSpecifier>, I: Into<GeneralizedBlock<R, M>>>(
+impl<R, O, M> GeneralizedCompositeFunction<R, O, M> {
+  pub fn new<A: Into<ArgumentSpecifier>, I: Into<GeneralizedBlock<R, O, M>>>(
     args: A,
     instructions: I,
   ) -> Self {
@@ -27,7 +27,8 @@ impl<R, M> GeneralizedCompositeFunction<R, M> {
   }
 }
 
-pub type CompositeFunction = GeneralizedCompositeFunction<RegisterIndex, ()>;
+pub type CompositeFunction =
+  GeneralizedCompositeFunction<RegisterIndex, RegisterIndex, ()>;
 
 #[derive(Debug)]
 pub struct CoroutineState {

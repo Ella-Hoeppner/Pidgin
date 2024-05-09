@@ -23,7 +23,7 @@ pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
 pub type CoreFnIndex = u8;
-pub type RuntimeInstruction = Instruction<RegisterIndex>;
+pub type RuntimeInstruction = Instruction<RegisterIndex, RegisterIndex>;
 
 pub struct EvaluationState {
   current_frame: StackFrame,
@@ -401,10 +401,10 @@ impl EvaluationState {
             let return_value = self.steal_register(value);
             self.return_value(return_value);
           }
-          CopyArgument(f) => {
+          CopyArgument(_) => {
             panic!("CopyArgument instruction called, this should never happen")
           }
-          StealArgument(f) => {
+          StealArgument(_) => {
             panic!("CopyArgument instruction called, this should never happen")
           }
           Call(target, f, arg_count) => {
@@ -647,8 +647,8 @@ impl EvaluationState {
           Partial(result, f, arg) => todo!(),
           Compose(result, f_1, f_2) => todo!(),
           FindSome(result, f, collection) => todo!(),
-          ReduceWithoutInitialValue(result, f, collection) => todo!(),
-          ReduceWithInitialValue(initial_value_and_result, f, collection) => {
+          ReduceWithoutInitialValue(collection_and_result, f) => todo!(),
+          ReduceWithInitialValue(collection_and_result, f, initial_value) => {
             todo!()
           }
           Memoize(result, f) => todo!(),
@@ -876,32 +876,32 @@ impl EvaluationState {
           ),
           Count(result, collection) => todo!(),
           Flatten(result, collection) => todo!(),
-          Remove(collection, key) => todo!(),
-          Filter(collection, f) => todo!(),
-          Map(collection, f) => todo!(),
-          DoubleMap(collection, other_collection, f) => {
+          Remove(collection_and_result, key) => todo!(),
+          Filter(collection_and_result, f) => todo!(),
+          Map(collection_and_result, f) => todo!(),
+          DoubleMap(collection_and_result, other_collection, f) => {
             // Special case of multi-collection map with just 2 collections.
             // This special case comes up often enough (e.g. mapping with
             // `(range)` as a second argument for indexing) that the
             // optimization from having this instruction seems worthwhile
             todo!()
           }
-          MultiCollectionMap(raw_vec_of_collections, f) => todo!(),
-          Set(collection, value, key) => todo!(),
-          SetIn(collection, value, path) => todo!(),
+          MultiCollectionMap(list_of_collections_and_result, f) => todo!(),
+          Set(collection_and_result, value, key) => todo!(),
+          SetIn(collection_and_result, value, path) => todo!(),
           Get(result, collection, key) => todo!(),
           GetIn(result, collection, path) => todo!(),
-          Update(collection, f, key) => todo!(),
-          UpdateIn(collection, f, path) => todo!(),
+          Update(collection_and_result, f, key) => todo!(),
+          UpdateIn(collection_and_result, f, path) => todo!(),
           MinKey(result, collection, f) => todo!(),
           MaxKey(result, collection, f) => todo!(),
-          Push(collection, value) => {
+          Push(collection_and_result, value) => {
             let value = self.get_register(value).clone();
-            let collection_value = self.steal_register(collection);
+            let collection_value = self.steal_register(collection_and_result);
             match collection_value {
               List(mut list_value) => {
                 self.set_register(
-                  collection,
+                  collection_and_result,
                   if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
                     owned_list_value.push(value);
                     list_value
@@ -914,12 +914,12 @@ impl EvaluationState {
               }
               Hashmap(hashmap) => todo!(),
               Hashset(set) => todo!(),
-              Nil => self.set_register(collection, Nil),
+              Nil => self.set_register(collection_and_result, Nil),
               _ => break 'instruction Err(PidginError::ArgumentNotList),
             };
           }
-          Sort(collection) => todo!(),
-          SortBy(collection, f) => todo!(),
+          Sort(collection_and_result) => todo!(),
+          SortBy(collection_and_result, f) => todo!(),
           EmptyList(result) => {
             self.set_register(result, Vec::new());
           }
@@ -931,12 +931,12 @@ impl EvaluationState {
               _ => break 'instruction Err(PidginError::ArgumentNotList),
             },
           ),
-          Rest(list) => {
-            let list_value = self.steal_register(list);
+          Rest(list_and_result) => {
+            let list_value = self.steal_register(list_and_result);
             match list_value {
               List(mut list_value) => {
                 self.set_register(
-                  list,
+                  list_and_result,
                   if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
                     owned_list_value.remove(0);
                     list_value
@@ -947,16 +947,16 @@ impl EvaluationState {
                   },
                 );
               }
-              Nil => self.set_register(list, Nil),
+              Nil => self.set_register(list_and_result, Nil),
               _ => break 'instruction Err(PidginError::ArgumentNotList),
             };
           }
-          ButLast(list) => {
-            let list_value = self.steal_register(list);
+          ButLast(list_and_result) => {
+            let list_value = self.steal_register(list_and_result);
             match list_value {
               List(mut list_value) => {
                 self.set_register(
-                  list,
+                  list_and_result,
                   if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
                     owned_list_value.pop();
                     list_value
@@ -967,7 +967,7 @@ impl EvaluationState {
                   },
                 );
               }
-              Nil => self.set_register(list, Nil),
+              Nil => self.set_register(list_and_result, Nil),
               _ => break 'instruction Err(PidginError::ArgumentNotList),
             };
           }
@@ -977,26 +977,26 @@ impl EvaluationState {
             todo!()
           }
           NthFromLast(result, list, n) => todo!(),
-          Cons(list, value) => todo!(),
-          Concat(list, other_list) => todo!(),
-          Take(list, n) => todo!(),
-          Drop(list, n) => todo!(),
-          Reverse(list) => todo!(),
-          Distinct(list) => todo!(),
-          Sub(list, start_index, end_index) => todo!(),
+          Cons(list_and_result, value) => todo!(),
+          Concat(list_and_result, other_list) => todo!(),
+          Take(list_and_result, n) => todo!(),
+          Drop(list_and_result, n) => todo!(),
+          Reverse(list_and_result) => todo!(),
+          Distinct(list_and_result) => todo!(),
+          Sub(list_and_result, start_index, end_index) => todo!(),
           Partition(result, list, size) => todo!(),
           SteppedPartition(step_and_return, list, size) => todo!(),
-          Pad(value_and_result, list, size) => todo!(),
+          Pad(list_and_result, value, size) => todo!(),
           EmptyMap(result) => todo!(),
           Keys(result, map) => todo!(),
           Values(result, map) => todo!(),
           Zip(result, key_list, value_list) => todo!(),
-          Invert(result, map) => todo!(),
+          Invert(map_and_result) => todo!(),
           Merge(result, map_1, map_2) => todo!(),
-          MergeWith(merge_f_and_result, map_1, map_2) => todo!(),
-          MapKeys(result, f, map) => todo!(),
-          MapValues(result, f, map) => todo!(),
-          SelectKeys(map, keys) => todo!(),
+          MergeWith(map_1_and_result, f, map_2) => todo!(),
+          MapKeys(map_and_result, f) => todo!(),
+          MapValues(map_and_result, f) => todo!(),
+          SelectKeys(map_and_result, keys) => todo!(),
           EmptySet(result) => todo!(),
           Union(result, set_1, set_2) => todo!(),
           Intersection(result, set_1, set_2) => todo!(),

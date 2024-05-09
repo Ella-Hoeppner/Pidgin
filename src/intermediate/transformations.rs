@@ -5,7 +5,7 @@ use crate::{
   Value,
 };
 
-use super::ir_instructions::VirtualRegister;
+use super::ir_instructions::{SSABlock, VirtualRegister};
 
 pub type RegisterLifetimes = HashMap<VirtualRegister, (usize, usize)>;
 
@@ -13,8 +13,8 @@ use GeneralizedValue::*;
 use Instruction::*;
 
 pub fn calculate_lifetimes<M>(
-  block: GeneralizedBlock<VirtualRegister, M>,
-) -> GeneralizedBlock<VirtualRegister, RegisterLifetimes> {
+  block: SSABlock<M>,
+) -> SSABlock<RegisterLifetimes> {
   block.replace_metadata(&|instructions, constants, _| {
     let mut lifetimes = RegisterLifetimes::new();
     for (i, instruction) in block.instructions.iter().enumerate() {
