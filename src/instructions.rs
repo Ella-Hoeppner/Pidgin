@@ -1,6 +1,10 @@
 use std::{ops::Index, rc::Rc};
 
-use crate::{ConstIndex, GeneralizedValue, RegisterIndex, SymbolIndex, Value};
+use crate::{
+  ConstIndex, GeneralizedCompositeFunction, GeneralizedValue, RegisterIndex,
+  SymbolIndex, Value,
+};
+use GeneralizedValue::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Instruction<R> {
@@ -243,33 +247,47 @@ impl<R, M> GeneralizedBlock<R, M> {
   pub fn len(&self) -> usize {
     self.instructions.len()
   }
-  /*pub fn replace_metadata<NewM>(
-    self,
-    metadata: NewM,
-  ) -> GeneralizedBlock<R, NewM> {
-    GeneralizedBlock {
-      instructions: self.instructions,
-      constants: self.constants,
-      metadata,
-    }
-  }*/
 }
-/*impl<R> From<Vec<Instruction<R>>> for GeneralizedBlock<R, ()> {
-  fn from(instructions: Vec<Instruction<R>>) -> Self {
-    Self {
-      instructions: instructions.into(),
-      metadata: (),
-    }
-  }
-}*/
-/*impl<R, OldM> GeneralizedBlock<R, OldM> {
-  pub fn with_metadata<NewM>(
-    self,
-    metadata: NewM,
+impl<R: Clone, M> GeneralizedBlock<R, M> {
+  pub fn replace_metadata<
+    NewM: Clone,
+    F: Fn(&[Instruction<R>], &[GeneralizedValue<R, M>], &M) -> NewM,
+  >(
+    &self,
+    replacer: &F,
   ) -> GeneralizedBlock<R, NewM> {
+    let new_metadata =
+      replacer(&*self.instructions, &*self.constants, &self.metadata);
+    let translated_constants: Vec<GeneralizedValue<R, NewM>> = self
+      .constants
+      .into_iter()
+      .map(|value| match value {
+        CompositeFn(f_ref) => {
+          CompositeFn(Rc::new(GeneralizedCompositeFunction::new(
+            (*f_ref).args.clone(),
+            (*f_ref).instructions.replace_metadata(replacer),
+          )))
+        }
+        Nil => Nil,
+        Bool(a) => Bool(*a),
+        Char(a) => Char(*a),
+        Number(a) => Number(*a),
+        Symbol(a) => Symbol(*a),
+        Str(a) => Str(a.clone()),
+        List(a) => List(a.clone()),
+        Hashmap(a) => Hashmap(a.clone()),
+        Hashset(a) => Hashset(a.clone()),
+        CoreFn(a) => CoreFn(a.clone()),
+        ExternalFn(a) => ExternalFn(a.clone()),
+        ExternalObject(a) => ExternalObject(a.clone()),
+        Coroutine(a) => Coroutine(a.clone()),
+        Error(a) => Error(a.clone()),
+      })
+      .collect();
     GeneralizedBlock {
-      instructions: self.instructions,
-      metadata,
+      instructions: self.instructions.clone(),
+      constants: (&*translated_constants).into(),
+      metadata: new_metadata,
     }
   }
-}*/
+}

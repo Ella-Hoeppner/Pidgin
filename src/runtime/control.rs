@@ -15,10 +15,8 @@ pub struct GeneralizedCompositeFunction<R, M> {
   pub instructions: GeneralizedBlock<R, M>,
 }
 
-pub type CompositeFunction = GeneralizedCompositeFunction<RegisterIndex, ()>;
-
-impl CompositeFunction {
-  pub fn new<A: Into<ArgumentSpecifier>, I: Into<Block>>(
+impl<R, M> GeneralizedCompositeFunction<R, M> {
+  pub fn new<A: Into<ArgumentSpecifier>, I: Into<GeneralizedBlock<R, M>>>(
     args: A,
     instructions: I,
   ) -> Self {
@@ -28,6 +26,8 @@ impl CompositeFunction {
     }
   }
 }
+
+pub type CompositeFunction = GeneralizedCompositeFunction<RegisterIndex, ()>;
 
 #[derive(Debug)]
 pub struct CoroutineState {
