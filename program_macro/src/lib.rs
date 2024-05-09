@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::{TokenStream, TokenTree};
 
 #[proc_macro]
-pub fn program(input: TokenStream) -> TokenStream {
+pub fn block(input: TokenStream) -> TokenStream {
   use TokenTree::*;
   let mut instructions: Vec<String> = vec![];
   let mut constants: Vec<String> = vec![];
@@ -109,14 +109,15 @@ pub fn program(input: TokenStream) -> TokenStream {
       }
     })
   }
-  let x = format!(
-    "Program::new(vec![{}], vec![{}])",
+  format!(
+    "Block::new(vec![{}], vec![{}])",
     instructions.join(", "),
     constants
       .into_iter()
       .map(|x| format!("({}).into()", x))
       .collect::<Vec<_>>()
       .join(", ")
-  );
-  x.parse().unwrap()
+  )
+  .parse()
+  .unwrap()
 }

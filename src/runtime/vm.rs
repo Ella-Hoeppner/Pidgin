@@ -1248,24 +1248,25 @@ impl EvaluationState {
   }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
   use std::rc::Rc;
 
   use super::EvaluationState;
   use crate::runtime::control::CompositeFunction;
   use crate::runtime::error::PidginError;
+  use crate::{composite_fn, Block};
   use crate::{
     runtime::core_functions::CoreFnId,
     ConstIndex, ExternalFunction,
     GeneralizedValue::{self, *},
     Instruction::*,
     Num::{self, *},
-    Program, RegisterIndex,
+    RegisterIndex,
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
-  use program_macro::program;
+  use program_macro::block;
 
   macro_rules! assert_register {
     ($state:expr, $register:expr, $value:expr) => {
@@ -1292,10 +1293,12 @@ mod tests {
   fn constants() {
     let constants = vec![1.into(), false.into(), "Hello!".into(), Nil];
     run_and_check_registers!(
-      Program::new(
-        vec![Const(0, 0), Const(1, 1), Const(2, 2), Const(3, 3)],
-        constants.clone()
-      ),
+      block![
+        Const(0, constants[0].clone()),
+        Const(1, constants[1].clone()),
+        Const(2, constants[2].clone()),
+        Const(3, constants[3].clone()),
+      ],
       (0, constants[0]),
       (1, constants[1]),
       (2, constants[2]),
@@ -1303,9 +1306,9 @@ mod tests {
     );
   }
 
-  /*simple_register_test!(
+  simple_register_test!(
     arithmetic,
-    program![
+    block![
       Const(0, 1),
       Const(1, 2.),
       Add(2, 0, 1),
@@ -1323,38 +1326,32 @@ mod tests {
   );
 
   fn environment_lookup() {
-    let mut state = EvaluationState::new(program![Lookup(0, 0)]);
+    let mut state = EvaluationState::new(block![Lookup(0, 0)]);
     state.bind_symbol(0, "test!");
     state.evaluate().unwrap();
     assert_register!(state, 0, "test!");
   }
 
-  simple_register_test!(clear, program![Const(0, 100), Clear(0)], (0, Nil));
+  simple_register_test!(clear, block![Const(0, 100), Clear(0)], (0, Nil));
 
-  simple_register_test!(copy, program![Const(0, 100), Copy(1, 0)], (1, 100));*/
+  simple_register_test!(copy, block![Const(0, 100), Copy(1, 0)], (1, 100));
 
   #[test]
   fn call_constant_function() {
     run_and_check_registers!(
-      Program::new(
-        vec![Const(0, 0), Call(1, 0, 0)],
-        vec![
-          GeneralizedValue::composite_fn(0, vec![Const(0, 1), Return(0)]),
-          5.into()
-        ],
-      ),
+      block![
+        Const(0, composite_fn(0, block![Const(0, 5), Return(0)])),
+        Call(1, 0, 0)
+      ],
       (1, 5)
     );
   }
 
-  /*simple_register_test!(
+  simple_register_test!(
     call_square_function,
-    program![
+    block![
       Const(0, 10),
-      Const(
-        1,
-        GeneralizedValue::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
-      ),
+      Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
       Call(2, 1, 1),
       CopyArgument(0)
     ],
@@ -1364,55 +1361,53 @@ mod tests {
 
   simple_register_test!(
     call_square_function_twice,
-    program![
+    block![
       Const(0, 10),
-      Const(
-        1,
-        GeneralizedValue::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)])
-      ),
+      Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
       Call(0, 1, 1),
       StealArgument(0),
       Call(0, 1, 1),
       StealArgument(0),
     ],
     (0, 10000),
-  );*/
+  );
 
   #[test]
   fn call_double_square_nested_function() {
     run_and_check_registers!(
-      Program::new(
-        vec![Const(0, 0), Const(1, 2), Call(0, 1, 1), StealArgument(0)],
-        vec![
-          10.into(),
-          GeneralizedValue::composite_fn(1, vec![Multiply(0, 0, 0), Return(0)]),
-          GeneralizedValue::composite_fn(
+      block![
+        Const(0, 10),
+        Const(
+          1,
+          composite_fn(
             1,
-            vec![
-              Const(1, 1),
+            block![
+              Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
               Call(0, 1, 1),
               StealArgument(0),
               Call(0, 1, 1),
               StealArgument(0),
               Return(0)
             ]
-          ),
-        ],
-      ),
+          )
+        ),
+        Call(0, 1, 1),
+        StealArgument(0)
+      ],
       (0, 10000)
     );
   }
 
-  /*simple_register_test!(
+  simple_register_test!(
     call_square_product_function,
-    program![
+    block![
       Const(0, 2),
       Const(1, 3),
       Const(
         2,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           2,
-          vec![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
+          block![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
         )
       ),
       Call(0, 2, 2),
@@ -1424,15 +1419,15 @@ mod tests {
 
   simple_register_test!(
     call_triple_product_function,
-    program![
+    block![
       Const(0, 2),
       Const(1, 3),
       Const(2, 4),
       Const(
         4,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           3,
-          vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
+          block![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )
       ),
       Call(3, 4, 3),
@@ -1445,13 +1440,13 @@ mod tests {
 
   simple_register_test!(
     apply_fn,
-    program![
+    block![
       Const(0, vec![2.into(), 3.into(), 4.into()]),
       Const(
         1,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           3,
-          vec![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
+          block![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )
       ),
       Apply(0, 1)
@@ -1461,7 +1456,7 @@ mod tests {
 
   simple_register_test!(
     apply_core_fn_add,
-    program![
+    block![
       Const(0, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
       Const(1, CoreFn(CoreFnId::Add)),
       Apply(0, 1),
@@ -1471,20 +1466,20 @@ mod tests {
 
   simple_register_test!(
     list_first_last,
-    program![Const(0, vec![1.into(), 2.into()]), First(1, 0), Last(2, 0)],
+    block![Const(0, vec![1.into(), 2.into()]), First(1, 0), Last(2, 0)],
     (1, 1),
     (2, 2)
   );
 
   simple_register_test!(
     list_push,
-    program![EmptyList(0), Const(1, "test"), Push(0, 1)],
+    block![EmptyList(0), Const(1, "test"), Push(0, 1)],
     (0, List(Rc::new(vec!["test".into()])))
   );
 
   simple_register_test!(
     list_rest,
-    program![
+    block![
       Const(0, List(Rc::new(vec![1.into(), 2.into()]))),
       Rest(0),
       Const(1, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
@@ -1496,7 +1491,7 @@ mod tests {
 
   simple_register_test!(
     list_butlast,
-    program![
+    block![
       Const(0, List(Rc::new(vec![1.into(), 2.into()]))),
       ButLast(0),
       Const(1, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
@@ -1508,19 +1503,19 @@ mod tests {
 
   simple_register_test!(
     if_true,
-    program![Const(0, true), Const(1, -5), If(0), Const(1, 5), EndIf],
+    block![Const(0, true), Const(1, -5), If(0), Const(1, 5), EndIf],
     (1, 5)
   );
 
   simple_register_test!(
     if_false,
-    program![Const(0, false), Const(1, -5), If(0), Const(1, 5), EndIf],
+    block![Const(0, false), Const(1, -5), If(0), Const(1, 5), EndIf],
     (1, -5)
   );
 
   simple_register_test!(
     if_else_true,
-    program![
+    block![
       Const(0, true),
       If(0),
       Const(1, -5),
@@ -1533,7 +1528,7 @@ mod tests {
 
   simple_register_test!(
     if_else_false,
-    program![
+    block![
       Const(0, false),
       If(0),
       Const(1, -5),
@@ -1546,7 +1541,7 @@ mod tests {
 
   simple_register_test!(
     if_else_if_else_true_true,
-    program![
+    block![
       Const(0, true),
       Const(1, true),
       If(0),
@@ -1562,7 +1557,7 @@ mod tests {
 
   simple_register_test!(
     if_else_if_else_true_false,
-    program![
+    block![
       Const(0, true),
       Const(1, false),
       If(0),
@@ -1578,7 +1573,7 @@ mod tests {
 
   simple_register_test!(
     if_else_if_else_false_true,
-    program![
+    block![
       Const(0, false),
       Const(1, true),
       If(0),
@@ -1594,7 +1589,7 @@ mod tests {
 
   simple_register_test!(
     if_else_if_else_false_false,
-    program![
+    block![
       Const(0, false),
       Const(1, false),
       If(0),
@@ -1610,13 +1605,13 @@ mod tests {
 
   simple_register_test!(
     recursion,
-    program![
+    block![
       Const(0, 10),
       Const(
         1,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           1,
-          vec![
+          block![
             IsPos(1, 0),
             If(1),
             Dec(0, 0),
@@ -1636,13 +1631,13 @@ mod tests {
 
   simple_register_test!(
     call_self_recursion,
-    program![
+    block![
       Const(0, 10),
       Const(
         1,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           1,
-          vec![
+          block![
             IsPos(1, 0),
             If(1),
             Dec(0, 0),
@@ -1661,13 +1656,13 @@ mod tests {
 
   simple_register_test!(
     tail_recursion,
-    program![
+    block![
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           1,
-          vec![
+          block![
             IsPos(1, 0),
             If(1),
             Dec(2, 0),
@@ -1687,13 +1682,13 @@ mod tests {
 
   simple_register_test!(
     call_self_tail_recursion,
-    program![
+    block![
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           1,
-          vec![
+          block![
             IsPos(1, 0),
             If(1),
             Dec(2, 0),
@@ -1712,13 +1707,13 @@ mod tests {
 
   simple_register_test!(
     jump_loop,
-    program![
+    block![
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           1,
-          vec![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
+          block![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
         )
       ),
       Call(0, 1, 1),
@@ -1729,7 +1724,7 @@ mod tests {
 
   simple_register_test!(
     call_external_function,
-    program![
+    block![
       Const(0, 1),
       Const(1, 2),
       Const(
@@ -1747,7 +1742,7 @@ mod tests {
 
   simple_register_test!(
     external_object,
-    program![
+    block![
       Const(0, GeneralizedValue::external((1i64, 2i64))),
       Const(1, GeneralizedValue::external((3i64, 4i64))),
       Const(
@@ -1767,43 +1762,41 @@ mod tests {
 
   simple_register_test!(
     create_coroutine,
-    program![
-      Const(
-        0,
-        GeneralizedValue::composite_fn(0, vec![EmptyList(0), Return(0)])
-      ),
+    block![
+      Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
       CreateCoroutine(0),
     ],
   );
 
   simple_register_test!(
     run_coroutine,
-    program![
-      Const(
-        0,
-        GeneralizedValue::composite_fn(0, vec![EmptyList(0), Return(0)])
-      ),
+    block![
+      Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
       CreateCoroutine(0),
       Call(1, 0, 0)
     ],
     (1, List(Rc::new(vec![])))
-  );*/
+  );
 
   #[test]
   fn run_nested_coroutinees() {
     run_and_check_registers!(
-      Program::new(
-        vec![Const(0, 1), CreateCoroutine(0), Call(1, 0, 0)],
-        vec![
-          GeneralizedValue::composite_fn(0, vec![EmptyList(0), Return(0)])
-            .into(),
-          GeneralizedValue::composite_fn(
+      block![
+        Const(
+          0,
+          composite_fn(
             0,
-            vec![Const(0, 0), CreateCoroutine(0), Call(1, 0, 0), Return(1)],
+            block![
+              Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
+              CreateCoroutine(0),
+              Call(1, 0, 0),
+              Return(1)
+            ]
           )
-          .into(),
-        ],
-      ),
+        ),
+        CreateCoroutine(0),
+        Call(1, 0, 0)
+      ],
       (1, List(Rc::new(vec![])))
     );
   }
@@ -1811,22 +1804,23 @@ mod tests {
   #[test]
   fn coroutine_yield() {
     run_and_check_registers!(
-      Program::new(
-        vec![
-          Const(0, 0),
-          CreateCoroutine(0),
-          Call(1, 0, 0),
-          Call(2, 0, 0)
-        ],
-        vec![
-          GeneralizedValue::composite_fn(
+      block![
+        Const(
+          0,
+          composite_fn(
             0,
-            vec![Const(0, 1), Yield(0), Const(1, 2), Return(1)],
-          ),
-          "yielded value!".into(),
-          "returned value!".into(),
-        ],
-      ),
+            block![
+              Const(0, "yielded value!"),
+              Yield(0),
+              Const(1, "returned value!"),
+              Return(1)
+            ]
+          )
+        ),
+        CreateCoroutine(0),
+        Call(1, 0, 0),
+        Call(2, 0, 0)
+      ],
       (1, "yielded value!"),
       (2, "returned value!")
     );
@@ -1835,47 +1829,55 @@ mod tests {
   #[test]
   fn nested_coroutine_yield() {
     run_and_check_registers!(
-      Program::new(
-        vec![
-          Const(0, 6),
-          CreateCoroutine(0),
-          Call(1, 0, 0),
-          Call(2, 0, 0),
-          Call(3, 0, 0),
-          Call(4, 0, 0)
-        ],
-        vec![
-          "first yield!".into(),
-          "first return!".into(),
-          "second yield!".into(),
-          "second return!".into(),
-          GeneralizedValue::composite_fn(
+      block![
+        Const(
+          0,
+          composite_fn(
             0,
-            vec![Const(0, 0), Yield(0), Const(1, 1), Yield(1)],
-          ),
-          GeneralizedValue::composite_fn(
-            0,
-            vec![Const(0, 2), Yield(0), Const(1, 3), Yield(1)],
-          ),
-          GeneralizedValue::composite_fn(
-            0,
-            vec![
-              Const(0, 4),
+            block![
+              Const(
+                0,
+                composite_fn(
+                  0,
+                  block![
+                    Const(0, "first yield!"),
+                    Yield(0),
+                    Const(1, "first return!"),
+                    Yield(1)
+                  ]
+                )
+              ),
               CreateCoroutine(0),
               Call(1, 0, 0),
               Yield(1),
               Call(2, 0, 0),
               Yield(2),
-              Const(0, 5),
+              Const(
+                0,
+                composite_fn(
+                  0,
+                  block![
+                    Const(0, "second yield!"),
+                    Yield(0),
+                    Const(1, "second return!"),
+                    Yield(1)
+                  ]
+                )
+              ),
               CreateCoroutine(0),
               Call(1, 0, 0),
               Yield(1),
               Call(2, 0, 0),
               Yield(2)
-            ],
-          ),
-        ],
-      ),
+            ]
+          )
+        ),
+        CreateCoroutine(0),
+        Call(1, 0, 0),
+        Call(2, 0, 0),
+        Call(3, 0, 0),
+        Call(4, 0, 0)
+      ],
       (1, "first yield!"),
       (2, "first return!"),
       (3, "second yield!"),
@@ -1883,13 +1885,10 @@ mod tests {
     );
   }
 
-  /*simple_register_test!(
+  simple_register_test!(
     run_coroutine_with_args,
-    program![
-      Const(
-        0,
-        GeneralizedValue::composite_fn(2, vec![Add(2, 0, 1), Return(2)])
-      ),
+    block![
+      Const(0, composite_fn(2, block![Add(2, 0, 1), Return(2)])),
       CreateCoroutine(0),
       Const(1, 1),
       Const(2, 2),
@@ -1902,12 +1901,12 @@ mod tests {
 
   simple_register_test!(
     resume_coroutine_with_args,
-    program![
+    block![
       Const(
         0,
-        GeneralizedValue::composite_fn(
+        composite_fn(
           2,
-          vec![
+          block![
             Add(0, 0, 1),
             YieldAndAccept(0, 2, 1),
             Add(0, 0, 1),
@@ -1934,11 +1933,8 @@ mod tests {
 
   simple_register_test!(
     coroutine_returns_error,
-    program![
-      Const(
-        0,
-        GeneralizedValue::composite_fn(2, vec![Add(0, 0, 1), Return(0)])
-      ),
+    block![
+      Const(0, composite_fn(2, block![Add(0, 0, 1), Return(0)])),
       CreateCoroutine(0),
       Const(1, "this isn't a number!!!"),
       Const(2, "this isn't either! so adding these will throw an error"),
@@ -1956,11 +1952,8 @@ mod tests {
 
   simple_register_test!(
     coroutine_is_alive,
-    program![
-      Const(
-        0,
-        GeneralizedValue::composite_fn(1, vec![Yield(0), Return(0)])
-      ),
+    block![
+      Const(0, composite_fn(1, block![Yield(0), Return(0)])),
       CreateCoroutine(0),
       Const(1, 1),
       Call(1, 0, 1),
@@ -1971,5 +1964,5 @@ mod tests {
     ],
     (2, true),
     (3, false),
-  );*/
-}*/
+  );
+}

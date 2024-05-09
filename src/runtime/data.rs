@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{
-  control::{CompositeFunction, PausedCoroutine, Block},
+  control::{Block, CompositeFunction, PausedCoroutine},
   core_functions::CoreFnId,
   error::{PidginError, PidginResult},
   vm::SymbolIndex,
@@ -452,10 +452,7 @@ impl Value {
       None
     }
   }
-  pub fn composite_fn<
-    A: Into<ArgumentSpecifier>,
-    I: Into<Block>,
-  >(
+  pub fn composite_fn<A: Into<ArgumentSpecifier>, I: Into<Block>>(
     args: A,
     instructions: I,
   ) -> Value {
@@ -464,6 +461,13 @@ impl Value {
   pub fn fn_coroutine(f: CompositeFunction) -> Value {
     Coroutine(Rc::new(Some(RefCell::new(Some(f.into())))))
   }
+}
+
+pub fn composite_fn<A: Into<ArgumentSpecifier>, I: Into<Block>>(
+  args: A,
+  instructions: I,
+) -> Value {
+  CompositeFn(Rc::new(CompositeFunction::new(args, instructions)))
 }
 
 impl Display for Value {
