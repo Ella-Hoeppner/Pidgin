@@ -1,7 +1,12 @@
-use std::{collections::HashMap, error::Error, fmt::Display, rc::Rc};
+use std::{
+  collections::{HashMap, HashSet},
+  error::Error,
+  fmt::Display,
+  rc::Rc,
+};
 
 use crate::{
-  ConstIndex, GeneralizedBlock, GeneralizedValue, Instruction, RegisterIndex,
+  Block, ConstIndex, GeneralizedBlock, GeneralizedValue, Instruction, Register,
   Value,
 };
 
@@ -308,7 +313,7 @@ impl RegisterLifetime {
 pub fn track_register_lifetimes<M>(
   block: SSABlock<M>,
 ) -> Result<SSABlock<HashMap<SSARegister, RegisterLifetime>>, LifetimeError> {
-  block.replace_metadata(&|instructions, constants, _| {
+  block.replace_metadata(&|instructions, _, _| {
     let mut lifetimes: HashMap<SSARegister, RegisterLifetime> = HashMap::new();
     for (timestamp, instruction) in block.instructions.iter().enumerate() {
       let timestamp = timestamp as InstructionTimestamp;
@@ -381,5 +386,60 @@ pub fn track_register_lifetimes<M>(
       }
     }
     Ok(lifetimes)
+  })
+}
+
+#[derive(Clone, Debug)]
+enum RegisterAllocationError {}
+impl Display for RegisterAllocationError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match *self {}
+  }
+}
+impl Error for RegisterAllocationError {}
+
+pub fn allocate_registers(
+  block: SSABlock<HashMap<SSARegister, RegisterLifetime>>,
+) -> Result<Block, RegisterAllocationError> {
+  block.translate_instructions(&|instructions, lifetimes| {
+    Ok((
+      {
+        let mut ssa_to_real_registers: HashMap<SSARegister, Register> =
+          HashMap::new();
+        let mut taken_registers: HashSet<Register> = HashSet::new();
+        let mut translated_instructions = vec![];
+        for (timestamp, instruction) in instructions.iter().enumerate() {
+          let timestamp = timestamp as u16;
+          for (virtual_register, register_lifetime) in lifetimes.iter() {
+            if register_lifetime.creation == timestamp {
+              if let Some(replaced_virtual_register) =
+                register_lifetime.replacing
+              {
+                let register = ssa_to_real_registers
+                  .remove(&replaced_virtual_register)
+                  .expect("Didn't find register when trying to replace");
+                ssa_to_real_registers.insert(*virtual_register, register);
+              } else {
+                let min_unused_register = (0..Register::MAX)
+                  .filter(|i| !taken_registers.contains(i))
+                  .next()
+                  .expect("Failed to find unused register");
+                let replaced_register = ssa_to_real_registers
+                  .insert(*virtual_register, min_unused_register);
+                #[cfg(debug_assertions)]
+                assert!(replaced_register.is_none());
+                let register_already_taken =
+                  taken_registers.insert(min_unused_register);
+                #[cfg(debug_assertions)]
+                assert!(!register_already_taken);
+              }
+            }
+          }
+          todo!() // push a value into translated_instructions
+        }
+        translated_instructions
+      },
+      (),
+    ))
   })
 }

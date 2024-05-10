@@ -18,12 +18,12 @@ use take_mut::take;
 use super::control::{Block, CompositeFunction, PausedCoroutine};
 use super::error::{PidginError, PidginResult};
 
-pub type RegisterIndex = u8;
+pub type Register = u8;
 pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
 pub type CoreFnIndex = u8;
-pub type RuntimeInstruction = Instruction<RegisterIndex, RegisterIndex>;
+pub type RuntimeInstruction = Instruction<Register, Register>;
 
 pub struct EvaluationState {
   current_frame: StackFrame,
@@ -208,34 +208,34 @@ impl EvaluationState {
   fn get_stack_mut(&mut self, index: StackIndex) -> &mut Value {
     self.get_stack_mut_usize(index as usize)
   }
-  fn register_stack_index(&self, register: RegisterIndex) -> StackIndex {
+  fn register_stack_index(&self, register: Register) -> StackIndex {
     self.current_frame.beginning + register as StackIndex
   }
   fn set_register<T: Into<Value>>(
     &mut self,
-    register: RegisterIndex,
+    register: Register,
     value: T,
   ) {
     self.set_stack(self.register_stack_index(register), value.into());
   }
   fn swap_register<T: Into<Value>>(
     &mut self,
-    register: RegisterIndex,
+    register: Register,
     value: T,
   ) -> Value {
     self.swap_stack(self.register_stack_index(register), value.into())
   }
-  fn steal_register(&mut self, register: RegisterIndex) -> Value {
+  fn steal_register(&mut self, register: Register) -> Value {
     self.steal_stack(self.register_stack_index(register))
   }
-  fn get_register(&self, register: RegisterIndex) -> &Value {
+  fn get_register(&self, register: Register) -> &Value {
     #[cfg(debug_assertions)]
     if register as usize >= self.current_coroutine.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
     }
     self.get_stack(self.register_stack_index(register))
   }
-  fn get_register_mut(&mut self, register: RegisterIndex) -> &mut Value {
+  fn get_register_mut(&mut self, register: Register) -> &mut Value {
     #[cfg(debug_assertions)]
     if register as usize >= self.current_coroutine.consumption as usize {
       panic!("trying to access register that hasn't been set yet")
@@ -358,7 +358,7 @@ impl EvaluationState {
   }
   fn set_args(&mut self, args: Vec<Value>, arg_offset: u8) {
     for (i, arg_value) in args.into_iter().enumerate() {
-      self.set_register(i as RegisterIndex + arg_offset, arg_value);
+      self.set_register(i as Register + arg_offset, arg_value);
     }
   }
   pub fn evaluate(&mut self) -> PidginResult<Option<Value>> {
@@ -541,7 +541,7 @@ impl EvaluationState {
               }
               let x = Rc::unwrap_or_clone(arg_list);
               for (i, arg_value) in x.into_iter().enumerate() {
-                self.set_register(i as RegisterIndex, arg_value);
+                self.set_register(i as Register, arg_value);
               }
             } else {
               panic!("Apply called with non-List value");
@@ -1262,7 +1262,7 @@ mod tests {
     GeneralizedValue::{self, *},
     Instruction::*,
     Num::{self, *},
-    RegisterIndex,
+    Register,
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;

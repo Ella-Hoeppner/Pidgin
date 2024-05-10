@@ -14,7 +14,7 @@ use ordered_float::OrderedFloat;
 
 use crate::{
   ConstIndex, CoreFnIndex, CoroutineState, GeneralizedCompositeFunction,
-  Instruction, RegisterIndex, StackFrame,
+  Instruction, Register, StackFrame,
 };
 
 use super::{
@@ -306,7 +306,7 @@ pub enum GeneralizedValue<R, O, M> {
   Error(PidginError),
 }
 
-pub type Value = GeneralizedValue<RegisterIndex, RegisterIndex, ()>;
+pub type Value = GeneralizedValue<Register, Register, ()>;
 use GeneralizedValue::*;
 
 impl PartialEq for Value {
