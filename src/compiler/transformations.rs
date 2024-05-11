@@ -217,28 +217,31 @@ pub fn allocate_registers(
         let mut translated_instructions = vec![];
         for (timestamp, instruction) in instructions.iter().enumerate() {
           let timestamp = timestamp as u16;
-          let finished_ssa_registers: Vec<SSARegister> =
-            ssa_to_runtime_registers
-              .iter()
-              .filter_map(|(ssa_register, _)| {
-                lifetimes
-                  .get(&ssa_register)
-                  .unwrap()
-                  .last_usage
-                  .map(|last_usage| {
-                    if last_usage == timestamp {
-                      Some(*ssa_register)
-                    } else {
-                      None
-                    }
-                  })
-                  .flatten()
-              })
-              .collect();
           let mut finished_ssa_to_runtime_registers: HashMap<
             SSARegister,
             Register,
           > = HashMap::new();
+          let finished_ssa_registers: Vec<SSARegister> =
+            ssa_to_runtime_registers
+              .iter()
+              .filter_map(|(ssa_register, _)| {
+                let lifetime = lifetimes.get(&ssa_register).unwrap();
+                if lifetime.replaced_by.is_none() {
+                  lifetime
+                    .last_usage
+                    .map(|last_usage| {
+                      if last_usage == timestamp {
+                        Some(*ssa_register)
+                      } else {
+                        None
+                      }
+                    })
+                    .flatten()
+                } else {
+                  None
+                }
+              })
+              .collect();
           for finished_ssa_register in finished_ssa_registers {
             let finised_runtime_register = ssa_to_runtime_registers
               .remove(&finished_ssa_register)
@@ -250,22 +253,21 @@ pub fn allocate_registers(
             #[cfg(debug_assertions)]
             assert!(removed)
           }
-          for (virtual_register, register_lifetime) in lifetimes.iter() {
+          for (ssa_registser, register_lifetime) in lifetimes.iter() {
             if register_lifetime.creation == timestamp {
-              if let Some(replaced_virtual_register) =
-                register_lifetime.replacing
+              if let Some(replaced_ssa_registser) = register_lifetime.replacing
               {
                 let register = ssa_to_runtime_registers
-                  .remove(&replaced_virtual_register)
+                  .remove(&replaced_ssa_registser)
                   .expect("Didn't find register when trying to replace");
-                ssa_to_runtime_registers.insert(*virtual_register, register);
+                ssa_to_runtime_registers.insert(*ssa_registser, register);
               } else {
                 let min_unused_register = (0..Register::MAX)
                   .filter(|i| !taken_runtime_registers.contains(i))
                   .next()
                   .expect("Failed to find unused register");
                 let replaced_register = ssa_to_runtime_registers
-                  .insert(*virtual_register, min_unused_register);
+                  .insert(*ssa_registser, min_unused_register);
                 #[cfg(debug_assertions)]
                 assert!(replaced_register.is_none());
                 let register_free =
@@ -280,17 +282,28 @@ pub fn allocate_registers(
               *ssa_to_runtime_registers
                 .get(&input)
                 .or_else(|| finished_ssa_to_runtime_registers.get(&input))
-                .expect("no current real register found for ssa register")
+                .unwrap_or_else(|| {
+                  panic!(
+                    "no current real register found for input ssa register \
+                     {input} at timestamp {timestamp}"
+                  )
+                })
             },
             |output: usize| -> u8 {
-              *ssa_to_runtime_registers
-                .get(&output)
-                .expect("no current real register found for ssa register")
+              *ssa_to_runtime_registers.get(&output).unwrap_or_else(|| {
+                panic!(
+                  "no current real register found for output ssa register \
+                   {output} at timestamp {timestamp}"
+                )
+              })
             },
-            |(input, _output): (usize, usize)| -> u8 {
-              *ssa_to_runtime_registers
-                .get(&input)
-                .expect("no current real register found for ssa register")
+            |(input, output): (usize, usize)| -> u8 {
+              *ssa_to_runtime_registers.get(&output).unwrap_or_else(|| {
+                panic!(
+                  "no current real register found for replacable ssa register \
+                   ({input} => {output}) at timestamp {timestamp}\n"
+                )
+              })
             },
           ));
         }

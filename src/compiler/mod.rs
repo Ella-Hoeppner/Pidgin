@@ -208,4 +208,46 @@ mod tests {
     ],
     720
   );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list,
+    "(list)",
+    ssa_block![EmptyList(0), Return(0)],
+    block![EmptyList(0), Return(0)],
+    vec![]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    single_element_list,
+    "(list 1)",
+    ssa_block![Const(0, 1), EmptyList(1), Push((1, 2), 0), Return(2)],
+    block![Const(0, 1), EmptyList(1), Push(1, 0), Return(1)],
+    vec![1.into()]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    multi_element_list,
+    "(list 1 2 3)",
+    ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      EmptyList(3),
+      Push((3, 4), 0),
+      Push((4, 5), 1),
+      Push((5, 6), 2),
+      Return(6)
+    ],
+    block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      EmptyList(3),
+      Push(3, 0),
+      Push(3, 1),
+      Push(3, 2),
+      Return(3)
+    ],
+    vec![1.into(), 2.into(), 3.into()]
+  );
 }

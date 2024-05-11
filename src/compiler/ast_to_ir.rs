@@ -69,23 +69,22 @@ pub fn build_ir_from_fn_application(
 ) -> Result<SSARegister, ASTError> {
   match f {
     Inner(_) => todo!(),
-    Leaf(fn_name) => match args.len() {
-      2 => {
-        if let Some(instruction) = match fn_name.as_str() {
+    Leaf(fn_name) => {
+      if let Some(instruction) = if args.len() == 2 {
+        match fn_name.as_str() {
           "+" => Some(Add(*taken_virtual_registers, args[0], args[1])),
           "-" => Some(Subtract(*taken_virtual_registers, args[0], args[1])),
           "*" => Some(Multiply(*taken_virtual_registers, args[0], args[1])),
           "/" => Some(Divide(*taken_virtual_registers, args[0], args[1])),
           other => None,
-        } {
-          instructions.push(instruction);
-          *taken_virtual_registers += 1;
-          Ok(*taken_virtual_registers - 1)
-        } else {
-          Err(ASTError::UnrecognizedFunction(fn_name, 2))
         }
-      }
-      arity => {
+      } else {
+        None
+      } {
+        instructions.push(instruction);
+        *taken_virtual_registers += 1;
+        Ok(*taken_virtual_registers - 1)
+      } else {
         let maybe_instruction_builder: Option<
           fn(SSARegister, SSARegister, SSARegister) -> SSAInstruction,
         > = match fn_name.as_str() {
@@ -110,10 +109,24 @@ pub fn build_ir_from_fn_application(
           }
           Ok(*taken_virtual_registers - 1)
         } else {
-          Err(ASTError::UnrecognizedFunction(fn_name, arity))
+          match fn_name.as_str() {
+            "list" => {
+              instructions.push(EmptyList(*taken_virtual_registers));
+              *taken_virtual_registers += 1;
+              for i in 0..args.len() {
+                instructions.push(Push(
+                  (*taken_virtual_registers - 1, *taken_virtual_registers),
+                  args[i],
+                ));
+                *taken_virtual_registers += 1;
+              }
+              Ok(*taken_virtual_registers - 1)
+            }
+            _ => Err(ASTError::UnrecognizedFunction(fn_name, args.len())),
+          }
         }
       }
-    },
+    }
   }
 }
 
