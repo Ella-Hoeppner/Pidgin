@@ -42,11 +42,11 @@ mod tests {
       #[test]
       fn $test_name() {
         let ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
-        assert_eq!(ir, $expected_ir);
+        assert_eq!(ir, $expected_ir, "incorrect intermediate representation");
         let bytecode = ir_to_bytecode(ir).unwrap();
-        assert_eq!(bytecode, $expected_bytecode);
+        assert_eq!(bytecode, $expected_bytecode, "incorrect bytecode");
         let output = EvaluationState::new(bytecode).evaluate().unwrap();
-        assert_eq!(output, Some($expected_output.into()));
+        assert_eq!(output, Some($expected_output.into()), "incorrect output");
       }
     };
   }
@@ -57,5 +57,155 @@ mod tests {
     ssa_block![Const(0, 1), Const(1, 2), Add(2, 0, 1), Return(2)],
     block![Const(0, 1), Const(1, 2), Add(0, 0, 1), Return(0)],
     3
+  );
+
+  test_ir_and_bytecode_and_output!(
+    subtraction,
+    "(- 1 2)",
+    ssa_block![Const(0, 1), Const(1, 2), Subtract(2, 0, 1), Return(2)],
+    block![Const(0, 1), Const(1, 2), Subtract(0, 0, 1), Return(0)],
+    -1
+  );
+
+  test_ir_and_bytecode_and_output!(
+    binary_multiplication,
+    "(* 1 2)",
+    ssa_block![Const(0, 1), Const(1, 2), Multiply(2, 0, 1), Return(2)],
+    block![Const(0, 1), Const(1, 2), Multiply(0, 0, 1), Return(0)],
+    2
+  );
+
+  test_ir_and_bytecode_and_output!(
+    division,
+    "(/ 1 2)",
+    ssa_block![Const(0, 1), Const(1, 2), Divide(2, 0, 1), Return(2)],
+    block![Const(0, 1), Const(1, 2), Divide(0, 0, 1), Return(0)],
+    0.5
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nested_binary_addition,
+    "(+ (+ 1 2) 3)",
+    ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Add(2, 0, 1),
+      Const(3, 3),
+      Add(4, 2, 3),
+      Return(4)
+    ],
+    block![
+      Const(0, 1),
+      Const(1, 2),
+      Add(0, 0, 1),
+      Const(1, 3),
+      Add(0, 0, 1),
+      Return(0)
+    ],
+    6
+  );
+
+  test_ir_and_bytecode_and_output!(
+    trinary_addition,
+    "(+ 1 2 3)",
+    ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Add(3, 0, 1),
+      Add(4, 3, 2),
+      Return(4)
+    ],
+    block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Add(0, 0, 1),
+      Add(0, 0, 2),
+      Return(0)
+    ],
+    6
+  );
+
+  test_ir_and_bytecode_and_output!(
+    arity_5_addition,
+    "(+ 1 2 3 4 5)",
+    ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, 4),
+      Const(4, 5),
+      Add(5, 0, 1),
+      Add(6, 5, 2),
+      Add(7, 6, 3),
+      Add(8, 7, 4),
+      Return(8)
+    ],
+    block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, 4),
+      Const(4, 5),
+      Add(0, 0, 1),
+      Add(0, 0, 2),
+      Add(0, 0, 3),
+      Add(0, 0, 4),
+      Return(0)
+    ],
+    15
+  );
+
+  test_ir_and_bytecode_and_output!(
+    trinary_multiplication,
+    "(* 2 3 4)",
+    ssa_block![
+      Const(0, 2),
+      Const(1, 3),
+      Const(2, 4),
+      Multiply(3, 0, 1),
+      Multiply(4, 3, 2),
+      Return(4)
+    ],
+    block![
+      Const(0, 2),
+      Const(1, 3),
+      Const(2, 4),
+      Multiply(0, 0, 1),
+      Multiply(0, 0, 2),
+      Return(0)
+    ],
+    24
+  );
+
+  test_ir_and_bytecode_and_output!(
+    arity_5_multiplication,
+    "(* 2 3 4 5 6)",
+    ssa_block![
+      Const(0, 2),
+      Const(1, 3),
+      Const(2, 4),
+      Const(3, 5),
+      Const(4, 6),
+      Multiply(5, 0, 1),
+      Multiply(6, 5, 2),
+      Multiply(7, 6, 3),
+      Multiply(8, 7, 4),
+      Return(8)
+    ],
+    block![
+      Const(0, 2),
+      Const(1, 3),
+      Const(2, 4),
+      Const(3, 5),
+      Const(4, 6),
+      Multiply(0, 0, 1),
+      Multiply(0, 0, 2),
+      Multiply(0, 0, 3),
+      Multiply(0, 0, 4),
+      Return(0)
+    ],
+    720
   );
 }

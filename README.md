@@ -46,11 +46,11 @@ Runtime stuff:
 
 Compiler stuff
 * do real error handling for `allocate_registers` rather than `expect`ing everywhere
-* support compiling more arithmetic operations
-  * support `+` and `*` with multiple arguments
 * support compiling list functions
   * `list`, `first`, `rest`, `last`, `butlast`, `push`
 * support compiling functions
+* support closures
+  * will have to lambda lift them, this will probably be kinda tricky
 * get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
   * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
 * IR-level optimizations:

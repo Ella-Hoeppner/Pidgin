@@ -37,9 +37,9 @@ mod tests {
     };
   }
   macro_rules! simple_register_test {
-    ($name:ident, $program:expr, $(($register:expr, $value:expr)),*$(,)?) => {
+    ($test_name:ident, $program:expr, $(($register:expr, $value:expr)),*$(,)?) => {
       #[test]
-      fn $name() {
+      fn $test_name() {
         run_and_check_registers!($program, $(($register, $value)),*);
       }
     }

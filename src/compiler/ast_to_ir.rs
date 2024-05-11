@@ -11,7 +11,7 @@ use Instruction::*;
 pub enum ASTError {
   CantParseToken(String),
   EmptyList,
-  UnrecognizedFunction(String),
+  UnrecognizedFunction(String, usize),
   InvalidArity(String, usize, AritySpecifier),
 }
 impl Display for ASTError {
@@ -24,8 +24,12 @@ impl Display for ASTError {
       EmptyList => {
         write!(f, "found empty when parsing AST")
       }
-      UnrecognizedFunction(fn_name) => {
-        write!(f, "unrecognized function name \"{}\"", fn_name)
+      UnrecognizedFunction(fn_name, arity) => {
+        write!(
+          f,
+          "unrecognized function name \"{}\" for arity {}",
+          fn_name, arity
+        )
       }
       InvalidArity(fn_name, given, expected) => {
         write!(
@@ -65,17 +69,50 @@ pub fn build_ir_from_fn_application(
 ) -> Result<SSARegister, ASTError> {
   match f {
     Inner(_) => todo!(),
-    Leaf(fn_name) => match fn_name.as_str() {
-      "+" => {
-        if args.len() == 2 {
-          instructions.push(Add(*taken_virtual_registers, args[0], args[1]));
+    Leaf(fn_name) => match args.len() {
+      2 => {
+        if let Some(instruction) = match fn_name.as_str() {
+          "+" => Some(Add(*taken_virtual_registers, args[0], args[1])),
+          "-" => Some(Subtract(*taken_virtual_registers, args[0], args[1])),
+          "*" => Some(Multiply(*taken_virtual_registers, args[0], args[1])),
+          "/" => Some(Divide(*taken_virtual_registers, args[0], args[1])),
+          other => None,
+        } {
+          instructions.push(instruction);
           *taken_virtual_registers += 1;
           Ok(*taken_virtual_registers - 1)
         } else {
-          Err(ASTError::InvalidArity(fn_name, args.len(), 2.into()))
+          Err(ASTError::UnrecognizedFunction(fn_name, 2))
         }
       }
-      _ => Err(ASTError::UnrecognizedFunction(fn_name)),
+      arity => {
+        let maybe_instruction_builder: Option<
+          fn(SSARegister, SSARegister, SSARegister) -> SSAInstruction,
+        > = match fn_name.as_str() {
+          "+" => Some(|o, a, b| Add(o, a, b)),
+          "*" => Some(|o, a, b| Multiply(o, a, b)),
+          _ => None,
+        };
+        if let Some(instruction_builder) = maybe_instruction_builder {
+          instructions.push(instruction_builder(
+            *taken_virtual_registers,
+            args[0],
+            args[1],
+          ));
+          *taken_virtual_registers += 1;
+          for i in 2..args.len() {
+            instructions.push(instruction_builder(
+              *taken_virtual_registers,
+              *taken_virtual_registers - 1,
+              args[i],
+            ));
+            *taken_virtual_registers += 1;
+          }
+          Ok(*taken_virtual_registers - 1)
+        } else {
+          Err(ASTError::UnrecognizedFunction(fn_name, arity))
+        }
+      }
     },
   }
 }
