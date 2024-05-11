@@ -92,16 +92,14 @@ mod tests {
 
   simple_register_test!(copy, block![Const(0, 100), Copy(1, 0)], (1, 100));
 
-  #[test]
-  fn call_constant_function() {
-    run_and_check_registers!(
-      block![
-        Const(0, composite_fn(0, block![Const(0, 5), Return(0)])),
-        Call(1, 0, 0)
-      ],
-      (1, 5)
-    );
-  }
+  simple_register_test!(
+    call_constant_function,
+    block![
+      Const(0, composite_fn(0, block![Const(0, 5), Return(0)])),
+      Call(1, 0, 0)
+    ],
+    (1, 5)
+  );
 
   simple_register_test!(
     call_square_function,
@@ -128,31 +126,29 @@ mod tests {
     (0, 10000),
   );
 
-  #[test]
-  fn call_double_square_nested_function() {
-    run_and_check_registers!(
-      block![
-        Const(0, 10),
-        Const(
+  simple_register_test!(
+    call_double_square_nested_function,
+    block![
+      Const(0, 10),
+      Const(
+        1,
+        composite_fn(
           1,
-          composite_fn(
-            1,
-            block![
-              Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
-              Call(0, 1, 1),
-              StealArgument(0),
-              Call(0, 1, 1),
-              StealArgument(0),
-              Return(0)
-            ]
-          )
-        ),
-        Call(0, 1, 1),
-        StealArgument(0)
-      ],
-      (0, 10000)
-    );
-  }
+          block![
+            Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
+            Call(0, 1, 1),
+            StealArgument(0),
+            Call(0, 1, 1),
+            StealArgument(0),
+            Return(0)
+          ]
+        )
+      ),
+      Call(0, 1, 1),
+      StealArgument(0)
+    ],
+    (0, 10000)
+  );
 
   simple_register_test!(
     call_square_product_function,
@@ -534,112 +530,106 @@ mod tests {
     (1, List(Rc::new(vec![])))
   );
 
-  #[test]
-  fn run_nested_coroutinees() {
-    run_and_check_registers!(
-      block![
-        Const(
+  simple_register_test!(
+    run_nested_coroutinees,
+    block![
+      Const(
+        0,
+        composite_fn(
           0,
-          composite_fn(
-            0,
-            block![
-              Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
-              CreateCoroutine(0),
-              Call(1, 0, 0),
-              Return(1)
-            ]
-          )
-        ),
-        CreateCoroutine(0),
-        Call(1, 0, 0)
-      ],
-      (1, List(Rc::new(vec![])))
-    );
-  }
+          block![
+            Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
+            CreateCoroutine(0),
+            Call(1, 0, 0),
+            Return(1)
+          ]
+        )
+      ),
+      CreateCoroutine(0),
+      Call(1, 0, 0)
+    ],
+    (1, List(Rc::new(vec![])))
+  );
 
-  #[test]
-  fn coroutine_yield() {
-    run_and_check_registers!(
-      block![
-        Const(
+  simple_register_test!(
+    coroutine_yield,
+    block![
+      Const(
+        0,
+        composite_fn(
           0,
-          composite_fn(
-            0,
-            block![
-              Const(0, "yielded value!"),
-              Yield(0),
-              Const(1, "returned value!"),
-              Return(1)
-            ]
-          )
-        ),
-        CreateCoroutine(0),
-        Call(1, 0, 0),
-        Call(2, 0, 0)
-      ],
-      (1, "yielded value!"),
-      (2, "returned value!")
-    );
-  }
+          block![
+            Const(0, "yielded value!"),
+            Yield(0),
+            Const(1, "returned value!"),
+            Return(1)
+          ]
+        )
+      ),
+      CreateCoroutine(0),
+      Call(1, 0, 0),
+      Call(2, 0, 0)
+    ],
+    (1, "yielded value!"),
+    (2, "returned value!")
+  );
 
-  #[test]
-  fn nested_coroutine_yield() {
-    run_and_check_registers!(
-      block![
-        Const(
+  simple_register_test!(
+    nested_coroutine_yield,
+    block![
+      Const(
+        0,
+        composite_fn(
           0,
-          composite_fn(
-            0,
-            block![
-              Const(
+          block![
+            Const(
+              0,
+              composite_fn(
                 0,
-                composite_fn(
-                  0,
-                  block![
-                    Const(0, "first yield!"),
-                    Yield(0),
-                    Const(1, "first return!"),
-                    Yield(1)
-                  ]
-                )
-              ),
-              CreateCoroutine(0),
-              Call(1, 0, 0),
-              Yield(1),
-              Call(2, 0, 0),
-              Yield(2),
-              Const(
+                block![
+                  Const(0, "first yield!"),
+                  Yield(0),
+                  Const(1, "first return!"),
+                  Yield(1)
+                ]
+              )
+            ),
+            CreateCoroutine(0),
+            Call(1, 0, 0),
+            Yield(1),
+            Call(2, 0, 0),
+            Yield(2),
+            Const(
+              0,
+              composite_fn(
                 0,
-                composite_fn(
-                  0,
-                  block![
-                    Const(0, "second yield!"),
-                    Yield(0),
-                    Const(1, "second return!"),
-                    Yield(1)
-                  ]
-                )
-              ),
-              CreateCoroutine(0),
-              Call(1, 0, 0),
-              Yield(1),
-              Call(2, 0, 0),
-              Yield(2)
-            ]
-          )
-        ),
-        CreateCoroutine(0),
-        Call(1, 0, 0),
-        Call(2, 0, 0),
-        Call(3, 0, 0),
-        Call(4, 0, 0)
-      ],
-      (1, "first yield!"),
-      (2, "first return!"),
-      (3, "second yield!"),
-      (4, "second return!")
-    );
-  }
+                block![
+                  Const(0, "second yield!"),
+                  Yield(0),
+                  Const(1, "second return!"),
+                  Yield(1)
+                ]
+              )
+            ),
+            CreateCoroutine(0),
+            Call(1, 0, 0),
+            Yield(1),
+            Call(2, 0, 0),
+            Yield(2)
+          ]
+        )
+      ),
+      CreateCoroutine(0),
+      Call(1, 0, 0),
+      Call(2, 0, 0),
+      Call(3, 0, 0),
+      Call(4, 0, 0)
+    ],
+    (1, "first yield!"),
+    (2, "first return!"),
+    (3, "second yield!"),
+    (4, "second return!")
+  );
 
   simple_register_test!(
     run_coroutine_with_args,

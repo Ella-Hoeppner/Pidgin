@@ -31,19 +31,31 @@ mod tests {
     Num::{self, *},
   };
 
-  #[test]
-  fn binary_addition() {
-    let ir = expression_ast_to_ir(parse_sexp("(+ 1 2)")).unwrap();
-    assert_eq!(
-      ir,
-      ssa_block![Const(0, 1), Const(1, 2), Add(2, 0, 1), Return(2)]
-    );
-    let bytecode = ir_to_bytecode(ir).unwrap();
-    assert_eq!(
-      bytecode,
-      block![Const(0, 1), Const(1, 2), Add(0, 0, 1), Return(0)]
-    );
-    let output = EvaluationState::new(bytecode).evaluate().unwrap();
-    assert_eq!(output, Some(3.into()));
+  macro_rules! test_ir_and_bytecode_and_output {
+    (
+      $test_name:ident,
+      $sexp:expr,
+      $expected_ir:expr,
+      $expected_bytecode:expr,
+      $expected_output:expr
+    ) => {
+      #[test]
+      fn $test_name() {
+        let ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
+        assert_eq!(ir, $expected_ir);
+        let bytecode = ir_to_bytecode(ir).unwrap();
+        assert_eq!(bytecode, $expected_bytecode);
+        let output = EvaluationState::new(bytecode).evaluate().unwrap();
+        assert_eq!(output, Some($expected_output.into()));
+      }
+    };
   }
+
+  test_ir_and_bytecode_and_output!(
+    binary_addition,
+    "(+ 1 2)",
+    ssa_block![Const(0, 1), Const(1, 2), Add(2, 0, 1), Return(2)],
+    block![Const(0, 1), Const(1, 2), Add(0, 0, 1), Return(0)],
+    3
+  );
 }
