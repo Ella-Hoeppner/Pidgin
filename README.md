@@ -2,12 +2,22 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Runtime stuff:
-* support duplicating coroutines
-  * This will allow for the equivalent of multi-shot delimited continuations, which seems worth supporting, even if the uses are fairly niche. Don't want to have to duplicate continuations by default tho because that would suck for performance, so having an explicit duplication operation seems like a good compromise (apparently Ocaml used to do this!)
+* consider supporting a way to reconstruct the lexical environment at runtime
+  * such that it would be possible to, e.g., have an `environment` function that returns the current lexical environment as a hashmap
+  * the main purpose would be for interactive error handling
+    * it would be nice if errors could be handled by basically giving you a repl wherever they occurred, but that isn't possible with the current evaluation model, since there isn't really an environment and instead values just exist in the registers
+  * this seems like it would be pretty difficult
+    * especially given that I plan to clear variables as soon as they are last used, instead of at the end of scope...
+      * I guess this could be disabled in a debug mode?
+        * I guess if I go this route I could also just not do register allocation in debug mode and make everything use the environment? That would make implementing this very easy, but would require pretty different compilation models
+          * I guess if there's just one pass that that replaces all `Bind` instructions with register allocations then they wouldn't need to be all that different?
+            * but functions are already implemented without using `Bind`...
 * handle external errors
 * destructuring
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
+* replace coroutines with effect handlers
+  * get rid of cells I guess? You can just emulate them with a "state" handler
 * support laziness
   * add a new type for a lazy sequence (not sure what to call it... `Lazy`? `Iterator`?)
     * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values

@@ -6,10 +6,10 @@ use minivec::{mini_vec, MiniVec};
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
 use crate::{
-  string_utils::indent_lines, GeneralizedValue, Instruction, Num, Value,
+  string_utils::indent_lines, GenericValue, Instruction, Num, Value,
 };
 use crate::{AritySpecifier, CoroutineState, StackFrame};
-use GeneralizedValue::*;
+use GenericValue::*;
 use Instruction::*;
 use Num::*;
 
@@ -23,7 +23,7 @@ pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
 pub type CoreFnIndex = u8;
-pub type RuntimeInstruction = Instruction<Register, Register>;
+pub type RuntimeInstruction = Instruction<Register, Register, Register>;
 
 pub struct EvaluationState {
   current_frame: StackFrame,
@@ -211,11 +211,7 @@ impl EvaluationState {
   fn register_stack_index(&self, register: Register) -> StackIndex {
     self.current_frame.beginning + register as StackIndex
   }
-  fn set_register<T: Into<Value>>(
-    &mut self,
-    register: Register,
-    value: T,
-  ) {
+  fn set_register<T: Into<Value>>(&mut self, register: Register, value: T) {
     self.set_stack(self.register_stack_index(register), value.into());
   }
   fn swap_register<T: Into<Value>>(
@@ -608,6 +604,22 @@ impl EvaluationState {
             self
               .set_register(register, self.environment[&symbol_index].clone());
           }
+          CallingFunction(result) => {
+            // This instruction puts a reference to the current calling function
+            // in a register, which is necessary to support recursion.
+            if let Some(calling_function) =
+              self.current_frame.calling_function.clone()
+            {
+              self.set_register(result, CompositeFn(calling_function));
+            } else {
+              panic!(
+              "CallingFunction invoked with no calling_function in StackFrame"
+            )
+            }
+          }
+          Jump(instruction_index) => {
+            self.current_frame.instruction_index = instruction_index as usize;
+          }
           If(condition) => {
             if !self.get_register(condition).as_bool() {
               // skip to next Else, ElseIf, or EndIf instruction
@@ -624,22 +636,6 @@ impl EvaluationState {
                 }
               }
             }
-          }
-          CallingFunction(result) => {
-            // This instruction puts a reference to the current calling function
-            // in a register, which is necessary to support recursion.
-            if let Some(calling_function) =
-              self.current_frame.calling_function.clone()
-            {
-              self.set_register(result, CompositeFn(calling_function));
-            } else {
-              panic!(
-              "CallingFunction invoked with no calling_function in StackFrame"
-            )
-            }
-          }
-          Jump(instruction_index) => {
-            self.current_frame.instruction_index = instruction_index as usize;
           }
           Else => self.skip_to_endif(),
           ElseIf(condition) => self.skip_to_endif(),
@@ -1259,7 +1255,7 @@ mod tests {
   use crate::{
     runtime::core_functions::CoreFnId,
     ConstIndex, ExternalFunction,
-    GeneralizedValue::{self, *},
+    GenericValue::{self, *},
     Instruction::*,
     Num::{self, *},
     Register,
@@ -1743,8 +1739,8 @@ mod tests {
   simple_register_test!(
     external_object,
     block![
-      Const(0, GeneralizedValue::external((1i64, 2i64))),
-      Const(1, GeneralizedValue::external((3i64, 4i64))),
+      Const(0, GenericValue::external((1i64, 2i64))),
+      Const(1, GenericValue::external((3i64, 4i64))),
       Const(
         2,
         ExternalFunction::unnamed(|mut args| {

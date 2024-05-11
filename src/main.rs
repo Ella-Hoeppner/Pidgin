@@ -1,6 +1,7 @@
 #![allow(warnings)]
 #![feature(stmt_expr_attributes)]
 
+mod blocks;
 mod compiler;
 mod instructions;
 mod runtime;
@@ -15,7 +16,7 @@ use crate::compiler::parse::parse_sexp;
 use crate::instructions::*;
 use crate::runtime::{control::*, data::*, vm::*};
 use std::rc::Rc;
-use GeneralizedValue::*;
+use GenericValue::*;
 use Instruction::*;
 use Num::*;
 

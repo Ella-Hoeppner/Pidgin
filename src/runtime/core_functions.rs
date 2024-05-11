@@ -1,9 +1,9 @@
 use std::fmt::Display;
 
 use crate::runtime::error::PidginResult;
-use crate::{GeneralizedValue, Num, Value};
+use crate::{GenericValue, Num, Value};
 use enum_map::{enum_map, Enum, EnumMap};
-use GeneralizedValue::*;
+use GenericValue::*;
 use Num::*;
 
 #[derive(Debug, Enum, PartialEq, Eq, Hash, Clone)]

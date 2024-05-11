@@ -13,7 +13,7 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  ConstIndex, CoreFnIndex, CoroutineState, GeneralizedCompositeFunction,
+  ConstIndex, CoreFnIndex, CoroutineState, GenericCompositeFunction,
   Instruction, Register, StackFrame,
 };
 
@@ -288,7 +288,7 @@ impl From<u8> for AritySpecifier {
 }
 
 #[derive(Clone, Debug)]
-pub enum GeneralizedValue<R, O, M> {
+pub enum GenericValue<I, O, R, M> {
   Nil,
   Bool(bool),
   Char(char),
@@ -299,15 +299,15 @@ pub enum GeneralizedValue<R, O, M> {
   Hashmap(Rc<HashMap<Value, Value>>),
   Hashset(Rc<HashSet<Value>>),
   CoreFn(CoreFnId),
-  CompositeFn(Rc<GeneralizedCompositeFunction<R, O, M>>),
+  CompositeFn(Rc<GenericCompositeFunction<I, O, R, M>>),
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<dyn Any>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(PidginError),
 }
 
-pub type Value = GeneralizedValue<Register, Register, ()>;
-use GeneralizedValue::*;
+pub type Value = GenericValue<Register, Register, Register, ()>;
+use GenericValue::*;
 
 impl PartialEq for Value {
   fn eq(&self, other: &Self) -> bool {

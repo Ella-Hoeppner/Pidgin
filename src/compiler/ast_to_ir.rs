@@ -1,10 +1,10 @@
 use std::{error::Error, fmt::Display};
 
-use crate::{AritySpecifier, GeneralizedValue, Instruction, Num};
+use crate::{AritySpecifier, GenericValue, Instruction, Num};
 
 use super::{SSABlock, SSAInstruction, SSARegister, SSAValue};
 
-use GeneralizedValue::*;
+use GenericValue::*;
 use Instruction::*;
 
 #[derive(Debug, Clone)]

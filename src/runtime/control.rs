@@ -1,24 +1,24 @@
 use std::rc::Rc;
 
 use crate::{
-  AritySpecifier, ConstIndex, GeneralizedBlock, Instruction, Register,
+  blocks::GenericBlock, AritySpecifier, ConstIndex, Instruction, Register,
   RuntimeInstruction, StackIndex, Value,
 };
 
 const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 
-pub type Block = GeneralizedBlock<Register, Register, ()>;
+pub type Block = GenericBlock<Register, Register, Register, ()>;
 
 #[derive(Clone, Debug)]
-pub struct GeneralizedCompositeFunction<R, O, M> {
+pub struct GenericCompositeFunction<I, O, R, M> {
   pub args: AritySpecifier,
-  pub instructions: GeneralizedBlock<R, O, M>,
+  pub instructions: GenericBlock<I, O, R, M>,
 }
 
-impl<R, O, M> GeneralizedCompositeFunction<R, O, M> {
-  pub fn new<A: Into<AritySpecifier>, I: Into<GeneralizedBlock<R, O, M>>>(
+impl<I, O, R, M> GenericCompositeFunction<I, O, R, M> {
+  pub fn new<A: Into<AritySpecifier>, T: Into<GenericBlock<I, O, R, M>>>(
     args: A,
-    instructions: I,
+    instructions: T,
   ) -> Self {
     Self {
       args: args.into(),
@@ -28,7 +28,7 @@ impl<R, O, M> GeneralizedCompositeFunction<R, O, M> {
 }
 
 pub type CompositeFunction =
-  GeneralizedCompositeFunction<Register, Register, ()>;
+  GenericCompositeFunction<Register, Register, Register, ()>;
 
 #[derive(Debug)]
 pub struct CoroutineState {

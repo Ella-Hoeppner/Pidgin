@@ -6,208 +6,15 @@ use std::{
 };
 
 use crate::{
-  Block, ConstIndex, GeneralizedBlock, GeneralizedValue, Instruction, Register,
+  blocks::GenericBlock, Block, ConstIndex, GenericValue, Instruction, Register,
   Value,
 };
 
 use super::{SSABlock, SSAInstruction, SSARegister};
 
 type InstructionTimestamp = u16;
-use GeneralizedValue::*;
+use GenericValue::*;
 use Instruction::*;
-
-struct RegisterUsages {
-  inputs: Vec<SSARegister>,
-  outputs: Vec<SSARegister>,
-  replacement: Option<(SSARegister, SSARegister)>,
-}
-impl SSAInstruction {
-  pub fn register_lifetime_constraints(&self) -> RegisterUsages {
-    let (inputs, outputs, replacement) = match self {
-      DebugPrint(_) => (vec![], vec![], None),
-      Clear(to) => (vec![], vec![to], None),
-      Copy(to, from) => (vec![from], vec![to], None),
-      Const(to, _) => (vec![], vec![to], None),
-      Print(from) => (vec![from], vec![], None),
-      Return(from) => (vec![from], vec![], None),
-      CopyArgument(from) => (vec![from], vec![], None),
-      StealArgument(from) => (vec![from], vec![], None),
-      Call(to, from, _) => (vec![from], vec![to], None),
-      Apply((from, to), f) => (vec![f], vec![], Some((from, to))),
-      CallSelf(to, _) => (vec![], vec![to], None),
-      ApplySelf((from, to)) => (vec![], vec![], Some((from, to))),
-      CallAndReturn(f, _) => (vec![f], vec![], None),
-      ApplyAndReturn(from, _) => (vec![from], vec![], None),
-      CallSelfAndReturn(_) => (vec![], vec![], None),
-      ApplySelfAndReturn(from) => (vec![from], vec![], None),
-      CallingFunction(to) => (vec![], vec![to], None),
-      Jump(_) => (vec![], vec![], None),
-      Lookup(to, _) => (vec![], vec![to], None),
-      If(from) => (vec![from], vec![], None),
-      Else => (vec![], vec![], None),
-      ElseIf(from) => (vec![from], vec![], None),
-      EndIf => (vec![], vec![], None),
-      Partial(to, f, arg) => (vec![f, arg], vec![to], None),
-      Compose(to, f_1, f_2) => (vec![f_1, f_2], vec![to], None),
-      FindSome(to, f, collection) => (vec![f, collection], vec![to], None),
-      ReduceWithoutInitialValue((from, to), f) => {
-        (vec![f], vec![], Some((from, to)))
-      }
-      ReduceWithInitialValue((from, to), f, initial) => {
-        (vec![f, initial], vec![], Some((from, to)))
-      }
-      Memoize(to, from) => (vec![from], vec![to], None),
-      Constantly(to, from) => (vec![from], vec![to], None),
-      NumericalEqual(to, a, b) => (vec![a, b], vec![to], None),
-      IsZero(to, from) => (vec![from], vec![to], None),
-      IsNan(to, from) => (vec![from], vec![to], None),
-      IsInf(to, from) => (vec![from], vec![to], None),
-      IsEven(to, from) => (vec![from], vec![to], None),
-      IsOdd(to, from) => (vec![from], vec![to], None),
-      IsPos(to, from) => (vec![from], vec![to], None),
-      IsNeg(to, from) => (vec![from], vec![to], None),
-      Inc(to, from) => (vec![from], vec![to], None),
-      Dec(to, from) => (vec![from], vec![to], None),
-      Negate(to, from) => (vec![from], vec![to], None),
-      Abs(to, from) => (vec![from], vec![to], None),
-      Floor(to, from) => (vec![from], vec![to], None),
-      Ceil(to, from) => (vec![from], vec![to], None),
-      Sqrt(to, from) => (vec![from], vec![to], None),
-      Exp(to, from) => (vec![from], vec![to], None),
-      Exp2(to, from) => (vec![from], vec![to], None),
-      Ln(to, from) => (vec![from], vec![to], None),
-      Log2(to, from) => (vec![from], vec![to], None),
-      Add(to, a, b) => (vec![a, b], vec![to], None),
-      Subtract(to, a, b) => (vec![a, b], vec![to], None),
-      Multiply(to, a, b) => (vec![a, b], vec![to], None),
-      Divide(to, a, b) => (vec![a, b], vec![to], None),
-      Pow(to, a, b) => (vec![a, b], vec![to], None),
-      Mod(to, a, b) => (vec![a, b], vec![to], None),
-      Quot(to, a, b) => (vec![a, b], vec![to], None),
-      Min(to, a, b) => (vec![a, b], vec![to], None),
-      Max(to, a, b) => (vec![a, b], vec![to], None),
-      GreaterThan(to, a, b) => (vec![a, b], vec![to], None),
-      GreaterThanOrEqual(to, a, b) => (vec![a, b], vec![to], None),
-      LessThan(to, a, b) => (vec![a, b], vec![to], None),
-      LessThanOrEqual(to, a, b) => (vec![a, b], vec![to], None),
-      Rand(to) => (vec![], vec![to], None),
-      UpperBoundedRand(to, from) => (vec![from], vec![to], None),
-      LowerUpperBoundedRand(to, a, b) => (vec![a, b], vec![to], None),
-      RandInt(to, from) => (vec![from], vec![to], None),
-      LowerBoundedRandInt(to, a, b) => (vec![a, b], vec![to], None),
-      Equal(to, a, b) => (vec![a, b], vec![to], None),
-      NotEqual(to, a, b) => (vec![a, b], vec![to], None),
-      Not(to, from) => (vec![from], vec![to], None),
-      And(to, a, b) => (vec![a, b], vec![to], None),
-      Or(to, a, b) => (vec![a, b], vec![to], None),
-      Xor(to, a, b) => (vec![a, b], vec![to], None),
-      IsEmpty(to, from) => (vec![from], vec![to], None),
-      First(to, from) => (vec![from], vec![to], None),
-      Count(to, from) => (vec![from], vec![to], None),
-      Flatten(to, from) => (vec![from], vec![to], None),
-      Remove((from, to), x) => (vec![x], vec![], Some((from, to))),
-      Filter((from, to), f) => (vec![f], vec![], Some((from, to))),
-      Map((from, to), f) => (vec![f], vec![], Some((from, to))),
-      DoubleMap((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      MultiCollectionMap((from, to), f) => (vec![f], vec![], Some((from, to))),
-      Set((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      SetIn((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      Get(to, a, b) => (vec![a, b], vec![to], None),
-      GetIn(to, a, b) => (vec![a, b], vec![to], None),
-      Update((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      UpdateIn((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      MinKey(to, a, b) => (vec![a, b], vec![to], None),
-      MaxKey(to, a, b) => (vec![a, b], vec![to], None),
-      Push((from, to), f) => (vec![f], vec![], Some((from, to))),
-      Sort((from, to)) => (vec![], vec![], Some((from, to))),
-      SortBy((from, to), f) => (vec![f], vec![], Some((from, to))),
-      EmptyList(to) => (vec![], vec![to], None),
-      Last(to, from) => (vec![from], vec![to], None),
-      Rest((from, to)) => (vec![], vec![], Some((from, to))),
-      ButLast((from, to)) => (vec![], vec![], Some((from, to))),
-      Nth(to, a, b) => (vec![a, b], vec![to], None),
-      NthFromLast(to, a, b) => (vec![a, b], vec![to], None),
-      Cons((from, to), x) => (vec![x], vec![], Some((from, to))),
-      Concat((from, to), x) => (vec![x], vec![], Some((from, to))),
-      Take((from, to), x) => (vec![x], vec![], Some((from, to))),
-      Drop((from, to), x) => (vec![x], vec![], Some((from, to))),
-      Reverse((from, to)) => (vec![from], vec![to], Some((from, to))),
-      Distinct((from, to)) => (vec![from], vec![to], Some((from, to))),
-      Sub((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      Partition(to, a, b) => (vec![a, b], vec![to], None),
-      SteppedPartition((from, to), a, b) => {
-        (vec![a, b], vec![], Some((from, to)))
-      }
-      Pad((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      EmptyMap(to) => (vec![], vec![to], None),
-      Keys(to, from) => (vec![from], vec![to], None),
-      Values(to, from) => (vec![from], vec![to], None),
-      Zip(to, a, b) => (vec![a, b], vec![to], None),
-      Invert((from, to)) => (vec![], vec![], Some((from, to))),
-      Merge(to, a, b) => (vec![a, b], vec![to], None),
-      MergeWith((from, to), a, b) => (vec![a, b], vec![], Some((from, to))),
-      MapKeys((from, to), f) => (vec![f], vec![], Some((from, to))),
-      MapValues((from, to), f) => (vec![f], vec![], Some((from, to))),
-      SelectKeys((from, to), x) => (vec![x], vec![], Some((from, to))),
-      EmptySet(to) => (vec![], vec![to], None),
-      Union(to, a, b) => (vec![a, b], vec![to], None),
-      Intersection(to, a, b) => (vec![a, b], vec![to], None),
-      Difference(to, a, b) => (vec![a, b], vec![to], None),
-      SymmetricDifference(to, a, b) => (vec![a, b], vec![to], None),
-      InfiniteRange(to) => (vec![], vec![to], None),
-      UpperBoundedRange(to, from) => (vec![from], vec![to], None),
-      LowerUpperBoundedRange(to, a, b) => (vec![a, b], vec![to], None),
-      InfiniteRepeat(to, from) => (vec![from], vec![to], None),
-      BoundedRepeat(to, a, b) => (vec![a, b], vec![to], None),
-      InfiniteRepeatedly(to, from) => (vec![from], vec![to], None),
-      BoundedRepeatedly(to, a, b) => (vec![a, b], vec![to], None),
-      InfiniteIterate(to, a, b) => (vec![a, b], vec![to], None),
-      BoundedIterate((from, to), a, b) => {
-        (vec![a, b], vec![], Some((from, to)))
-      }
-      CreateCell(to) => (vec![], vec![to], None),
-      GetCellValue(to, from) => (vec![from], vec![to], None),
-      SetCellValue(to, from) => (vec![from], vec![to], None),
-      UpdateCell(to, from) => (vec![from], vec![to], None),
-      CreateCoroutine((from, to)) => (vec![], vec![], Some((from, to))),
-      IsCoroutineAlive(to, from) => (vec![from], vec![to], None),
-      Yield(from) => (vec![from], vec![], None),
-      YieldAndAccept(from, _, _) => (vec![from], vec![], None),
-      IsNil(to, from) => (vec![from], vec![to], None),
-      IsBool(to, from) => (vec![from], vec![to], None),
-      IsChar(to, from) => (vec![from], vec![to], None),
-      IsNum(to, from) => (vec![from], vec![to], None),
-      IsInt(to, from) => (vec![from], vec![to], None),
-      IsFloat(to, from) => (vec![from], vec![to], None),
-      IsSymbol(to, from) => (vec![from], vec![to], None),
-      IsString(to, from) => (vec![from], vec![to], None),
-      IsList(to, from) => (vec![from], vec![to], None),
-      IsMap(to, from) => (vec![from], vec![to], None),
-      IsSet(to, from) => (vec![from], vec![to], None),
-      IsCollection(to, from) => (vec![from], vec![to], None),
-      IsFn(to, from) => (vec![from], vec![to], None),
-      IsError(to, from) => (vec![from], vec![to], None),
-      IsCell(to, from) => (vec![from], vec![to], None),
-      IsCoroutine(to, from) => (vec![from], vec![to], None),
-      ToBool(to, from) => (vec![from], vec![to], None),
-      ToChar(to, from) => (vec![from], vec![to], None),
-      ToNum(to, from) => (vec![from], vec![to], None),
-      ToInt(to, from) => (vec![from], vec![to], None),
-      ToFloat(to, from) => (vec![from], vec![to], None),
-      ToSymbol(to, from) => (vec![from], vec![to], None),
-      ToString(to, from) => (vec![from], vec![to], None),
-      ToList(to, from) => (vec![from], vec![to], None),
-      ToMap(to, from) => (vec![from], vec![to], None),
-      ToSet(to, from) => (vec![from], vec![to], None),
-      ToError(to, from) => (vec![from], vec![to], None),
-    };
-    RegisterUsages {
-      inputs: inputs.into_iter().cloned().collect(),
-      outputs: outputs.into_iter().cloned().collect(),
-      replacement: replacement.map(|(from, to)| (*from, *to)),
-    }
-  }
-}
 
 #[derive(Clone, Debug)]
 enum LifetimeError {
@@ -347,7 +154,7 @@ pub fn track_register_lifetimes<M>(
           lifetimes.insert(output_register, RegisterLifetime::new(timestamp));
         }
       }
-      if let Some((from_register, to_register)) = usages.replacement {
+      for (from_register, to_register) in usages.replacements {
         if let Some(from_lifetime) = lifetimes.get_mut(&from_register) {
           if let Some(replaced_by_register) = from_lifetime.replaced_by {
             return Err(LifetimeError::UsedAfterReplacement(
