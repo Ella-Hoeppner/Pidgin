@@ -32,7 +32,7 @@ mod tests {
   };
 
   #[test]
-  fn addition() {
+  fn binary_addition() {
     let ir = expression_ast_to_ir(parse_sexp("(+ 1 2)")).unwrap();
     assert_eq!(
       ir,
