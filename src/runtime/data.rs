@@ -309,7 +309,7 @@ pub enum GenericValue<I, O, R, M> {
 pub type Value = GenericValue<Register, Register, Register, ()>;
 use GenericValue::*;
 
-impl PartialEq for Value {
+impl<I, O, R, M> PartialEq for GenericValue<I, O, R, M> {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::Nil, Self::Nil) => true,
@@ -331,7 +331,7 @@ impl PartialEq for Value {
     }
   }
 }
-impl Eq for Value {}
+impl<I, O, R, M> Eq for GenericValue<I, O, R, M> {}
 
 impl Hash for Value {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -476,42 +476,42 @@ impl Display for Value {
   }
 }
 
-impl From<Num> for Value {
+impl<I, O, R, M> From<Num> for GenericValue<I, O, R, M> {
   fn from(n: Num) -> Self {
     Number(n)
   }
 }
-impl From<i64> for Value {
+impl<I, O, R, M> From<i64> for GenericValue<I, O, R, M> {
   fn from(i: i64) -> Self {
     Number(i.into())
   }
 }
-impl From<f64> for Value {
+impl<I, O, R, M> From<f64> for GenericValue<I, O, R, M> {
   fn from(f: f64) -> Self {
     Number(f.into())
   }
 }
-impl From<OrderedFloat<f64>> for Value {
+impl<I, O, R, M> From<OrderedFloat<f64>> for GenericValue<I, O, R, M> {
   fn from(f: OrderedFloat<f64>) -> Self {
     Number(f.into())
   }
 }
-impl From<bool> for Value {
+impl<I, O, R, M> From<bool> for GenericValue<I, O, R, M> {
   fn from(b: bool) -> Self {
     Bool(b)
   }
 }
-impl From<char> for Value {
+impl<I, O, R, M> From<char> for GenericValue<I, O, R, M> {
   fn from(c: char) -> Self {
     Char(c)
   }
 }
-impl From<String> for Value {
+impl<I, O, R, M> From<String> for GenericValue<I, O, R, M> {
   fn from(s: String) -> Self {
     Str(Rc::new(s))
   }
 }
-impl From<&str> for Value {
+impl<I, O, R, M> From<&str> for GenericValue<I, O, R, M> {
   fn from(s: &str) -> Self {
     Str(Rc::new(s.to_string()))
   }

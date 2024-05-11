@@ -265,3 +265,27 @@ pub fn allocate_registers(
     ))
   })
 }
+
+#[derive(Clone, Debug)]
+pub enum CompilationError {
+  Lifetime(LifetimeError),
+  RegisterAllocation(RegisterAllocationError),
+}
+impl Display for CompilationError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      CompilationError::Lifetime(e) => write!(f, "lifetime error: {}", e),
+      CompilationError::RegisterAllocation(e) => {
+        write!(f, "register allocation error: {}", e)
+      }
+    }
+  }
+}
+impl Error for CompilationError {}
+
+pub fn ir_to_bytecode<M>(ir: SSABlock<M>) -> Result<Block, CompilationError> {
+  allocate_registers(
+    track_register_lifetimes(ir).map_err(|e| CompilationError::Lifetime(e))?,
+  )
+  .map_err(|e| CompilationError::RegisterAllocation(e))
+}

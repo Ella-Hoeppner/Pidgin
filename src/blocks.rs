@@ -5,7 +5,7 @@ use crate::{GenericCompositeFunction, GenericValue, Instruction};
 use GenericValue::*;
 use Instruction::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GenericBlock<I, O, R, M> {
   pub instructions: Rc<[Instruction<I, O, R>]>,
   pub constants: Rc<[GenericValue<I, O, R, M>]>,

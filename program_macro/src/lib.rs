@@ -1,8 +1,7 @@
 extern crate proc_macro;
 use proc_macro::{TokenStream, TokenTree};
 
-#[proc_macro]
-pub fn block(input: TokenStream) -> TokenStream {
+fn generic_block(block_type_name: &str, input: TokenStream) -> TokenStream {
   use TokenTree::*;
   let mut instructions: Vec<String> = vec![];
   let mut constants: Vec<String> = vec![];
@@ -110,7 +109,8 @@ pub fn block(input: TokenStream) -> TokenStream {
     })
   }
   format!(
-    "Block::new(vec![{}], vec![{}])",
+    "{}::new(vec![{}], vec![{}])",
+    block_type_name,
     instructions.join(", "),
     constants
       .into_iter()
@@ -120,4 +120,14 @@ pub fn block(input: TokenStream) -> TokenStream {
   )
   .parse()
   .unwrap()
+}
+
+#[proc_macro]
+pub fn block(input: TokenStream) -> TokenStream {
+  generic_block("Block", input)
+}
+
+#[proc_macro]
+pub fn ssa_block(input: TokenStream) -> TokenStream {
+  generic_block("SSABlock", input)
 }

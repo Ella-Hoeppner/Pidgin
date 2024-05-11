@@ -45,22 +45,11 @@ Runtime stuff:
     * go blocks seem like maybe the tough part
 
 Compiler stuff
-* Implement compiler from IR (using `Instruction<usize, Value>`) to bytecode
-  * Compute lifetimes of all virtual registers
-    * Add a new generic type parameter to `Instruction` for replacable registers, i.e. registers that are used for both input and output
-      * in `RuntimeInstruction` this will just be the same
-      * having registers be overwritable like this breaks SSA, so the intermediate 
-  * Reallocate all registers in a block into `0-255`
-    * I guess panic with "expression too complex" or something if this can't be done?
-      * I wonder how often this would come up...
-        * I feel like it would be pretty rare...
-          * the one situation I can think of where that might happen is a `(+ ...)` or `(list ...)` with >255 elements
-            * if compiled naively that would compute each of the arguments and store them in their own register, reduce them into one final value (by adding or pushing them into the list, respectively), and that would exhaust all the registers
-              * I guess this can be avoided if things like this are compiled to evaluate one arg at a time and then reduce into the register holding the final value rather than pre-evaluating all the args
-      * In principle I think when the compiler runs out of registers it could start storing values in a vector stored in the last register in the stack frame, and then shuffle values between that vector and the previous registers, but that sounds complex to implement correctly, and probably isn't that important for a first version
+* do real error handling for `allocate_registers` rather than `expect`ing everywhere
 * support compiling more arithmetic operations
+  * support `+` and `*` with multiple arguments
 * support compiling list functions
-  * `list`, `first`, `rest`, `last`, `butlast`
+  * `list`, `first`, `rest`, `last`, `butlast`, `push`
 * support compiling functions
 * get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
   * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes

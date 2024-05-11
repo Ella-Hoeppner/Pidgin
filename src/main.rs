@@ -41,7 +41,6 @@ fn main() {
   let mut state = EvaluationState::new(program);
   state.evaluate().unwrap();
   println!("{}", time.elapsed().as_secs_f64());*/
-
   let raw_ir = expression_ast_to_ir(parse_sexp("(+ 1 2)")).unwrap();
   println!("raw ir:\n{:?}\n\n", raw_ir);
   let lifetime_ir = track_register_lifetimes(raw_ir).unwrap();
