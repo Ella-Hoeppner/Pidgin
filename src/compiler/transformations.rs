@@ -17,7 +17,7 @@ use GenericValue::*;
 use Instruction::*;
 
 #[derive(Clone, Debug)]
-enum LifetimeError {
+pub enum LifetimeError {
   UsedBeforeCreation(SSARegister, InstructionTimestamp),
   OutputToExisting(SSARegister, InstructionTimestamp, InstructionTimestamp),
   ReplacingNonexistent(SSARegister, InstructionTimestamp),
@@ -197,7 +197,7 @@ pub fn track_register_lifetimes<M>(
 }
 
 #[derive(Clone, Debug)]
-enum RegisterAllocationError {}
+pub enum RegisterAllocationError {}
 impl Display for RegisterAllocationError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match *self {}
@@ -235,14 +235,29 @@ pub fn allocate_registers(
                   .insert(*virtual_register, min_unused_register);
                 #[cfg(debug_assertions)]
                 assert!(replaced_register.is_none());
-                let register_already_taken =
-                  taken_registers.insert(min_unused_register);
+                let register_free = taken_registers.insert(min_unused_register);
                 #[cfg(debug_assertions)]
-                assert!(!register_already_taken);
+                assert!(register_free);
               }
             }
           }
-          todo!() // push a value into translated_instructions
+          translated_instructions.push(instruction.clone().translate(
+            |input: usize| -> u8 {
+              *ssa_to_real_registers
+                .get(&input)
+                .expect("no current real register found for ssa register")
+            },
+            |output: usize| -> u8 {
+              *ssa_to_real_registers
+                .get(&output)
+                .expect("no current real register found for ssa register")
+            },
+            |(input, _output): (usize, usize)| -> u8 {
+              *ssa_to_real_registers
+                .get(&input)
+                .expect("no current real register found for ssa register")
+            },
+          ));
         }
         translated_instructions
       },

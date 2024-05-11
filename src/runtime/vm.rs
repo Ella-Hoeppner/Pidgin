@@ -103,30 +103,43 @@ impl EvaluationState {
     std::mem::swap(&mut self.current_frame, &mut frame);
     self.current_coroutine.paused_frames.push(frame);
   }
-  fn complete_child_coroutine(&mut self) -> StackFrame {
-    let (child_coroutine_stack_index, mut parent_coroutine) =
-      self.parent_coroutine_stack.pop().expect(
-        "attempted to complete_child_coroutine with no paused parent coroutinees",
+  fn complete_child_coroutine(&mut self) -> Option<StackFrame> {
+    if let Some((child_coroutine_stack_index, mut parent_coroutine)) =
+      self.parent_coroutine_stack.pop()
+    {
+      let (frame, coroutine_state) = parent_coroutine.resume_from_child();
+      self.current_coroutine = coroutine_state;
+      self.set_stack(
+        child_coroutine_stack_index,
+        Value::Coroutine(Rc::new(None)),
       );
-    let (frame, coroutine_state) = parent_coroutine.resume_from_child();
-    self.current_coroutine = coroutine_state;
-    self
-      .set_stack(child_coroutine_stack_index, Value::Coroutine(Rc::new(None)));
-    frame
+      Some(frame)
+    } else {
+      None
+    }
   }
-  fn complete_frame(&mut self) -> StackFrame {
-    let mut next_frame = self
+  fn complete_frame(&mut self) -> Option<StackFrame> {
+    if let Some(mut next_frame) = self
       .current_coroutine
       .paused_frames
       .pop()
-      .unwrap_or_else(|| self.complete_child_coroutine());
-    std::mem::swap(&mut self.current_frame, &mut next_frame);
-    next_frame
+      .map(|x| Some(x))
+      .unwrap_or_else(|| self.complete_child_coroutine())
+    {
+      std::mem::swap(&mut self.current_frame, &mut next_frame);
+      Some(next_frame)
+    } else {
+      None
+    }
   }
-  fn return_value(&mut self, value: Value) {
-    let completed_frame = self.complete_frame();
-    self.current_coroutine.consumption = completed_frame.beginning;
-    self.set_stack(completed_frame.return_stack_index, value);
+  fn return_value(&mut self, value: Value) -> Option<Value> {
+    if let Some(completed_frame) = self.complete_frame() {
+      self.current_coroutine.consumption = completed_frame.beginning;
+      self.set_stack(completed_frame.return_stack_index, value);
+      None
+    } else {
+      Some(value)
+    }
   }
   fn yield_value(
     &mut self,
@@ -395,7 +408,9 @@ impl EvaluationState {
           }
           Return(value) => {
             let return_value = self.steal_register(value);
-            self.return_value(return_value);
+            if let Some(final_value) = self.return_value(return_value) {
+              break 'instruction Ok(Some(final_value));
+            }
           }
           CopyArgument(_) => {
             panic!("CopyArgument instruction called, this should never happen")
@@ -545,37 +560,40 @@ impl EvaluationState {
           }
           CallAndReturn(f, arg_count) => {
             let f_value = self.get_register(f).clone();
-            let mut completed_frame = self.complete_frame();
-            match f_value {
-              CompositeFn(composite_fn) => {
-                let new_frame = StackFrame::for_fn(
-                  composite_fn,
-                  completed_frame.beginning,
-                  completed_frame.return_stack_index,
-                );
-                self.move_args_from(
-                  arg_count,
-                  new_frame.beginning,
-                  &mut completed_frame,
-                );
-                self.current_coroutine.consumption =
-                  completed_frame.beginning + arg_count as StackIndex;
-                self.push_frame(new_frame);
-              }
-              ExternalFn(_) => todo!(),
-              CoreFn(_) => {
-                panic!(
-                  "CallAndReturn instruction called with CoreFn value, this \
+            if let Some(mut completed_frame) = self.complete_frame() {
+              match f_value {
+                CompositeFn(composite_fn) => {
+                  let new_frame = StackFrame::for_fn(
+                    composite_fn,
+                    completed_frame.beginning,
+                    completed_frame.return_stack_index,
+                  );
+                  self.move_args_from(
+                    arg_count,
+                    new_frame.beginning,
+                    &mut completed_frame,
+                  );
+                  self.current_coroutine.consumption =
+                    completed_frame.beginning + arg_count as StackIndex;
+                  self.push_frame(new_frame);
+                }
+                ExternalFn(_) => todo!(),
+                CoreFn(_) => {
+                  panic!(
+                    "CallAndReturn instruction called with CoreFn value, this \
                   should never happen"
-                )
+                  )
+                }
+                Coroutine(maybe_coroutine) => todo!(),
+                List(list) => todo!(),
+                Hashmap(map) => todo!(),
+                Hashset(set) => todo!(),
+                other => {
+                  break 'instruction Err(PidginError::CantApply);
+                }
               }
-              Coroutine(maybe_coroutine) => todo!(),
-              List(list) => todo!(),
-              Hashmap(map) => todo!(),
-              Hashset(set) => todo!(),
-              other => {
-                break 'instruction Err(PidginError::CantApply);
-              }
+            } else {
+              panic!("CallAndReturn failed to complete the current frame")
             }
           }
           ApplyAndReturn(args, f) => {
@@ -584,20 +602,23 @@ impl EvaluationState {
           CallSelfAndReturn(arg_count) => {
             let composite_fn =
               self.current_frame.calling_function.clone().unwrap();
-            let mut completed_frame = self.complete_frame();
-            let new_frame = StackFrame::for_fn(
-              composite_fn,
-              completed_frame.beginning,
-              completed_frame.return_stack_index,
-            );
-            self.move_args_from(
-              arg_count,
-              new_frame.beginning,
-              &mut completed_frame,
-            );
-            self.current_coroutine.consumption =
-              completed_frame.beginning + arg_count as StackIndex;
-            self.push_frame(new_frame);
+            if let Some(mut completed_frame) = self.complete_frame() {
+              let new_frame = StackFrame::for_fn(
+                composite_fn,
+                completed_frame.beginning,
+                completed_frame.return_stack_index,
+              );
+              self.move_args_from(
+                arg_count,
+                new_frame.beginning,
+                &mut completed_frame,
+              );
+              self.current_coroutine.consumption =
+                completed_frame.beginning + arg_count as StackIndex;
+              self.push_frame(new_frame);
+            } else {
+              panic!("CallSelfAndReturn failed to complete the current frame")
+            }
           }
           ApplySelfAndReturn(args) => todo!(),
           Lookup(register, symbol_index) => {

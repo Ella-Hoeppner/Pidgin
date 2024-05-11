@@ -11,8 +11,11 @@ use minivec::mini_vec;
 use ordered_float::OrderedFloat;
 use program_macro::block;
 
-use crate::compiler::ast_to_ir::{ast_to_ir, token_to_value};
+use crate::compiler::ast_to_ir::{expression_ast_to_ir, token_to_value};
 use crate::compiler::parse::parse_sexp;
+use crate::compiler::transformations::{
+  allocate_registers, track_register_lifetimes,
+};
 use crate::instructions::*;
 use crate::runtime::{control::*, data::*, vm::*};
 use std::rc::Rc;
@@ -39,5 +42,13 @@ fn main() {
   state.evaluate().unwrap();
   println!("{}", time.elapsed().as_secs_f64());*/
 
-  println!("{:?}", ast_to_ir(parse_sexp("(+ 1 2)")));
+  let raw_ir = expression_ast_to_ir(parse_sexp("(+ 1 2)")).unwrap();
+  println!("raw ir:\n{:?}\n\n", raw_ir);
+  let lifetime_ir = track_register_lifetimes(raw_ir).unwrap();
+  println!("lifetime ir:\n{:?}\n\n", lifetime_ir);
+  let bytecode = allocate_registers(lifetime_ir).unwrap();
+  println!("bytecode:\n{:?}\n\n", bytecode);
+  let mut state = EvaluationState::new(bytecode);
+  let x = state.evaluate().unwrap();
+  println!("{x:?}");
 }

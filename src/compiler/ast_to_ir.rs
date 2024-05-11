@@ -1,6 +1,6 @@
 use std::{error::Error, fmt::Display};
 
-use crate::{AritySpecifier, GenericValue, Instruction, Num};
+use crate::{AritySpecifier, GenericValue, Instruction, Num, Register};
 
 use super::{SSABlock, SSAInstruction, SSARegister, SSAValue};
 
@@ -121,15 +121,16 @@ pub fn build_ir_from_ast(
   }
 }
 
-pub fn ast_to_ir(ast: AST) -> SSABlock<()> {
+pub fn expression_ast_to_ir(ast: AST) -> Result<SSABlock<()>, ASTError> {
   let mut taken_virtual_registers = 0;
   let mut instructions = vec![];
   let mut constants = vec![];
-  build_ir_from_ast(
+  let last_register = build_ir_from_ast(
     ast,
     &mut taken_virtual_registers,
     &mut instructions,
     &mut constants,
-  );
-  SSABlock::new(instructions, constants)
+  )?;
+  instructions.push(Return(last_register));
+  Ok(SSABlock::new(instructions, constants))
 }
