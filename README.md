@@ -2,6 +2,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Runtime stuff:
+* At some point `GenericValue` became 24 bytes rather than 16, need to fix that
 * consider supporting a way to reconstruct the lexical environment at runtime
   * such that it would be possible to, e.g., have an `environment` function that returns the current lexical environment as a hashmap
   * the main purpose would be for interactive error handling
@@ -46,11 +47,10 @@ Runtime stuff:
 
 Compiler stuff
 * do real error handling for `allocate_registers` rather than `expect`ing everywhere
-* support compiling list functions
-  * `list`, `first`, `rest`, `last`, `butlast`, `push`
 * support compiling functions
 * support closures
   * will have to lambda lift them, this will probably be kinda tricky
+  * I guess I should do lambda lifting at the ast level?
 * get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
   * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
 * IR-level optimizations:
@@ -68,6 +68,7 @@ Compiler stuff
         * For this reason I'm unsure if this optimization will really be worth it. Should at least implement it and have it be an optional thing, and do some benchmarking to see what effect it has.
         * It should be possible to have certain instructions that are known to always produce non-collection values (arithmetic ops, boolean ops, etc...) tag their output registers with metadata that lets the compiler know it can skip the `Clear` at the end of the lifetime
           * but many things will often produce non-collection values, e.g. `First` and user-defined functions, in a way that the compiler can't know about because the language doesn't have static typing. So this will probably only help in a small fraction of cases
+      * Alternatively, what about making `Clear` not actually zero out the memory, but just like, decrement the strong count of the associated `Rc` (if any, i.e. if the value is a collection) and then use `std::mem::forget`? This would avoid zeroing out the memory. Though it would still mean processing an extra instruction.
 * Use GSE for parsing, once it's ready
 
 # planned language features (once the IR and VM are usable and a basic AST)
@@ -89,34 +90,24 @@ Compiler stuff
 # Long-run optimizations
 * using the `take_mut` crate can probably avoid replacing a stolen register with a temporary `Nil` for several instructions
 * Reimplement `Value::List` using a custom reference-counted vector.
-  * This could take more advantage of the fact that the behavior is very different when the reference count is 1. Also, `Rc<Vec<Value>>` involves two layers of indirection, but it should be possible to implement a custom `RcVec` with just one. This might be something like an enum with two variants for the single-ownership (mutable) case and the shared-ownership (immutable) case, like:
-    ```rust
-    enum RcVec<T> {
-      Unique(MiniVec<T>)
-      Shared(Box<{
-        reference_count: usize,
-        data: [T]
-      }>)
-    }
-    ```
-  * This layout would mean that changing between a `Unique` and a `Shared` would involve cloning the `MiniVec` data to make it into a `[T]` slice or vice versa tho... not ideal. It needs to be very cheap to change between the two or the performance gains from the lack of extra indirection might not be worth it. I guess the memory layout could be more like just a `MiniVec` but with an extra `reference_count` value in the vec header, so the layout would look like:
-    ```rust
-    (reference_count: usize, len: usize, cap: usize, data: [T; cap])
-    ```
-  * But that would mean that even checking whether the reference count is 1, i.e. whether it can be mutated, would involve a heap lookup. I guess there could be an extra bool stored on the stack that keeps track of whether the reference count on the heap is 1 or not... So the full memory layout would look something like:
+  * This could have a few advantages:
+    * there would only need to be one layer of indirection in accessing the contents of the vector, rather than 2
+    * it could switch from acting like a vector to acting like a deque without any reallocation, so pushing onto both the front and the back could be relatively cheap
+  * representation could be something like:
     ```rust
     struct RcVec<T> {
       unique: bool,
-      data: Box<{
+      data: *const {
         reference_count: usize,
         len: usize,
         cap: usize,
+        first_index: usize,
         data: [T; cap]
-      }>
+      }
     }
     ```
-  * This should fit in just 9 bytes, so it wouldn't make `Value` any bigger. Getting all the implementation details right to be as well-optimized as `Vec` or `MiniVec` might be pretty difficult tho.
-  * A reference-counted-vector type that only involves one layer of indirection rather than the 2 of an `Rc<Vec<>>` would also be nice for reprenting functions 
+    * the `unique` field is redundant, as it should always be `reference_count == 1`, but having that not behind the pointer might make some things faster, I think?
+    * A tricky thing here is that we wouldn't want to always have to check `first_index` when doing indexed operations, as that would make things slower, in the same way that a `VecDeque` is slower than a `Vec`. But there could just be two versions of each method, like `vec_get` and `deque_get` where the former just indexes directly into `data` while the latter makes use of `first_index` to act like a deque. At the VM level there could be `Value::VecList` and `Value::DequeList` that both internally use this same struct, but just call different versions of the indexed functions.
 * Distinguish between multi-use constants and single-use constants
   * if a constant is known to be single-use, it could just be swapped with `Nil` in the constants stack rather than needing to be cloned when it's used
   * this could be especially important for functions with many instructions inside

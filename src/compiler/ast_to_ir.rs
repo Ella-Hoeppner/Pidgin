@@ -56,7 +56,10 @@ pub fn token_to_value(token: String) -> Result<SSAValue<()>, ASTError> {
   } else if let Ok(f) = token.parse::<f64>() {
     Ok(Number(Num::Float(f.into())))
   } else {
-    Err(ASTError::CantParseToken(token))
+    match token.as_str() {
+      "nil" => Ok(Nil),
+      _ => Err(ASTError::CantParseToken(token)),
+    }
   }
 }
 
@@ -70,7 +73,43 @@ pub fn build_ir_from_fn_application(
   match f {
     Inner(_) => todo!(),
     Leaf(fn_name) => {
-      if let Some(instruction) = if args.len() == 2 {
+      if let Some(replacing_unary_instruction) = if args.len() == 1 {
+        match fn_name.as_str() {
+          "rest" => Some(Rest((args[0], *taken_virtual_registers))),
+          "butlast" => Some(ButLast((args[0], *taken_virtual_registers))),
+          other => None,
+        }
+      } else {
+        None
+      } {
+        instructions.push(replacing_unary_instruction);
+        *taken_virtual_registers += 1;
+        Ok(*taken_virtual_registers - 1)
+      } else if let Some(nonreplacing_unary_instruction) = if args.len() == 1 {
+        match fn_name.as_str() {
+          "first" => Some(First(*taken_virtual_registers, args[0])),
+          "last" => Some(Last(*taken_virtual_registers, args[0])),
+          other => None,
+        }
+      } else {
+        None
+      } {
+        instructions.push(nonreplacing_unary_instruction);
+        *taken_virtual_registers += 1;
+        Ok(*taken_virtual_registers - 1)
+      } else if let Some(replacing_binary_instruction) = if args.len() == 2 {
+        match fn_name.as_str() {
+          "push" => Some(Push((args[0], *taken_virtual_registers), args[1])),
+          "cons" => Some(Cons((args[0], *taken_virtual_registers), args[1])),
+          other => None,
+        }
+      } else {
+        None
+      } {
+        instructions.push(replacing_binary_instruction);
+        *taken_virtual_registers += 1;
+        Ok(*taken_virtual_registers - 1)
+      } else if let Some(nonreplacing_binary_instruction) = if args.len() == 2 {
         match fn_name.as_str() {
           "+" => Some(Add(*taken_virtual_registers, args[0], args[1])),
           "-" => Some(Subtract(*taken_virtual_registers, args[0], args[1])),
@@ -81,7 +120,7 @@ pub fn build_ir_from_fn_application(
       } else {
         None
       } {
-        instructions.push(instruction);
+        instructions.push(nonreplacing_binary_instruction);
         *taken_virtual_registers += 1;
         Ok(*taken_virtual_registers - 1)
       } else {

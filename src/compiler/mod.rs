@@ -250,4 +250,210 @@ mod tests {
     ],
     vec![1.into(), 2.into(), 3.into()]
   );
+
+  test_ir_and_bytecode_and_output!(
+    nil_first,
+    "(first nil)",
+    ssa_block![Const(0, Nil), First(1, 0), Return(1)],
+    block![Const(0, Nil), First(0, 0), Return(0)],
+    Nil
+  );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list_first,
+    "(first (list))",
+    ssa_block![EmptyList(0), First(1, 0), Return(1)],
+    block![EmptyList(0), First(0, 0), Return(0)],
+    Nil
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nonempty_list_first,
+    "(first (list 1))",
+    ssa_block![
+      Const(0, 1),
+      EmptyList(1),
+      Push((1, 2), 0),
+      First(3, 2),
+      Return(3)
+    ],
+    block![
+      Const(0, 1),
+      EmptyList(1),
+      Push(1, 0),
+      First(0, 1),
+      Return(0)
+    ],
+    1
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nil_last,
+    "(last nil)",
+    ssa_block![Const(0, Nil), Last(1, 0), Return(1)],
+    block![Const(0, Nil), Last(0, 0), Return(0)],
+    Nil
+  );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list_last,
+    "(last (list))",
+    ssa_block![EmptyList(0), Last(1, 0), Return(1)],
+    block![EmptyList(0), Last(0, 0), Return(0)],
+    Nil
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nonempty_list_last,
+    "(last (list 1))",
+    ssa_block![
+      Const(0, 1),
+      EmptyList(1),
+      Push((1, 2), 0),
+      Last(3, 2),
+      Return(3)
+    ],
+    block![Const(0, 1), EmptyList(1), Push(1, 0), Last(0, 1), Return(0)],
+    1
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nil_rest,
+    "(rest nil)",
+    ssa_block![Const(0, Nil), Rest((0, 1)), Return(1)],
+    block![Const(0, Nil), Rest(0), Return(0)],
+    Nil
+  );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list_rest,
+    "(rest (list))",
+    ssa_block![EmptyList(0), Rest((0, 1)), Return(1)],
+    block![EmptyList(0), Rest(0), Return(0)],
+    vec![]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nonempty_list_rest,
+    "(rest (list 1 2))",
+    ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      EmptyList(2),
+      Push((2, 3), 0),
+      Push((3, 4), 1),
+      Rest((4, 5)),
+      Return(5)
+    ],
+    block![
+      Const(0, 1),
+      Const(1, 2),
+      EmptyList(2),
+      Push(2, 0),
+      Push(2, 1),
+      Rest(2),
+      Return(2)
+    ],
+    vec![2.into()]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nil_butlast,
+    "(butlast nil)",
+    ssa_block![Const(0, Nil), ButLast((0, 1)), Return(1)],
+    block![Const(0, Nil), ButLast(0), Return(0)],
+    Nil
+  );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list_butlast,
+    "(butlast (list))",
+    ssa_block![EmptyList(0), ButLast((0, 1)), Return(1)],
+    block![EmptyList(0), ButLast(0), Return(0)],
+    vec![]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nonempty_list_butlast,
+    "(butlast (list 1 2))",
+    ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      EmptyList(2),
+      Push((2, 3), 0),
+      Push((3, 4), 1),
+      ButLast((4, 5)),
+      Return(5)
+    ],
+    block![
+      Const(0, 1),
+      Const(1, 2),
+      EmptyList(2),
+      Push(2, 0),
+      Push(2, 1),
+      ButLast(2),
+      Return(2)
+    ],
+    vec![1.into()]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list_push,
+    "(push (list) 1)",
+    ssa_block![EmptyList(0), Const(1, 1), Push((0, 2), 1), Return(2)],
+    block![EmptyList(0), Const(1, 1), Push(0, 1), Return(0)],
+    vec![1.into()]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nonempty_list_push,
+    "(push (list 1) 2)",
+    ssa_block![
+      Const(0, 1),
+      EmptyList(1),
+      Push((1, 2), 0),
+      Const(3, 2),
+      Push((2, 4), 3),
+      Return(4)
+    ],
+    block![
+      Const(0, 1),
+      EmptyList(1),
+      Push(1, 0),
+      Const(0, 2),
+      Push(1, 0),
+      Return(1)
+    ],
+    vec![1.into(), 2.into()]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list_cons,
+    "(cons (list) 1)",
+    ssa_block![EmptyList(0), Const(1, 1), Cons((0, 2), 1), Return(2)],
+    block![EmptyList(0), Const(1, 1), Cons(0, 1), Return(0)],
+    vec![1.into()]
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nonempty_list_cons,
+    "(cons (list 2) 1)",
+    ssa_block![
+      Const(0, 2),
+      EmptyList(1),
+      Push((1, 2), 0),
+      Const(3, 1),
+      Cons((2, 4), 3),
+      Return(4)
+    ],
+    block![
+      Const(0, 2),
+      EmptyList(1),
+      Push(1, 0),
+      Const(0, 1),
+      Cons(1, 0),
+      Return(1)
+    ],
+    vec![1.into(), 2.into()]
+  );
 }

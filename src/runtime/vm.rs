@@ -955,7 +955,9 @@ impl EvaluationState {
                 self.set_register(
                   list_and_result,
                   if let Some(owned_list_value) = Rc::get_mut(&mut list_value) {
-                    owned_list_value.remove(0);
+                    if !owned_list_value.is_empty() {
+                      owned_list_value.remove(0);
+                    }
                     list_value
                   } else {
                     let mut list_value_clone = (*list_value).clone();
@@ -994,7 +996,44 @@ impl EvaluationState {
             todo!()
           }
           NthFromLast(result, list, n) => todo!(),
-          Cons(list_and_result, value) => todo!(),
+          Cons(list_and_result, value) => {
+            let value = self.get_register(value).clone();
+            let collection_value = self.steal_register(list_and_result);
+            match collection_value {
+              List(mut list_value) => {
+                self.set_register(
+                  list_and_result,
+                  if list_value.is_empty() {
+                    if let Some(owned_list_value) = Rc::get_mut(&mut list_value)
+                    {
+                      owned_list_value.push(value);
+                      list_value
+                    } else {
+                      let mut list_value_clone = (*list_value).clone();
+                      list_value_clone.push(value);
+                      Rc::new(list_value_clone)
+                    }
+                  } else {
+                    if let Some(owned_list_value) = Rc::get_mut(&mut list_value)
+                    {
+                      owned_list_value.insert(0, value);
+                      list_value
+                    } else {
+                      Rc::new(
+                        std::iter::once(value)
+                          .chain((*list_value).iter().cloned())
+                          .collect(),
+                      )
+                    }
+                  },
+                );
+              }
+              Hashmap(hashmap) => todo!(),
+              Hashset(set) => todo!(),
+              Nil => self.set_register(list_and_result, Nil),
+              _ => break 'instruction Err(PidginError::ArgumentNotList),
+            };
+          }
           Concat(list_and_result, other_list) => todo!(),
           Take(list_and_result, n) => todo!(),
           Drop(list_and_result, n) => todo!(),
