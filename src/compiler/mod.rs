@@ -456,4 +456,32 @@ mod tests {
     ],
     vec![1.into(), 2.into()]
   );
+
+  test_ir_and_bytecode_and_output!(
+    empty_list_is_empty,
+    "(empty? (list))",
+    ssa_block![EmptyList(0), IsEmpty(1, 0), Return(1)],
+    block![EmptyList(0), IsEmpty(0, 0), Return(0)],
+    true
+  );
+
+  test_ir_and_bytecode_and_output!(
+    nonempty_list_is_nonempty,
+    "(empty? (list 1))",
+    ssa_block![
+      Const(0, 1),
+      EmptyList(1),
+      Push((1, 2), 0),
+      IsEmpty(3, 2),
+      Return(3)
+    ],
+    block![
+      Const(0, 1),
+      EmptyList(1),
+      Push(1, 0),
+      IsEmpty(0, 1),
+      Return(0)
+    ],
+    false
+  );
 }

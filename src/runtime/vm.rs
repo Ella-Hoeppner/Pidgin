@@ -876,7 +876,16 @@ impl EvaluationState {
           And(result, bool_1, bool_2) => todo!(),
           Or(result, bool_1, bool_2) => todo!(),
           Xor(result, bool_1, bool_2) => todo!(),
-          IsEmpty(result, collection) => todo!(),
+          IsEmpty(result, collection) => self.set_register(
+            result,
+            match self.get_register(collection) {
+              List(list) => list.is_empty(),
+              Hashset(set) => set.is_empty(),
+              Hashmap(hashmap) => hashmap.is_empty(),
+              Nil => true,
+              _ => break 'instruction Err(PidginError::ArgumentNotList),
+            },
+          ),
           First(result, collection) => self.set_register(
             result,
             match self.get_register(collection) {

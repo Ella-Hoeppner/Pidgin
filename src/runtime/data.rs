@@ -301,9 +301,9 @@ pub enum GenericValue<I, O, R, M> {
   CoreFn(CoreFnId),
   CompositeFn(Rc<GenericCompositeFunction<I, O, R, M>>),
   ExternalFn(Rc<ExternalFunction>),
-  ExternalObject(Rc<dyn Any>),
+  ExternalObject(Rc<Rc<dyn Any>>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
-  Error(PidginError),
+  Error(Box<PidginError>),
 }
 
 pub type Value = GenericValue<Register, Register, Register, ()>;
@@ -443,11 +443,11 @@ impl Value {
     }
   }
   pub fn external<T: Any>(external_object: T) -> Self {
-    ExternalObject(Rc::new(external_object))
+    ExternalObject(Rc::new(Rc::new(external_object)))
   }
   pub fn casted_external<T: Any>(self) -> Option<Rc<T>> {
     if let ExternalObject(external_object) = self {
-      external_object.downcast::<T>().ok()
+      Rc::downcast::<T>((*external_object).clone()).ok()
     } else {
       None
     }
@@ -533,6 +533,6 @@ impl From<ExternalFunction> for Value {
 }
 impl From<PidginError> for Value {
   fn from(e: PidginError) -> Self {
-    Error(e)
+    Error(Box::new(e))
   }
 }

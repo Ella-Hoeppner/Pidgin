@@ -28,9 +28,9 @@ Runtime stuff:
   * these should store a function and a vec of arguments passed to it
   * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
   * I guess the `Compose` and `Memoize` instructions might need special vm-level machinery too?
-* support cells
 * write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
-  * not sure exactly how to do this...`SingleArityCompositeFunction`
+  * not sure exactly how to do this...
+* string manipulation instructions
 * implement remaining instructions, and write tests
 * add an ability to overload certain core functions like `=` and `+` for specific `ExternalObject` types
   * for `=`, for example, this would work by having a function like `EvaluationState::add_external_eq_type<T: PartialEq>` that adds the `TypeId` of the provided type to a `HashMap` mapping to a function that uses the type's `PartialEq` to do the comparison
@@ -46,13 +46,21 @@ Runtime stuff:
     * go blocks seem like maybe the tough part
 
 Compiler stuff
+* support compiling the rest of the math functions
+  * ==, zero?,  nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
+* support compiling boolean functions
+  * =, not=, not, and, or, xor
+* support compiling type checkers, converters
+  * nil?, bool?, char?, num?, int?, float?, symbol?, str?, list?, map?, set?, collection?, fn?, error?, bool, char, num, int, float, symbol, to-list, to-map, to-set, error
 * do real error handling for `allocate_registers` rather than `expect`ing everywhere
+* get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
+  * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
 * support compiling functions
 * support closures
   * will have to lambda lift them, this will probably be kinda tricky
-  * I guess I should do lambda lifting at the ast level?
-* get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
-  * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
+    * I guess I should do lambda lifting at the ast level?
+      * need to have a system for walking the AST and keeping track of the lexical scope. This will be useful for some other things to, e.g. making sure values are never shadowed
+* support compiling if statements
 * IR-level optimizations:
   * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
   * [`Call`, `Return`] -> `CallAndReturn`

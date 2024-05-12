@@ -89,6 +89,7 @@ pub fn build_ir_from_fn_application(
         match fn_name.as_str() {
           "first" => Some(First(*taken_virtual_registers, args[0])),
           "last" => Some(Last(*taken_virtual_registers, args[0])),
+          "empty?" => Some(IsEmpty(*taken_virtual_registers, args[0])),
           other => None,
         }
       } else {
