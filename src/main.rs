@@ -12,7 +12,7 @@ use ordered_float::OrderedFloat;
 use program_macro::block;
 
 use crate::compiler::ast_to_ir::{expression_ast_to_ir, token_to_value};
-use crate::compiler::parse::parse_sexp;
+use crate::compiler::parse::{parse_sexp, Token};
 use crate::compiler::transformations::{
   allocate_registers, track_register_lifetimes,
 };

@@ -2,7 +2,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 Runtime stuff:
-* At some point `GenericValue` became 24 bytes rather than 16, need to fix that
 * consider supporting a way to reconstruct the lexical environment at runtime
   * such that it would be possible to, e.g., have an `environment` function that returns the current lexical environment as a hashmap
   * the main purpose would be for interactive error handling
