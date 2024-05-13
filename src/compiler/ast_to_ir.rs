@@ -22,6 +22,7 @@ pub enum ASTError {
   InvalidFunctionDefintionArgumentList(Option<TokenTree>),
   InvalidFunctionDefintionArgument(TokenTree),
   FunctionDefinitionMissingBody,
+  UnboundSymbol(String),
 }
 impl Display for ASTError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -58,6 +59,9 @@ impl Display for ASTError {
       FunctionDefinitionMissingBody => {
         write!(f, "no body for function definition")
       }
+      UnboundSymbol(symbol_name) => {
+        write!(f, "encountered unbound symbol {symbol_name}")
+      }
     }
   }
 }
@@ -65,15 +69,28 @@ impl Error for ASTError {}
 
 #[derive(Debug, Clone, Default)]
 pub struct SymbolLedger {
-  assignments: HashMap<String, u16>,
+  assignments: HashMap<String, SymbolIndex>,
 }
 impl SymbolLedger {
-  fn symbol_index(&mut self, symbol: String) -> u16 {
+  fn symbol_index(&mut self, symbol: String) -> SymbolIndex {
     self.assignments.get(&symbol).cloned().unwrap_or_else(|| {
       let next_free_index = self.assignments.len() as u16;
       self.assignments.insert(symbol, next_free_index);
       next_free_index
     })
+  }
+  fn get_name(&self, index: SymbolIndex) -> Option<String> {
+    self
+      .assignments
+      .iter()
+      .filter_map(|(name, symbol_index)| {
+        if *symbol_index == index {
+          Some(name.clone())
+        } else {
+          None
+        }
+      })
+      .next()
   }
 }
 
@@ -281,7 +298,7 @@ pub fn build_ast_ir(
                 body,
                 &new_bindings,
                 symbol_ledger,
-                taken_virtual_registers,
+                &mut (arg_count.clone() as SSARegister),
                 &mut function_instructions,
                 &mut function_constants,
               )?;
@@ -328,12 +345,33 @@ pub fn build_ast_ir(
         Err(ASTError::EmptyList)
       }
     }
-    Leaf(s) => Ok(push_constant(
-      token_to_value(symbol_ledger, s),
-      taken_virtual_registers,
-      instructions,
-      constants,
-    )),
+    Leaf(s) => {
+      let value = token_to_value(symbol_ledger, s.clone());
+      if let Symbol(symbol_index) = value {
+        if let Some(binding_index) = bindings.get(&symbol_index) {
+          Ok(*binding_index as SSARegister)
+        } else {
+          let symbol_name = symbol_ledger.get_name(symbol_index).unwrap();
+          if let Some(fn_id) = CoreFnId::from_name(&symbol_name) {
+            Ok(push_constant(
+              CoreFn(fn_id),
+              taken_virtual_registers,
+              instructions,
+              constants,
+            ))
+          } else {
+            Err(ASTError::UnboundSymbol(symbol_name))
+          }
+        }
+      } else {
+        Ok(push_constant(
+          value,
+          taken_virtual_registers,
+          instructions,
+          constants,
+        ))
+      }
+    }
   }
 }
 

@@ -14,6 +14,7 @@ pub type SSAValue<M> =
 
 mod tests {
   use program_macro::{block, ssa_block};
+  use std::fmt::Debug;
 
   use crate::{
     blocks::GenericBlock,
@@ -32,6 +33,10 @@ mod tests {
     Value,
   };
 
+  fn debug_string<T: Debug>(x: &T) -> String {
+    format!("{:?}", x)
+  }
+
   macro_rules! test_ir_and_bytecode_and_output {
     (
       $test_name:ident,
@@ -43,9 +48,17 @@ mod tests {
       #[test]
       fn $test_name() {
         let ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
-        assert_eq!(ir, $expected_ir, "incorrect intermediate representation");
+        assert_eq!(
+          debug_string(&ir),
+          debug_string(&$expected_ir),
+          "incorrect intermediate representation"
+        );
         let bytecode = ir_to_bytecode(ir).unwrap();
-        assert_eq!(bytecode, $expected_bytecode, "incorrect bytecode");
+        assert_eq!(
+          debug_string(&bytecode),
+          debug_string(&$expected_bytecode),
+          "incorrect bytecode"
+        );
         let output = EvaluationState::new(bytecode).evaluate().unwrap();
         assert_eq!(output, Some($expected_output.into()), "incorrect output");
       }
