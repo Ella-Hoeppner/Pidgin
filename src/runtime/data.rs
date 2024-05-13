@@ -275,6 +275,9 @@ impl AritySpecifier {
   pub fn can_accept(&self, count: usize) -> bool {
     self.count as usize == count
   }
+  pub fn register_count(&self) -> u8 {
+    self.count
+  }
 }
 impl Display for AritySpecifier {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -1,23 +1,19 @@
 Early WIP programming language. Intended to be a Clojure-like Lisp with a more powerful metaprogramming system, compiling to a register-based VM. Intended to be radically extensible, easily integrable with the Rust ecosystem, and ideal for creating DSLs (both DSLs hosted on it's own runtime, and DSLs that compile to entirely separate languages/runtimes). Following up on [Quoot](https://github.com/Ella-Hoeppner/Quoot).
 
 # to-do
+General:
+* Add a "debug mode" to the runtime + compiler. In this mode, each stackframe carries a HashMap describing the local environment. On the runtime side, this means there needs to be an extra `LocalBind` instruction that adds values to that hashmap. On the compiler side, that instruction needs to be emitted at the start of every function for each input, with the proper name given the lexical scope.
+  * Most optimizations will probably have to be disabled in this mode. Specifically, function inlining will probably be impossible.
+  * This mode will probably be *much* slower, not only because of the disabling of optimziations, but also because the local environment will keep the reference count of all collections above 1 at all times, so the runtime will have to clone a collection for every single modification
+  * This will be helpful for debugging things tho, as it will be possible to write a error effect handler that e.g. prints the entire lexical scope to the console, or starts up a repl within that scope
+
 Runtime stuff:
-* consider supporting a way to reconstruct the lexical environment at runtime
-  * such that it would be possible to, e.g., have an `environment` function that returns the current lexical environment as a hashmap
-  * the main purpose would be for interactive error handling
-    * it would be nice if errors could be handled by basically giving you a repl wherever they occurred, but that isn't possible with the current evaluation model, since there isn't really an environment and instead values just exist in the registers
-  * this seems like it would be pretty difficult
-    * especially given that I plan to clear variables as soon as they are last used, instead of at the end of scope...
-      * I guess this could be disabled in a debug mode?
-        * I guess if I go this route I could also just not do register allocation in debug mode and make everything use the environment? That would make implementing this very easy, but would require pretty different compilation models
-          * I guess if there's just one pass that that replaces all `Bind` instructions with register allocations then they wouldn't need to be all that different?
-            * but functions are already implemented without using `Bind`...
-* handle external errors
 * destructuring
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
 * replace coroutines with effect handlers
   * get rid of cells I guess? You can just emulate them with a "state" handler
+* handle external errors
 * support laziness
   * add a new type for a lazy sequence (not sure what to call it... `Lazy`? `Iterator`?)
     * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values
@@ -27,9 +23,7 @@ Runtime stuff:
   * these should store a function and a vec of arguments passed to it
   * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
   * I guess the `Compose` and `Memoize` instructions might need special vm-level machinery too?
-* write tests that make sure the single-ownership `Rc` optimization is properly avoiding unnecessary clones
-  * not sure exactly how to do this...
-* string manipulation instructions
+* add string manipulation instructions
 * implement remaining instructions, and write tests
 * add an ability to overload certain core functions like `=` and `+` for specific `ExternalObject` types
   * for `=`, for example, this would work by having a function like `EvaluationState::add_external_eq_type<T: PartialEq>` that adds the `TypeId` of the provided type to a `HashMap` mapping to a function that uses the type's `PartialEq` to do the comparison
@@ -54,7 +48,6 @@ Compiler stuff
 * do real error handling for `allocate_registers` rather than `expect`ing everywhere
 * get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
   * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
-* support compiling functions
 * support closures
   * will have to lambda lift them, this will probably be kinda tricky
     * I guess I should do lambda lifting at the ast level?

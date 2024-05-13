@@ -43,22 +43,26 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
     NewM: Clone,
     E,
     F: Fn(
+      u8,
       &[Instruction<I, O, R>],
       &M,
     ) -> Result<(Vec<Instruction<NewI, NewO, NewR>>, NewM), E>,
   >(
     &self,
+    preallocated_registers: u8,
     replacer: &F,
   ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E> {
     let (new_instructions, new_metadata) =
-      replacer(&*self.instructions, &self.metadata)?;
+      replacer(preallocated_registers, &*self.instructions, &self.metadata)?;
     let mut translated_constants = vec![];
     for value in self.constants.into_iter() {
       translated_constants.push(match value {
         CompositeFn(f_ref) => {
           CompositeFn(Rc::new(GenericCompositeFunction::new(
-            (*f_ref).args.clone(),
-            (*f_ref).instructions.translate_instructions(replacer)?,
+            f_ref.args.clone(),
+            f_ref
+              .instructions
+              .translate_instructions(f_ref.args.register_count(), replacer)?,
           )))
         }
         Nil => Nil,
@@ -87,23 +91,31 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
     NewM: Clone,
     E,
     F: Fn(
+      u8,
       &[Instruction<I, O, R>],
       &[GenericValue<I, O, R, M>],
       &M,
     ) -> Result<NewM, E>,
   >(
     &self,
+    preallocated_registers: u8,
     replacer: &F,
   ) -> Result<GenericBlock<I, O, R, NewM>, E> {
-    let new_metadata =
-      replacer(&*self.instructions, &*self.constants, &self.metadata)?;
+    let new_metadata = replacer(
+      preallocated_registers,
+      &*self.instructions,
+      &*self.constants,
+      &self.metadata,
+    )?;
     let mut translated_constants = vec![];
     for value in self.constants.into_iter() {
       translated_constants.push(match value {
         CompositeFn(f_ref) => {
           CompositeFn(Rc::new(GenericCompositeFunction::new(
-            (*f_ref).args.clone(),
-            (*f_ref).instructions.replace_metadata(replacer)?,
+            f_ref.args.clone(),
+            f_ref
+              .instructions
+              .replace_metadata(f_ref.args.register_count(), replacer)?,
           )))
         }
         Nil => Nil,

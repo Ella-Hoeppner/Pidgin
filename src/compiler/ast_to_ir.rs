@@ -69,28 +69,26 @@ impl Error for ASTError {}
 
 #[derive(Debug, Clone, Default)]
 pub struct SymbolLedger {
-  assignments: HashMap<String, SymbolIndex>,
+  names_to_indeces: HashMap<String, SymbolIndex>,
+  indeces_to_names: HashMap<SymbolIndex, String>,
 }
 impl SymbolLedger {
   fn symbol_index(&mut self, symbol: String) -> SymbolIndex {
-    self.assignments.get(&symbol).cloned().unwrap_or_else(|| {
-      let next_free_index = self.assignments.len() as u16;
-      self.assignments.insert(symbol, next_free_index);
-      next_free_index
-    })
-  }
-  fn get_name(&self, index: SymbolIndex) -> Option<String> {
     self
-      .assignments
-      .iter()
-      .filter_map(|(name, symbol_index)| {
-        if *symbol_index == index {
-          Some(name.clone())
-        } else {
-          None
-        }
+      .names_to_indeces
+      .get(&symbol)
+      .cloned()
+      .unwrap_or_else(|| {
+        let next_free_index = self.names_to_indeces.len() as u16;
+        self
+          .indeces_to_names
+          .insert(next_free_index, symbol.clone());
+        self.names_to_indeces.insert(symbol, next_free_index);
+        next_free_index
       })
-      .next()
+  }
+  fn symbol_name(&self, index: SymbolIndex) -> Option<&String> {
+    self.indeces_to_names.get(&index)
   }
 }
 
@@ -351,7 +349,7 @@ pub fn build_ast_ir(
         if let Some(binding_index) = bindings.get(&symbol_index) {
           Ok(*binding_index as SSARegister)
         } else {
-          let symbol_name = symbol_ledger.get_name(symbol_index).unwrap();
+          let symbol_name = symbol_ledger.symbol_name(symbol_index).unwrap();
           if let Some(fn_id) = CoreFnId::from_name(&symbol_name) {
             Ok(push_constant(
               CoreFn(fn_id),
@@ -360,7 +358,7 @@ pub fn build_ast_ir(
               constants,
             ))
           } else {
-            Err(ASTError::UnboundSymbol(symbol_name))
+            Err(ASTError::UnboundSymbol(symbol_name.clone()))
           }
         }
       } else {

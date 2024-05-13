@@ -60,7 +60,11 @@ mod tests {
           "incorrect bytecode"
         );
         let output = EvaluationState::new(bytecode).evaluate().unwrap();
-        assert_eq!(output, Some($expected_output.into()), "incorrect output");
+        assert_eq!(
+          debug_string(&output),
+          debug_string(&Some(Value::from($expected_output))),
+          "incorrect output"
+        );
       }
     };
   }
@@ -517,5 +521,49 @@ mod tests {
       Return(0)
     ],
     Value::composite_fn(1, block![Multiply(0, 0, 0), Return(0)])
+  );
+
+  test_ir_and_bytecode_and_output!(
+    fn_definition_mutliarg,
+    "(fn (x y) (* x x y y))",
+    ssa_block![
+      Const(
+        0,
+        GenericValue::composite_fn(
+          2,
+          ssa_block![
+            Multiply(2, 0, 0),
+            Multiply(3, 2, 1),
+            Multiply(4, 3, 1),
+            Return(4)
+          ]
+        )
+      ),
+      Return(0)
+    ],
+    block![
+      Const(
+        0,
+        Value::composite_fn(
+          2,
+          block![
+            Multiply(0, 0, 0),
+            Multiply(0, 0, 1),
+            Multiply(0, 0, 1),
+            Return(0)
+          ]
+        )
+      ),
+      Return(0)
+    ],
+    Value::composite_fn(
+      2,
+      block![
+        Multiply(0, 0, 0),
+        Multiply(0, 0, 1),
+        Multiply(0, 0, 1),
+        Return(0)
+      ]
+    )
   );
 }
