@@ -13,8 +13,8 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  ConstIndex, CoreFnIndex, CoroutineState, GenericCompositeFunction,
-  Instruction, Register, StackFrame,
+  blocks::GenericBlock, ConstIndex, CoreFnIndex, CoroutineState,
+  GenericCompositeFunction, Instruction, Register, StackFrame,
 };
 
 use super::{
@@ -305,6 +305,17 @@ pub enum GenericValue<I, O, R, M> {
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(Box<PidginError>),
 }
+impl<I, O, R, M> GenericValue<I, O, R, M> {
+  pub fn composite_fn<
+    A: Into<AritySpecifier>,
+    B: Into<GenericBlock<I, O, R, M>>,
+  >(
+    args: A,
+    instructions: B,
+  ) -> Self {
+    CompositeFn(Rc::new(GenericCompositeFunction::new(args, instructions)))
+  }
+}
 
 pub type Value = GenericValue<Register, Register, Register, ()>;
 use GenericValue::*;
@@ -452,22 +463,9 @@ impl Value {
       None
     }
   }
-  pub fn composite_fn<A: Into<AritySpecifier>, I: Into<Block>>(
-    args: A,
-    instructions: I,
-  ) -> Value {
-    CompositeFn(Rc::new(CompositeFunction::new(args, instructions)))
-  }
   pub fn fn_coroutine(f: CompositeFunction) -> Value {
     Coroutine(Rc::new(Some(RefCell::new(Some(f.into())))))
   }
-}
-
-pub fn composite_fn<A: Into<AritySpecifier>, I: Into<Block>>(
-  args: A,
-  instructions: I,
-) -> Value {
-  CompositeFn(Rc::new(CompositeFunction::new(args, instructions)))
 }
 
 impl Display for Value {

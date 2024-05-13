@@ -10,15 +10,15 @@ mod tests {
 
   use crate::runtime::control::CompositeFunction;
   use crate::runtime::error::PidginError;
+  use crate::Block;
   use crate::EvaluationState;
-  use crate::{composite_fn, Block};
   use crate::{
     runtime::core_functions::CoreFnId,
     ConstIndex, ExternalFunction,
     GenericValue::{self, *},
     Instruction::*,
     Num::{self, *},
-    Register,
+    Register, Value,
   };
   use minivec::mini_vec;
   use ordered_float::OrderedFloat;
@@ -95,7 +95,7 @@ mod tests {
   simple_register_test!(
     call_constant_function,
     block![
-      Const(0, composite_fn(0, block![Const(0, 5), Return(0)])),
+      Const(0, Value::composite_fn(0, block![Const(0, 5), Return(0)])),
       Call(1, 0, 0)
     ],
     (1, 5)
@@ -105,7 +105,10 @@ mod tests {
     call_square_function,
     block![
       Const(0, 10),
-      Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
+      Const(
+        1,
+        Value::composite_fn(1, block![Multiply(0, 0, 0), Return(0)])
+      ),
       Call(2, 1, 1),
       CopyArgument(0)
     ],
@@ -117,7 +120,10 @@ mod tests {
     call_square_function_twice,
     block![
       Const(0, 10),
-      Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
+      Const(
+        1,
+        Value::composite_fn(1, block![Multiply(0, 0, 0), Return(0)])
+      ),
       Call(0, 1, 1),
       StealArgument(0),
       Call(0, 1, 1),
@@ -132,10 +138,13 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        composite_fn(
+        Value::composite_fn(
           1,
           block![
-            Const(1, composite_fn(1, block![Multiply(0, 0, 0), Return(0)])),
+            Const(
+              1,
+              Value::composite_fn(1, block![Multiply(0, 0, 0), Return(0)])
+            ),
             Call(0, 1, 1),
             StealArgument(0),
             Call(0, 1, 1),
@@ -157,7 +166,7 @@ mod tests {
       Const(1, 3),
       Const(
         2,
-        composite_fn(
+        Value::composite_fn(
           2,
           block![Multiply(0, 1, 0), Multiply(0, 0, 0), Return(0)]
         )
@@ -177,7 +186,7 @@ mod tests {
       Const(2, 4),
       Const(
         4,
-        composite_fn(
+        Value::composite_fn(
           3,
           block![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )
@@ -196,7 +205,7 @@ mod tests {
       Const(0, vec![2.into(), 3.into(), 4.into()]),
       Const(
         1,
-        composite_fn(
+        Value::composite_fn(
           3,
           block![Multiply(0, 1, 0), Multiply(0, 2, 0), Return(0)]
         )
@@ -361,7 +370,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        composite_fn(
+        Value::composite_fn(
           1,
           block![
             IsPos(1, 0),
@@ -387,7 +396,7 @@ mod tests {
       Const(0, 10),
       Const(
         1,
-        composite_fn(
+        Value::composite_fn(
           1,
           block![
             IsPos(1, 0),
@@ -412,7 +421,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        composite_fn(
+        Value::composite_fn(
           1,
           block![
             IsPos(1, 0),
@@ -438,7 +447,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        composite_fn(
+        Value::composite_fn(
           1,
           block![
             IsPos(1, 0),
@@ -463,7 +472,7 @@ mod tests {
       Const(0, (u16::MAX as i64)),
       Const(
         1,
-        composite_fn(
+        Value::composite_fn(
           1,
           block![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
         )
@@ -515,7 +524,7 @@ mod tests {
   simple_register_test!(
     create_coroutine,
     block![
-      Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
+      Const(0, Value::composite_fn(0, block![EmptyList(0), Return(0)])),
       CreateCoroutine(0),
     ],
   );
@@ -523,7 +532,7 @@ mod tests {
   simple_register_test!(
     run_coroutine,
     block![
-      Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
+      Const(0, Value::composite_fn(0, block![EmptyList(0), Return(0)])),
       CreateCoroutine(0),
       Call(1, 0, 0)
     ],
@@ -535,10 +544,10 @@ mod tests {
     block![
       Const(
         0,
-        composite_fn(
+        Value::composite_fn(
           0,
           block![
-            Const(0, composite_fn(0, block![EmptyList(0), Return(0)])),
+            Const(0, Value::composite_fn(0, block![EmptyList(0), Return(0)])),
             CreateCoroutine(0),
             Call(1, 0, 0),
             Return(1)
@@ -556,7 +565,7 @@ mod tests {
     block![
       Const(
         0,
-        composite_fn(
+        Value::composite_fn(
           0,
           block![
             Const(0, "yielded value!"),
@@ -579,12 +588,12 @@ mod tests {
     block![
       Const(
         0,
-        composite_fn(
+        Value::composite_fn(
           0,
           block![
             Const(
               0,
-              composite_fn(
+              Value::composite_fn(
                 0,
                 block![
                   Const(0, "first yield!"),
@@ -601,7 +610,7 @@ mod tests {
             Yield(2),
             Const(
               0,
-              composite_fn(
+              Value::composite_fn(
                 0,
                 block![
                   Const(0, "second yield!"),
@@ -634,7 +643,7 @@ mod tests {
   simple_register_test!(
     run_coroutine_with_args,
     block![
-      Const(0, composite_fn(2, block![Add(2, 0, 1), Return(2)])),
+      Const(0, Value::composite_fn(2, block![Add(2, 0, 1), Return(2)])),
       CreateCoroutine(0),
       Const(1, 1),
       Const(2, 2),
@@ -650,7 +659,7 @@ mod tests {
     block![
       Const(
         0,
-        composite_fn(
+        Value::composite_fn(
           2,
           block![
             Add(0, 0, 1),
@@ -680,7 +689,7 @@ mod tests {
   simple_register_test!(
     coroutine_returns_error,
     block![
-      Const(0, composite_fn(2, block![Add(0, 0, 1), Return(0)])),
+      Const(0, Value::composite_fn(2, block![Add(0, 0, 1), Return(0)])),
       CreateCoroutine(0),
       Const(1, "this isn't a number!!!"),
       Const(2, "this isn't either! so adding these will throw an error"),
@@ -699,7 +708,7 @@ mod tests {
   simple_register_test!(
     coroutine_is_alive,
     block![
-      Const(0, composite_fn(1, block![Yield(0), Return(0)])),
+      Const(0, Value::composite_fn(1, block![Yield(0), Return(0)])),
       CreateCoroutine(0),
       Const(1, 1),
       Call(1, 0, 1),

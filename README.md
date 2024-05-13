@@ -66,6 +66,8 @@ Compiler stuff
   * [`CallSelf`, `Return`] -> `CallSelfAndReturn`
   * [`Apply`, `Return`] -> `ApplyAndReturn`
   * [`ApplySelf`, `Return`] -> `CallSelfAndReturn`
+  * [`Clear`, `Clear`] -> `Clear2`, [`Clear`, `Clear`, `Clear`] -> `Clear3`
+    * need to implement `Clear2` and `Clear3` first
   * Function inlining
   * Functions ending with `CallSelfAndReturn` that can put their return values back into the corresponding input registers can just `Jump` back to the start of the function
   * When a value reaches the end of its lifetime without being replaced, insert a `Clear` instruction

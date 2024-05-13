@@ -29,6 +29,7 @@ mod tests {
     GenericValue::{self, *},
     Instruction::*,
     Num::{self, *},
+    Value,
   };
 
   macro_rules! test_ir_and_bytecode_and_output {
@@ -483,5 +484,25 @@ mod tests {
       Return(0)
     ],
     false
+  );
+
+  test_ir_and_bytecode_and_output!(
+    fn_definition,
+    "(fn (x) (* x x))",
+    ssa_block![
+      Const(
+        0,
+        GenericValue::composite_fn(1, ssa_block![Multiply(1, 0, 0), Return(1)])
+      ),
+      Return(0)
+    ],
+    block![
+      Const(
+        0,
+        Value::composite_fn(1, block![Multiply(0, 0, 0), Return(0)])
+      ),
+      Return(0)
+    ],
+    Value::composite_fn(1, block![Multiply(0, 0, 0), Return(0)])
   );
 }

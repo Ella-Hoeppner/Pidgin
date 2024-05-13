@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::runtime::core_functions::CoreFnId;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Tree<T> {
   Inner(Vec<Tree<T>>),
   Leaf(T),
@@ -75,6 +75,8 @@ pub enum Token {
   Symbol(String),
 }
 
+pub type TokenTree = Tree<Token>;
+
 impl TryFrom<String> for Token {
   type Error = CantParseTokenError;
 
@@ -111,7 +113,7 @@ impl TryFrom<&str> for Token {
   }
 }
 
-impl TryFrom<Tree<String>> for Tree<Token> {
+impl TryFrom<Tree<String>> for TokenTree {
   type Error = CantParseTokenError;
 
   fn try_from(value: Tree<String>) -> Result<Self, Self::Error> {

@@ -6,7 +6,7 @@ use enum_map::{enum_map, Enum, EnumMap};
 use GenericValue::*;
 use Num::*;
 
-#[derive(Debug, Enum, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, Enum, PartialEq, Eq, Hash, Clone, Copy)]
 pub(crate) enum CoreFnId {
   Print,
   Apply,
@@ -139,7 +139,7 @@ pub(crate) enum CoreFnId {
 use CoreFnId as F;
 
 impl CoreFnId {
-  fn name(&self) -> &str {
+  pub fn name(&self) -> &str {
     match self {
       F::Print => "print",
       F::Apply => "apply",
@@ -270,7 +270,7 @@ impl CoreFnId {
       F::UpdateCell => todo!(),
     }
   }
-  fn from_name(name: &str) -> Option<Self> {
+  pub fn from_name(name: &str) -> Option<Self> {
     match name {
       "print" => Some(F::Print),
       "apply" => Some(F::Apply),
