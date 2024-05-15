@@ -12,17 +12,17 @@ pub type Block = GenericBlock<Register, Register, Register, ()>;
 #[derive(Clone, Debug)]
 pub struct GenericCompositeFunction<I, O, R, M> {
   pub args: AritySpecifier,
-  pub instructions: GenericBlock<I, O, R, M>,
+  pub block: GenericBlock<I, O, R, M>,
 }
 
 impl<I, O, R, M> GenericCompositeFunction<I, O, R, M> {
   pub fn new<A: Into<AritySpecifier>, T: Into<GenericBlock<I, O, R, M>>>(
     args: A,
-    instructions: T,
+    block: T,
   ) -> Self {
     Self {
       args: args.into(),
-      instructions: instructions.into(),
+      block: block.into(),
     }
   }
 }
@@ -103,9 +103,7 @@ impl From<CompositeFunction> for PausedCoroutine {
       started: false,
       args: f.args,
       arg_offset: 0,
-      state: CoroutineState::new_with_root_frame(StackFrame::root(
-        f.instructions,
-      )),
+      state: CoroutineState::new_with_root_frame(StackFrame::root(f.block)),
     }
   }
 }
@@ -135,7 +133,7 @@ impl StackFrame {
   ) -> Self {
     Self {
       beginning,
-      instructions: f.instructions.clone(),
+      instructions: f.block.clone(),
       instruction_index: 0,
       calling_function: Some(f),
       return_stack_index,

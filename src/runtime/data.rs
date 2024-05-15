@@ -415,7 +415,7 @@ impl Value {
         format!(
           "fn( {} args, {} instructions )",
           composite_fn.args.count,
-          composite_fn.instructions.len()
+          composite_fn.block.len()
         )
       }
       CoreFn(core_fn_id) => {

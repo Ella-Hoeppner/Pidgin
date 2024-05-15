@@ -30,13 +30,27 @@ impl<I, O, R> GenericBlock<I, O, R, ()> {
   }
 }
 impl<I, O, R, M> GenericBlock<I, O, R, M> {
+  pub fn new_with_metadata(
+    instructions: Vec<Instruction<I, O, R>>,
+    constants: Vec<GenericValue<I, O, R, M>>,
+    metadata: M,
+  ) -> Self {
+    Self {
+      instructions: instructions.into(),
+      constants: constants.into(),
+      metadata,
+    }
+  }
+}
+
+impl<I, O, R, M> GenericBlock<I, O, R, M> {
   pub fn len(&self) -> usize {
     self.instructions.len()
   }
 }
 
 impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
-  pub fn translate_instructions<
+  fn translate_inner<
     NewI: Clone,
     NewO: Clone,
     NewR: Clone,
@@ -45,15 +59,14 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
     F: Fn(
       u8,
       &[Instruction<I, O, R>],
+      Vec<GenericValue<NewI, NewO, NewR, NewM>>,
       &M,
-    ) -> Result<(Vec<Instruction<NewI, NewO, NewR>>, NewM), E>,
+    ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E>,
   >(
     &self,
     preallocated_registers: u8,
-    replacer: &F,
+    translator: &F,
   ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E> {
-    let (new_instructions, new_metadata) =
-      replacer(preallocated_registers, &*self.instructions, &self.metadata)?;
     let mut translated_constants = vec![];
     for value in self.constants.into_iter() {
       translated_constants.push(match value {
@@ -61,8 +74,8 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
           CompositeFn(Rc::new(GenericCompositeFunction::new(
             f_ref.args.clone(),
             f_ref
-              .instructions
-              .translate_instructions(f_ref.args.register_count(), replacer)?,
+              .block
+              .translate_inner(f_ref.args.register_count(), translator)?,
           )))
         }
         Nil => Nil,
@@ -81,63 +94,29 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
         Error(a) => Error(a.clone()),
       })
     }
-    Ok(GenericBlock {
-      instructions: (&*new_instructions).into(),
-      constants: (&*translated_constants).into(),
-      metadata: new_metadata,
-    })
+    translator(
+      preallocated_registers,
+      &self.instructions,
+      translated_constants,
+      &self.metadata,
+    )
   }
-  pub fn replace_metadata<
+  pub fn translate<
+    NewI: Clone,
+    NewO: Clone,
+    NewR: Clone,
     NewM: Clone,
     E,
     F: Fn(
       u8,
       &[Instruction<I, O, R>],
-      &[GenericValue<I, O, R, M>],
+      Vec<GenericValue<NewI, NewO, NewR, NewM>>,
       &M,
-    ) -> Result<NewM, E>,
+    ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E>,
   >(
     &self,
-    preallocated_registers: u8,
-    replacer: &F,
-  ) -> Result<GenericBlock<I, O, R, NewM>, E> {
-    let new_metadata = replacer(
-      preallocated_registers,
-      &*self.instructions,
-      &*self.constants,
-      &self.metadata,
-    )?;
-    let mut translated_constants = vec![];
-    for value in self.constants.into_iter() {
-      translated_constants.push(match value {
-        CompositeFn(f_ref) => {
-          CompositeFn(Rc::new(GenericCompositeFunction::new(
-            f_ref.args.clone(),
-            f_ref
-              .instructions
-              .replace_metadata(f_ref.args.register_count(), replacer)?,
-          )))
-        }
-        Nil => Nil,
-        Bool(a) => Bool(*a),
-        Char(a) => Char(*a),
-        Number(a) => Number(*a),
-        Symbol(a) => Symbol(*a),
-        Str(a) => Str(a.clone()),
-        List(a) => List(a.clone()),
-        Hashmap(a) => Hashmap(a.clone()),
-        Hashset(a) => Hashset(a.clone()),
-        CoreFn(a) => CoreFn(a.clone()),
-        ExternalFn(a) => ExternalFn(a.clone()),
-        ExternalObject(a) => ExternalObject(a.clone()),
-        Coroutine(a) => Coroutine(a.clone()),
-        Error(a) => Error(a.clone()),
-      })
-    }
-    Ok(GenericBlock {
-      instructions: self.instructions.clone(),
-      constants: (&*translated_constants).into(),
-      metadata: new_metadata,
-    })
+    translator: &F,
+  ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E> {
+    self.translate_inner(0, translator)
   }
 }

@@ -91,7 +91,7 @@ impl Error for LifetimeError {}
 #[derive(Clone, Debug)]
 pub struct RegisterLifetime {
   creation: InstructionTimestamp,
-  last_usage: Option<InstructionTimestamp>,
+  usages: Vec<InstructionTimestamp>,
   replacing: Option<SSARegister>,
   replaced_by: Option<SSARegister>,
 }
@@ -99,7 +99,7 @@ impl RegisterLifetime {
   fn new(creation_timestamp: InstructionTimestamp) -> Self {
     Self {
       creation: creation_timestamp,
-      last_usage: None,
+      usages: vec![],
       replacing: None,
       replaced_by: None,
     }
@@ -110,17 +110,20 @@ impl RegisterLifetime {
   ) -> Self {
     Self {
       creation: creation_timestamp,
-      last_usage: None,
+      usages: vec![],
       replacing: Some(replacing),
       replaced_by: None,
     }
+  }
+  fn last_usage(&self) -> Option<InstructionTimestamp> {
+    self.usages.last().cloned()
   }
 }
 
 pub fn track_register_lifetimes<M>(
   block: SSABlock<M>,
 ) -> Result<SSABlock<HashMap<SSARegister, RegisterLifetime>>, LifetimeError> {
-  block.replace_metadata(0, &|preallocated_registers, instructions, _, _| {
+  block.translate(&|preallocated_registers, instructions, constants, _| {
     let mut lifetimes: HashMap<SSARegister, RegisterLifetime> = HashMap::new();
     for preallocated_register in 0..preallocated_registers {
       lifetimes.insert(
@@ -138,10 +141,10 @@ pub fn track_register_lifetimes<M>(
               input_register,
               timestamp,
               replaced_by,
-              lifetime.last_usage.unwrap(),
+              lifetime.last_usage().unwrap(),
             ));
           }
-          lifetime.last_usage = Some(timestamp);
+          lifetime.usages.push(timestamp);
         } else {
           return Err(LifetimeError::UsedBeforeCreation(
             input_register,
@@ -167,10 +170,10 @@ pub fn track_register_lifetimes<M>(
               from_register,
               timestamp,
               replaced_by_register,
-              from_lifetime.last_usage.unwrap(),
+              from_lifetime.last_usage().unwrap(),
             ));
           } else {
-            from_lifetime.last_usage = Some(timestamp);
+            from_lifetime.usages.push(timestamp);
             from_lifetime.replaced_by = Some(to_register);
           }
         } else {
@@ -194,11 +197,15 @@ pub fn track_register_lifetimes<M>(
       }
     }
     for (register, lifetime) in lifetimes.iter() {
-      if lifetime.last_usage.is_none() {
+      if lifetime.usages.is_empty() {
         return Err(LifetimeError::Unused(*register, lifetime.creation));
       }
     }
-    Ok(lifetimes)
+    Ok(GenericBlock::new_with_metadata(
+      instructions.to_vec(),
+      constants,
+      lifetimes,
+    ))
   })
 }
 
@@ -214,144 +221,126 @@ impl Error for RegisterAllocationError {}
 pub fn allocate_registers(
   block: SSABlock<HashMap<SSARegister, RegisterLifetime>>,
 ) -> Result<Block, RegisterAllocationError> {
-  block.translate_instructions(
-    0,
-    &|preallocated_registers, instructions, lifetimes| {
-      Ok((
-        {
-          let mut ssa_to_runtime_registers: HashMap<SSARegister, Register> =
-            HashMap::new();
-          let mut taken_runtime_registers: HashSet<Register> = HashSet::new();
-          for preallocated_register in 0..preallocated_registers {
+  block.translate(&|preallocated_registers,
+                    instructions,
+                    constants,
+                    lifetimes| {
+    Ok(GenericBlock::new_with_metadata(
+      {
+        let mut ssa_to_runtime_registers: HashMap<SSARegister, Register> =
+          HashMap::new();
+        let mut taken_runtime_registers: HashSet<Register> = HashSet::new();
+        for preallocated_register in 0..preallocated_registers {
+          ssa_to_runtime_registers
+            .insert(preallocated_register as usize, preallocated_register);
+          taken_runtime_registers.insert(preallocated_register);
+        }
+        let mut translated_instructions = vec![];
+        for (timestamp, instruction) in instructions.iter().enumerate() {
+          let timestamp = timestamp as u16;
+          let mut finished_ssa_to_runtime_registers: HashMap<
+            SSARegister,
+            Register,
+          > = HashMap::new();
+          let finished_ssa_registers: Vec<SSARegister> =
             ssa_to_runtime_registers
-              .insert(preallocated_register as usize, preallocated_register);
-            taken_runtime_registers.insert(preallocated_register);
-          }
-          let mut translated_instructions = vec![];
-          for (timestamp, instruction) in instructions.iter().enumerate() {
-            let timestamp = timestamp as u16;
-            let mut finished_ssa_to_runtime_registers: HashMap<
-              SSARegister,
-              Register,
-            > = HashMap::new();
-            let finished_ssa_registers: Vec<SSARegister> =
-              ssa_to_runtime_registers
-                .iter()
-                .filter_map(|(ssa_register, _)| {
-                  let lifetime = lifetimes.get(&ssa_register).unwrap();
-                  if lifetime.replaced_by.is_none() {
-                    lifetime
-                      .last_usage
-                      .map(|last_usage| {
-                        if last_usage == timestamp {
-                          Some(*ssa_register)
-                        } else {
-                          None
-                        }
-                      })
-                      .flatten()
-                  } else {
-                    None
-                  }
-                })
-                .collect();
-            for finished_ssa_register in finished_ssa_registers {
-              let finised_runtime_register = ssa_to_runtime_registers
-                .remove(&finished_ssa_register)
-                .unwrap();
-              finished_ssa_to_runtime_registers
-                .insert(finished_ssa_register, finised_runtime_register);
-              let removed =
-                taken_runtime_registers.remove(&finised_runtime_register);
-              #[cfg(debug_assertions)]
-              assert!(removed)
-            }
-            for (ssa_registser, register_lifetime) in lifetimes.iter() {
-              if register_lifetime.creation == timestamp
-                && (timestamp != 0
-                  || *ssa_registser >= preallocated_registers as usize)
-              {
-                if let Some(replaced_ssa_registser) =
-                  register_lifetime.replacing
-                {
-                  let register = ssa_to_runtime_registers
-                    .remove(&replaced_ssa_registser)
-                    .expect("Didn't find register when trying to replace");
-                  ssa_to_runtime_registers.insert(*ssa_registser, register);
+              .iter()
+              .filter_map(|(ssa_register, _)| {
+                let lifetime = lifetimes.get(&ssa_register).unwrap();
+                if lifetime.replaced_by.is_none() {
+                  lifetime
+                    .last_usage()
+                    .map(|last_usage| {
+                      if last_usage == timestamp {
+                        Some(*ssa_register)
+                      } else {
+                        None
+                      }
+                    })
+                    .flatten()
                 } else {
-                  let min_unused_register = (0..Register::MAX)
-                    .filter(|i| !taken_runtime_registers.contains(i))
-                    .next()
-                    .expect("Failed to find unused register");
-                  let replaced_register = ssa_to_runtime_registers
-                    .insert(*ssa_registser, min_unused_register);
-                  #[cfg(debug_assertions)]
-                  assert!(replaced_register.is_none());
-                  let register_free =
-                    taken_runtime_registers.insert(min_unused_register);
-                  #[cfg(debug_assertions)]
-                  assert!(register_free);
+                  None
                 }
+              })
+              .collect();
+          for finished_ssa_register in finished_ssa_registers {
+            let finised_runtime_register = ssa_to_runtime_registers
+              .remove(&finished_ssa_register)
+              .unwrap();
+            finished_ssa_to_runtime_registers
+              .insert(finished_ssa_register, finised_runtime_register);
+            let removed =
+              taken_runtime_registers.remove(&finised_runtime_register);
+            #[cfg(debug_assertions)]
+            assert!(removed)
+          }
+          for (ssa_registser, register_lifetime) in lifetimes.iter() {
+            if register_lifetime.creation == timestamp
+              && (timestamp != 0
+                || *ssa_registser >= preallocated_registers as usize)
+            {
+              if let Some(replaced_ssa_registser) = register_lifetime.replacing
+              {
+                let register = ssa_to_runtime_registers
+                  .remove(&replaced_ssa_registser)
+                  .expect("Didn't find register when trying to replace");
+                ssa_to_runtime_registers.insert(*ssa_registser, register);
+              } else {
+                let min_unused_register = (0..Register::MAX)
+                  .filter(|i| !taken_runtime_registers.contains(i))
+                  .next()
+                  .expect("Failed to find unused register");
+                let replaced_register = ssa_to_runtime_registers
+                  .insert(*ssa_registser, min_unused_register);
+                #[cfg(debug_assertions)]
+                assert!(replaced_register.is_none());
+                let register_free =
+                  taken_runtime_registers.insert(min_unused_register);
+                #[cfg(debug_assertions)]
+                assert!(register_free);
               }
             }
-            translated_instructions.push(instruction.clone().translate(
-              |input: usize| -> u8 {
-                *ssa_to_runtime_registers
-                  .get(&input)
-                  .or_else(|| finished_ssa_to_runtime_registers.get(&input))
-                  .unwrap_or_else(|| {
-                    panic!(
-                      "no current real register found for input ssa register \
-                     {input} at timestamp {timestamp}"
-                    )
-                  })
-              },
-              |output: usize| -> u8 {
-                *ssa_to_runtime_registers.get(&output).unwrap_or_else(|| {
+          }
+          translated_instructions.push(instruction.clone().translate(
+            |input: usize| -> u8 {
+              *ssa_to_runtime_registers
+                .get(&input)
+                .or_else(|| finished_ssa_to_runtime_registers.get(&input))
+                .unwrap_or_else(|| {
                   panic!(
-                    "no current real register found for output ssa register \
-                   {output} at timestamp {timestamp}"
+                    "no current real register found for input ssa register \
+                     {input} at timestamp {timestamp}"
                   )
                 })
-              },
-              |(input, output): (usize, usize)| -> u8 {
-                *ssa_to_runtime_registers.get(&output).unwrap_or_else(|| {
-                  panic!(
+            },
+            |output: usize| -> u8 {
+              *ssa_to_runtime_registers.get(&output).unwrap_or_else(|| {
+                panic!(
+                  "no current real register found for output ssa register \
+                   {output} at timestamp {timestamp}"
+                )
+              })
+            },
+            |(input, output): (usize, usize)| -> u8 {
+              *ssa_to_runtime_registers.get(&output).unwrap_or_else(|| {
+                panic!(
                   "no current real register found for replacable ssa register \
                    ({input} => {output}) at timestamp {timestamp}\n"
                 )
-                })
-              },
-            ));
-          }
-          translated_instructions
-        },
-        (),
-      ))
-    },
-  )
+              })
+            },
+          ));
+        }
+        translated_instructions
+      },
+      constants,
+      (),
+    ))
+  })
 }
 
-#[derive(Clone, Debug)]
-pub enum CompilationError {
-  Lifetime(LifetimeError),
-  RegisterAllocation(RegisterAllocationError),
-}
-impl Display for CompilationError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      CompilationError::Lifetime(e) => write!(f, "lifetime error: {}", e),
-      CompilationError::RegisterAllocation(e) => {
-        write!(f, "register allocation error: {}", e)
-      }
-    }
-  }
-}
-impl Error for CompilationError {}
-
-pub fn ir_to_bytecode<M>(ir: SSABlock<M>) -> Result<Block, CompilationError> {
-  let lifetime_ir =
-    track_register_lifetimes(ir).map_err(|e| CompilationError::Lifetime(e))?;
-  allocate_registers(lifetime_ir)
-    .map_err(|e| CompilationError::RegisterAllocation(e))
+pub fn inline_core_fns(
+  block: SSABlock<HashMap<SSARegister, RegisterLifetime>>,
+) -> SSABlock<()> {
+  todo!()
 }
