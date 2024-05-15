@@ -39,6 +39,10 @@ Runtime stuff:
     * go blocks seem like maybe the tough part
 
 Compiler stuff
+* big refactor:
+  * `build_ast_ir` should, for all applications of core functions, should emit code like `[Const(x, CoreFnId), Const(x + 1, <First Argument>) ... Const(x + n, <Second Argument>), Call(x, x, n)]`, using the `CoreFnId` of whatever the function being called is, rather than emitting direct instructions corresponding to the core functions that appear in the AST.
+    * A later optimization pass can recognize anywhere there's a `Const(x, CoreFnId)` followed some time later by a `Call(x, x, n)` and can optimize it to be equivalent to the current output. This will look similar to what `build_application_ir` currently does (and that function can be removed, `build_ast_ir` won't need it)
+    * Having this separated out will be beneficial later for making inlining/partial evaluation more powerful
 * support compiling the rest of the math functions
   * ==, zero?,  nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
 * support compiling boolean functions
@@ -48,10 +52,9 @@ Compiler stuff
 * do real error handling for `allocate_registers` rather than `expect`ing everywhere
 * get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
   * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
-* support closures
-  * will have to lambda lift them, this will probably be kinda tricky
-    * I guess I should do lambda lifting at the ast level?
-      * need to have a system for walking the AST and keeping track of the lexical scope. This will be useful for some other things to, e.g. making sure values are never shadowed
+* lambda-lifting
+  * this will be an AST-level transformation
+    * basically, in `build_ast_ir`, whenever a `fn` is encountered and `bindings` is non-empty, the 
 * support compiling if statements
 * IR-level optimizations:
   * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
@@ -61,6 +64,9 @@ Compiler stuff
   * [`ApplySelf`, `Return`] -> `CallSelfAndReturn`
   * [`Clear`, `Clear`] -> `Clear2`, [`Clear`, `Clear`, `Clear`] -> `Clear3`
     * need to implement `Clear2` and `Clear3` first
+  * [`EmptyList`, `Const`, `Push` ... `Const`, `Push`] -> [`Const(Full List)`]
+    * Maybe even - if some elements are constant and some aren't, replace the `EmptyList .. Push` chain with a `Const(List)` with the size of the full list and all the constant values inlined, followed by `Set` instructions to add in the non-constant values
+  * translate `Map` over constant lists can to a sequence of individual function applications
   * Function inlining
   * Functions ending with `CallSelfAndReturn` that can put their return values back into the corresponding input registers can just `Jump` back to the start of the function
   * When a value reaches the end of its lifetime without being replaced, insert a `Clear` instruction
