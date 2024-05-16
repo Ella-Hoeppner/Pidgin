@@ -41,12 +41,12 @@ mod tests {
 
   macro_rules! test_raw_ir {
     ($sexp:expr, $expected_ir:expr) => {
-      /*let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
+      let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
       assert_eq!(
         debug_string(&raw_ir),
         debug_string(&$expected_ir),
         "incorrect raw ir"
-      );*/
+      );
     };
   }
 
@@ -94,7 +94,15 @@ mod tests {
     let sexp = "(+ 1 2)";
     test_raw_ir!(
       sexp,
-      (ssa_block![Const(0, 1), Const(1, 2), Add(2, 0, 1), Return(2)])
+      (ssa_block![
+        Const(0, 1),
+        Const(1, 2),
+        Const(2, CoreFn(CoreFnId::Add)),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Return(3)
+      ])
     );
     test_bytecode!(
       sexp,
@@ -108,7 +116,15 @@ mod tests {
     let sexp = "(- 1 2)";
     test_raw_ir!(
       sexp,
-      (ssa_block![Const(0, 1), Const(1, 2), Subtract(2, 0, 1), Return(2)])
+      (ssa_block![
+        Const(0, 1),
+        Const(1, 2),
+        Const(2, CoreFn(CoreFnId::Subtract)),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Return(3)
+      ])
     );
     test_bytecode!(
       sexp,
@@ -122,7 +138,15 @@ mod tests {
     let sexp = "(* 1 2)";
     test_raw_ir!(
       sexp,
-      (ssa_block![Const(0, 1), Const(1, 2), Multiply(2, 0, 1), Return(2)])
+      (ssa_block![
+        Const(0, 1),
+        Const(1, 2),
+        Const(2, CoreFn(CoreFnId::Multiply)),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Return(3)
+      ])
     );
     test_bytecode!(
       sexp,
@@ -136,7 +160,15 @@ mod tests {
     let sexp = "(/ 1 2)";
     test_raw_ir!(
       sexp,
-      (ssa_block![Const(0, 1), Const(1, 2), Divide(2, 0, 1), Return(2)])
+      (ssa_block![
+        Const(0, 1),
+        Const(1, 2),
+        Const(2, CoreFn(CoreFnId::Divide)),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Return(3)
+      ])
     );
     test_bytecode!(
       sexp,
@@ -153,10 +185,16 @@ mod tests {
       (ssa_block![
         Const(0, 1),
         Const(1, 2),
-        Add(2, 0, 1),
-        Const(3, 3),
-        Add(4, 2, 3),
-        Return(4)
+        Const(2, CoreFn(CoreFnId::Add)),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Const(4, 3),
+        Const(5, CoreFn(CoreFnId::Add)),
+        Call(6, 5, 2),
+        CopyArgument(3),
+        CopyArgument(4),
+        Return(6)
       ])
     );
     test_bytecode!(
@@ -182,8 +220,11 @@ mod tests {
         Const(0, 1),
         Const(1, 2),
         Const(2, 3),
-        Add(3, 0, 1),
-        Add(4, 3, 2),
+        Const(3, CoreFn(CoreFnId::Add)),
+        Call(4, 3, 3),
+        CopyArgument(0),
+        CopyArgument(1),
+        CopyArgument(2),
         Return(4)
       ])
     );
@@ -212,11 +253,14 @@ mod tests {
         Const(2, 3),
         Const(3, 4),
         Const(4, 5),
-        Add(5, 0, 1),
-        Add(6, 5, 2),
-        Add(7, 6, 3),
-        Add(8, 7, 4),
-        Return(8)
+        Const(5, CoreFn(CoreFnId::Add)),
+        Call(6, 5, 5),
+        CopyArgument(0),
+        CopyArgument(1),
+        CopyArgument(2),
+        CopyArgument(3),
+        CopyArgument(4),
+        Return(6)
       ])
     );
     test_bytecode!(
@@ -246,8 +290,11 @@ mod tests {
         Const(0, 2),
         Const(1, 3),
         Const(2, 4),
-        Multiply(3, 0, 1),
-        Multiply(4, 3, 2),
+        Const(3, CoreFn(CoreFnId::Multiply)),
+        Call(4, 3, 3),
+        CopyArgument(0),
+        CopyArgument(1),
+        CopyArgument(2),
         Return(4)
       ])
     );
@@ -276,11 +323,14 @@ mod tests {
         Const(2, 4),
         Const(3, 5),
         Const(4, 6),
-        Multiply(5, 0, 1),
-        Multiply(6, 5, 2),
-        Multiply(7, 6, 3),
-        Multiply(8, 7, 4),
-        Return(8)
+        Const(5, CoreFn(CoreFnId::Multiply)),
+        Call(6, 5, 5),
+        CopyArgument(0),
+        CopyArgument(1),
+        CopyArgument(2),
+        CopyArgument(3),
+        CopyArgument(4),
+        Return(6)
       ])
     );
     test_bytecode!(
@@ -304,7 +354,14 @@ mod tests {
   #[test]
   fn empty_list() {
     let sexp = "(list)";
-    test_raw_ir!(sexp, (ssa_block![EmptyList(0), Return(0)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Return(1)
+      ])
+    );
     test_bytecode!(sexp, (block![EmptyList(0), Return(0)]));
     test_output!(sexp, (vec![]));
   }
@@ -314,7 +371,13 @@ mod tests {
     let sexp = "(list 1)";
     test_raw_ir!(
       sexp,
-      (ssa_block![Const(0, 1), EmptyList(1), Push((1, 2), 0), Return(2)])
+      (ssa_block![
+        Const(0, 1),
+        Const(1, CoreFn(CoreFnId::CreateList)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Return(2)
+      ])
     );
     test_bytecode!(
       sexp,
@@ -332,11 +395,12 @@ mod tests {
         Const(0, 1),
         Const(1, 2),
         Const(2, 3),
-        EmptyList(3),
-        Push((3, 4), 0),
-        Push((4, 5), 1),
-        Push((5, 6), 2),
-        Return(6)
+        Const(3, CoreFn(CoreFnId::CreateList)),
+        Call(4, 3, 3),
+        CopyArgument(0),
+        CopyArgument(1),
+        CopyArgument(2),
+        Return(4)
       ])
     );
     test_bytecode!(
@@ -358,7 +422,16 @@ mod tests {
   #[test]
   fn nil_first() {
     let sexp = "(first nil)";
-    test_raw_ir!(sexp, (ssa_block![Const(0, Nil), First(1, 0), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, Nil),
+        Const(1, CoreFn(CoreFnId::First)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Return(2)
+      ])
+    );
     test_bytecode!(sexp, (block![Const(0, Nil), First(0, 0), Return(0)]));
     test_output!(sexp, Nil);
   }
@@ -366,7 +439,17 @@ mod tests {
   #[test]
   fn empty_list_first() {
     let sexp = "(first (list))";
-    test_raw_ir!(sexp, (ssa_block![EmptyList(0), First(1, 0), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Const(2, CoreFn(CoreFnId::First)),
+        Call(3, 2, 1),
+        CopyArgument(1),
+        Return(3)
+      ])
+    );
     test_bytecode!(sexp, (block![EmptyList(0), First(0, 0), Return(0)]));
     test_output!(sexp, Nil);
   }
@@ -378,10 +461,13 @@ mod tests {
       sexp,
       (ssa_block![
         Const(0, 1),
-        EmptyList(1),
-        Push((1, 2), 0),
-        First(3, 2),
-        Return(3)
+        Const(1, CoreFn(CoreFnId::CreateList)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Const(3, CoreFn(CoreFnId::First)),
+        Call(4, 3, 1),
+        CopyArgument(2),
+        Return(4)
       ])
     );
     test_bytecode!(
@@ -400,7 +486,16 @@ mod tests {
   #[test]
   fn nil_last() {
     let sexp = "(last nil)";
-    test_raw_ir!(sexp, (ssa_block![Const(0, Nil), Last(1, 0), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, Nil),
+        Const(1, CoreFn(CoreFnId::Last)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Return(2)
+      ])
+    );
     test_bytecode!(sexp, (block![Const(0, Nil), Last(0, 0), Return(0)]));
     test_output!(sexp, Nil);
   }
@@ -408,7 +503,17 @@ mod tests {
   #[test]
   fn empty_list_last() {
     let sexp = "(last (list))";
-    test_raw_ir!(sexp, (ssa_block![EmptyList(0), Last(1, 0), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Const(2, CoreFn(CoreFnId::Last)),
+        Call(3, 2, 1),
+        CopyArgument(1),
+        Return(3)
+      ])
+    );
     test_bytecode!(sexp, (block![EmptyList(0), Last(0, 0), Return(0)]));
     test_output!(sexp, Nil);
   }
@@ -420,10 +525,13 @@ mod tests {
       sexp,
       (ssa_block![
         Const(0, 1),
-        EmptyList(1),
-        Push((1, 2), 0),
-        Last(3, 2),
-        Return(3)
+        Const(1, CoreFn(CoreFnId::CreateList)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Const(3, CoreFn(CoreFnId::Last)),
+        Call(4, 3, 1),
+        CopyArgument(2),
+        Return(4)
       ])
     );
     test_bytecode!(
@@ -436,7 +544,16 @@ mod tests {
   #[test]
   fn nil_rest() {
     let sexp = "(rest nil)";
-    test_raw_ir!(sexp, (ssa_block![Const(0, Nil), Rest((0, 1)), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, Nil),
+        Const(1, CoreFn(CoreFnId::Rest)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Return(2)
+      ])
+    );
     test_bytecode!(sexp, (block![Const(0, Nil), Rest(0), Return(0)]));
     test_output!(sexp, Nil);
   }
@@ -444,7 +561,17 @@ mod tests {
   #[test]
   fn empty_list_rest() {
     let sexp = "(rest (list))";
-    test_raw_ir!(sexp, (ssa_block![EmptyList(0), Rest((0, 1)), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Const(2, CoreFn(CoreFnId::Rest)),
+        Call(3, 2, 1),
+        CopyArgument(1),
+        Return(3)
+      ])
+    );
     test_bytecode!(sexp, (block![EmptyList(0), Rest(0), Return(0)]));
     test_output!(sexp, (vec![]));
   }
@@ -457,10 +584,13 @@ mod tests {
       (ssa_block![
         Const(0, 1),
         Const(1, 2),
-        EmptyList(2),
-        Push((2, 3), 0),
-        Push((3, 4), 1),
-        Rest((4, 5)),
+        Const(2, CoreFn(CoreFnId::CreateList)),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Const(4, CoreFn(CoreFnId::Rest)),
+        Call(5, 4, 1),
+        CopyArgument(3),
         Return(5)
       ])
     );
@@ -484,7 +614,13 @@ mod tests {
     let sexp = "(butlast nil)";
     test_raw_ir!(
       sexp,
-      (ssa_block![Const(0, Nil), ButLast((0, 1)), Return(1)])
+      (ssa_block![
+        Const(0, Nil),
+        Const(1, CoreFn(CoreFnId::ButLast)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Return(2)
+      ])
     );
     test_bytecode!(sexp, (block![Const(0, Nil), ButLast(0), Return(0)]));
     test_output!(sexp, Nil);
@@ -493,7 +629,17 @@ mod tests {
   #[test]
   fn empty_list_butlast() {
     let sexp = "(butlast (list))";
-    test_raw_ir!(sexp, (ssa_block![EmptyList(0), ButLast((0, 1)), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Const(2, CoreFn(CoreFnId::ButLast)),
+        Call(3, 2, 1),
+        CopyArgument(1),
+        Return(3)
+      ])
+    );
     test_bytecode!(sexp, (block![EmptyList(0), ButLast(0), Return(0)]));
     test_output!(sexp, (vec![]));
   }
@@ -506,10 +652,13 @@ mod tests {
       (ssa_block![
         Const(0, 1),
         Const(1, 2),
-        EmptyList(2),
-        Push((2, 3), 0),
-        Push((3, 4), 1),
-        ButLast((4, 5)),
+        Const(2, CoreFn(CoreFnId::CreateList)),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Const(4, CoreFn(CoreFnId::ButLast)),
+        Call(5, 4, 1),
+        CopyArgument(3),
         Return(5)
       ])
     );
@@ -533,7 +682,16 @@ mod tests {
     let sexp = "(push (list) 1)";
     test_raw_ir!(
       sexp,
-      (ssa_block![EmptyList(0), Const(1, 1), Push((0, 2), 1), Return(2)])
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Const(2, 1),
+        Const(3, CoreFn(CoreFnId::Push)),
+        Call(4, 3, 2),
+        CopyArgument(1),
+        CopyArgument(2),
+        Return(4)
+      ])
     );
     test_bytecode!(
       sexp,
@@ -549,11 +707,15 @@ mod tests {
       sexp,
       (ssa_block![
         Const(0, 1),
-        EmptyList(1),
-        Push((1, 2), 0),
+        Const(1, CoreFn(CoreFnId::CreateList)),
+        Call(2, 1, 1),
+        CopyArgument(0),
         Const(3, 2),
-        Push((2, 4), 3),
-        Return(4)
+        Const(4, CoreFn(CoreFnId::Push)),
+        Call(5, 4, 2),
+        CopyArgument(2),
+        CopyArgument(3),
+        Return(5)
       ])
     );
     test_bytecode!(
@@ -575,7 +737,16 @@ mod tests {
     let sexp = "(cons (list) 1)";
     test_raw_ir!(
       sexp,
-      (ssa_block![EmptyList(0), Const(1, 1), Cons((0, 2), 1), Return(2)])
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Const(2, 1),
+        Const(3, CoreFn(CoreFnId::Cons)),
+        Call(4, 3, 2),
+        CopyArgument(1),
+        CopyArgument(2),
+        Return(4)
+      ])
     );
     test_bytecode!(
       sexp,
@@ -591,11 +762,15 @@ mod tests {
       sexp,
       (ssa_block![
         Const(0, 2),
-        EmptyList(1),
-        Push((1, 2), 0),
+        Const(1, CoreFn(CoreFnId::CreateList)),
+        Call(2, 1, 1),
+        CopyArgument(0),
         Const(3, 1),
-        Cons((2, 4), 3),
-        Return(4)
+        Const(4, CoreFn(CoreFnId::Cons)),
+        Call(5, 4, 2),
+        CopyArgument(2),
+        CopyArgument(3),
+        Return(5)
       ])
     );
     test_bytecode!(
@@ -615,7 +790,17 @@ mod tests {
   #[test]
   fn empty_list_is_empty() {
     let sexp = "(empty? (list))";
-    test_raw_ir!(sexp, (ssa_block![EmptyList(0), IsEmpty(1, 0), Return(1)]));
+    test_raw_ir!(
+      sexp,
+      (ssa_block![
+        Const(0, CoreFn(CoreFnId::CreateList)),
+        Call(1, 0, 0),
+        Const(2, CoreFn(CoreFnId::IsEmpty)),
+        Call(3, 2, 1),
+        CopyArgument(1),
+        Return(3)
+      ])
+    );
     test_bytecode!(sexp, (block![EmptyList(0), IsEmpty(0, 0), Return(0)]));
     test_output!(sexp, true);
   }
@@ -627,10 +812,13 @@ mod tests {
       sexp,
       (ssa_block![
         Const(0, 1),
-        EmptyList(1),
-        Push((1, 2), 0),
-        IsEmpty(3, 2),
-        Return(3)
+        Const(1, CoreFn(CoreFnId::CreateList)),
+        Call(2, 1, 1),
+        CopyArgument(0),
+        Const(3, CoreFn(CoreFnId::IsEmpty)),
+        Call(4, 3, 1),
+        CopyArgument(2),
+        Return(4)
       ])
     );
     test_bytecode!(
@@ -656,7 +844,13 @@ mod tests {
           0,
           GenericValue::composite_fn(
             1,
-            ssa_block![Multiply(1, 0, 0), Return(1)]
+            ssa_block![
+              Const(1, CoreFn(CoreFnId::Multiply)),
+              Call(2, 1, 2),
+              CopyArgument(0),
+              CopyArgument(0),
+              Return(2)
+            ]
           )
         ),
         Return(0)
@@ -689,10 +883,13 @@ mod tests {
           GenericValue::composite_fn(
             2,
             ssa_block![
-              Multiply(2, 0, 0),
-              Multiply(3, 2, 1),
-              Multiply(4, 3, 1),
-              Return(4)
+              Const(2, CoreFn(CoreFnId::Multiply)),
+              Call(3, 2, 4),
+              CopyArgument(0),
+              CopyArgument(0),
+              CopyArgument(1),
+              CopyArgument(1),
+              Return(3)
             ]
           )
         ),
@@ -742,10 +939,13 @@ mod tests {
           GenericValue::composite_fn(
             2,
             ssa_block![
-              Multiply(2, 0, 0),
-              Multiply(3, 2, 1),
-              Multiply(4, 3, 1),
-              Return(4)
+              Const(2, CoreFn(CoreFnId::Multiply)),
+              Call(3, 2, 4),
+              CopyArgument(0),
+              CopyArgument(0),
+              CopyArgument(1),
+              CopyArgument(1),
+              Return(3)
             ]
           )
         ),
