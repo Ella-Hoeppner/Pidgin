@@ -22,8 +22,9 @@ mod tests {
       ast_to_ir::expression_ast_to_ir,
       parse::parse_sexp,
       transformations::{
-        allocate_registers, erase_unused_constants, inline_core_fn_calls,
-        track_register_lifetimes,
+        cleanup::erase_unused_constants, core_inlining::inline_core_fn_calls,
+        lifetimes::track_register_lifetimes,
+        register_allocation::allocate_registers,
       },
       SSABlock,
     },
@@ -981,5 +982,74 @@ mod tests {
       ])
     );
     test_output!(sexp, 36);
+  }
+
+  #[test]
+  fn higher_order_fn_application() {
+    let sexp = "((fn (f x) (f (f x))) (fn (x) (* x x)) 2)";
+    test_raw_ir!(
+      sexp,
+      ssa_block![
+        Const(
+          0,
+          GenericValue::composite_fn(
+            1,
+            ssa_block![
+              Const(1, CoreFn(CoreFnId::Multiply)),
+              Call(2, 1, 2),
+              CopyArgument(0),
+              CopyArgument(0),
+              Return(2)
+            ]
+          )
+        ),
+        Const(1, 2),
+        Const(
+          2,
+          GenericValue::composite_fn(
+            2,
+            ssa_block![
+              Call(2, 0, 1),
+              CopyArgument(1),
+              Call(3, 0, 1),
+              CopyArgument(2),
+              Return(3)
+            ]
+          )
+        ),
+        Call(3, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Return(3)
+      ]
+    );
+    test_bytecode!(
+      sexp,
+      block![
+        Const(
+          0,
+          GenericValue::composite_fn(1, block![Multiply(0, 0, 0), Return(0)])
+        ),
+        Const(1, 2),
+        Const(
+          2,
+          GenericValue::composite_fn(
+            2,
+            block![
+              Call(2, 0, 1),
+              CopyArgument(1),
+              Call(0, 0, 1),
+              CopyArgument(2),
+              Return(0)
+            ]
+          )
+        ),
+        Call(2, 2, 2),
+        CopyArgument(0),
+        CopyArgument(1),
+        Return(2)
+      ]
+    );
+    test_output!(sexp, 16);
   }
 }

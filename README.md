@@ -9,8 +9,7 @@ General:
 
 Runtime stuff:
 * for the `Const` instruction, take arguments out of the constants table rather than cloning them. I guess use `.replace(Nil)`. This will mean that often times the constants table will have to be cloned when entering a stack frame, but that can be avoided when the reference count of the block is 1 (not sure that it's easy to condition things on the reference count like that with the way things are currently set up, but this should be possible with some refactoring)
-  * This does mean that constants in the table can never be shared, but that seems worth it. If they can be shared then it would be a lot more work to keep track of when they can and can't be tsolen from the table.
-* destructuring
+  * This does mean that constants in the table can never be shared, but that seems worth it. If they could be shared then it would be a lot more work to keep track of when they can and can't be tsolen from the table. Single use of constants make various things in compilation and IR transformation easier anyhow.
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
 * replace coroutines with effect handlers
@@ -21,6 +20,7 @@ Runtime stuff:
     * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values
       * a rust iterator would work for the realizers of built-in functions, but I want there to be a function to turn a coroutine into a lazy list, and I'm not sure a rust iter could capture that...
         * I guess there could be a `Realizer` enum type with `Iterator` and `Coroutine` variants?
+* destructuring
 * support partially-applied functions
   * these should store a function and a vec of arguments passed to it
   * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
@@ -47,7 +47,6 @@ Compiler stuff
   * =, not=, not, and, or, xor
 * support compiling type checkers, converters
   * nil?, bool?, char?, num?, int?, float?, symbol?, str?, list?, map?, set?, collection?, fn?, error?, bool, char, num, int, float, symbol, to-list, to-map, to-set, error
-* do real error handling for `allocate_registers` rather than `expect`ing everywhere
 * get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
   * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
 * lambda-lifting
@@ -75,6 +74,7 @@ Compiler stuff
         * It should be possible to have certain instructions that are known to always produce non-collection values (arithmetic ops, boolean ops, etc...) tag their output registers with metadata that lets the compiler know it can skip the `Clear` at the end of the lifetime
           * but many things will often produce non-collection values, e.g. `First` and user-defined functions, in a way that the compiler can't know about because the language doesn't have static typing. So this will probably only help in a small fraction of cases
       * Alternatively, what about making `Clear` not actually zero out the memory, but just like, decrement the strong count of the associated `Rc` (if any, i.e. if the value is a collection) and then use `std::mem::forget`? This would avoid zeroing out the memory. Though it would still mean processing an extra instruction.
+* do real error handling for `allocate_registers` rather than `expect`ing everywhere
 * Use GSE for parsing, once it's ready
 
 # planned language features (once the IR and VM are usable and a basic AST)
