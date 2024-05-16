@@ -414,99 +414,140 @@ pub fn inline_core_fn_calls<M: Clone>(
                     }
                   })
                   .collect();
-                if let Some(y) = match args.len() {
-                  0 => todo!(),
-                  1 => {
-                    if let Some(nonreplacing_unary_instruction) = match fn_id {
-                      F::First => Some(First(*target, args[0])),
-                      F::Last => Some(Last(*target, args[0])),
-                      F::IsEmpty => Some(IsEmpty(*target, args[0])),
-                      _ => None,
-                    } {
-                      Some(vec![nonreplacing_unary_instruction])
-                    } else if let Some(replacing_unary_instruction) =
-                      match fn_id {
-                        F::Rest => Some(Rest((args[0], *target))),
-                        F::ButLast => Some(ButLast((args[0], *target))),
-                        _ => None,
-                      }
-                    {
-                      Some(vec![replacing_unary_instruction])
-                    } else {
-                      None
+                if let Some(replacement_instructions) = match fn_id {
+                  F::CreateList => Some(if *arg_count == 0 {
+                    vec![EmptyList(*target)]
+                  } else {
+                    let max_register =
+                      get_max_register(preallocated_registers, &instructions);
+                    let mut list_instructions =
+                      vec![EmptyList(max_register + 1)];
+                    for i in 0..*arg_count as usize - 1 {
+                      list_instructions.push(Push(
+                        (max_register + i + 1, max_register + i + 2),
+                        args[i],
+                      ));
                     }
-                  }
-                  2 => {
-                    if let Some(nonreplacing_binary_instruction) = match fn_id {
-                      F::Add => Some(Add(*target, args[0], args[1])),
-                      F::Subtract => Some(Subtract(*target, args[0], args[1])),
-                      F::Multiply => Some(Multiply(*target, args[0], args[1])),
-                      F::Divide => Some(Divide(*target, args[0], args[1])),
-                      _ => None,
-                    } {
-                      Some(vec![nonreplacing_binary_instruction])
-                    } else if let Some(replacing_binary_instruction) =
-                      match fn_id {
-                        F::Push => Some(Push((args[0], *target), args[1])),
-                        F::Cons => Some(Cons((args[0], *target), args[1])),
+                    list_instructions.push(Push(
+                      (max_register + *arg_count as usize, *target),
+                      args[*arg_count as usize - 1],
+                    ));
+                    list_instructions
+                  }),
+                  _ => match args.len() {
+                    0 => {
+                      if let Some(nullary_instruction) = match fn_id {
+                        F::CreateList => Some(EmptyList(*target)),
                         _ => None,
-                      }
-                    {
-                      Some(vec![replacing_binary_instruction])
-                    } else {
-                      None
-                    }
-                  }
-                  arg_count => {
-                    let maybe_instruction_builder: Option<
-                      fn(
-                        SSARegister,
-                        SSARegister,
-                        SSARegister,
-                      ) -> SSAInstruction,
-                    > = match fn_id {
-                      F::Add => Some(|a, b, c| Add(a, b, c)),
-                      F::Multiply => Some(|a, b, c| Multiply(a, b, c)),
-                      _ => None,
-                    };
-                    if let Some(instruction_builder) = maybe_instruction_builder
-                    {
-                      let first_free_register =
-                        get_max_register(preallocated_registers, &instructions)
-                          + 1;
-                      let mut new_instructions = vec![instruction_builder(
-                        first_free_register,
-                        args[0],
-                        args[1],
-                      )];
-                      if arg_count == 3 {
-                        new_instructions.push(instruction_builder(
-                          *target,
-                          args[2],
-                          first_free_register,
-                        ));
+                      } {
+                        Some(vec![nullary_instruction])
                       } else {
-                        for i in (0..(arg_count - 3)) {
+                        None
+                      }
+                    }
+                    1 => {
+                      if let Some(nonreplacing_unary_instruction) = match fn_id
+                      {
+                        F::First => Some(First(*target, args[0])),
+                        F::Last => Some(Last(*target, args[0])),
+                        F::IsEmpty => Some(IsEmpty(*target, args[0])),
+                        _ => None,
+                      } {
+                        Some(vec![nonreplacing_unary_instruction])
+                      } else if let Some(replacing_unary_instruction) =
+                        match fn_id {
+                          F::Rest => Some(Rest((args[0], *target))),
+                          F::ButLast => Some(ButLast((args[0], *target))),
+                          _ => None,
+                        }
+                      {
+                        Some(vec![replacing_unary_instruction])
+                      } else {
+                        None
+                      }
+                    }
+                    2 => {
+                      if let Some(nonreplacing_binary_instruction) = match fn_id
+                      {
+                        F::Add => Some(Add(*target, args[0], args[1])),
+                        F::Subtract => {
+                          Some(Subtract(*target, args[0], args[1]))
+                        }
+                        F::Multiply => {
+                          Some(Multiply(*target, args[0], args[1]))
+                        }
+                        F::Divide => Some(Divide(*target, args[0], args[1])),
+                        _ => None,
+                      } {
+                        Some(vec![nonreplacing_binary_instruction])
+                      } else if let Some(replacing_binary_instruction) =
+                        match fn_id {
+                          F::Push => Some(Push((args[0], *target), args[1])),
+                          F::Cons => Some(Cons((args[0], *target), args[1])),
+                          _ => None,
+                        }
+                      {
+                        Some(vec![replacing_binary_instruction])
+                      } else {
+                        None
+                      }
+                    }
+                    arg_count => {
+                      let maybe_instruction_builder: Option<
+                        fn(
+                          SSARegister,
+                          SSARegister,
+                          SSARegister,
+                        ) -> SSAInstruction,
+                      > = match fn_id {
+                        F::Add => Some(|a, b, c| Add(a, b, c)),
+                        F::Multiply => Some(|a, b, c| Multiply(a, b, c)),
+                        _ => None,
+                      };
+                      if let Some(instruction_builder) =
+                        maybe_instruction_builder
+                      {
+                        let first_free_register = get_max_register(
+                          preallocated_registers,
+                          &instructions,
+                        ) + 1;
+                        let mut new_instructions = vec![instruction_builder(
+                          first_free_register,
+                          args[0],
+                          args[1],
+                        )];
+                        if arg_count == 3 {
                           new_instructions.push(instruction_builder(
-                            first_free_register + i + 1,
-                            args[i + 2],
-                            first_free_register + i,
+                            *target,
+                            first_free_register,
+                            args[2],
+                          ));
+                        } else {
+                          for i in (0..(arg_count - 3)) {
+                            new_instructions.push(instruction_builder(
+                              first_free_register + i + 1,
+                              first_free_register + i,
+                              args[i + 2],
+                            ))
+                          }
+                          new_instructions.push(instruction_builder(
+                            *target,
+                            first_free_register + arg_count - 3,
+                            args[arg_count - 1],
                           ))
                         }
-                        new_instructions.push(instruction_builder(
-                          *target,
-                          args[arg_count - 1],
-                          first_free_register + arg_count - 3,
-                        ))
+                        Some(new_instructions)
+                      } else {
+                        None
                       }
-                      Some(new_instructions)
-                    } else {
-                      None
                     }
-                  }
+                  },
                 } {
                   instructions
-                    .splice(timestamp..(timestamp + 1 + *arg_count as usize), y)
+                    .splice(
+                      timestamp..(timestamp + 1 + *arg_count as usize),
+                      replacement_instructions,
+                    )
                     .collect::<Vec<_>>();
                   modified = true;
                   break;
@@ -629,7 +670,7 @@ mod tests {
       Const(1, 2),
       Const(2, 3),
       Add(5, 0, 1),
-      Add(4, 2, 5),
+      Add(4, 5, 2),
       Return(4)
     ];
     assert_eq!(
@@ -664,8 +705,8 @@ mod tests {
       Const(2, 3),
       Const(3, 4),
       Add(6, 0, 1),
-      Add(7, 2, 6),
-      Add(5, 3, 7),
+      Add(7, 6, 2),
+      Add(5, 7, 3),
       Return(5)
     ];
     assert_eq!(
@@ -700,8 +741,8 @@ mod tests {
       Const(2, 3),
       Const(3, 4),
       Multiply(6, 0, 1),
-      Multiply(7, 2, 6),
-      Multiply(5, 3, 7),
+      Multiply(7, 6, 2),
+      Multiply(5, 7, 3),
       Return(5)
     ];
     assert_eq!(

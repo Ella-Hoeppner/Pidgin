@@ -41,11 +41,6 @@ Runtime stuff:
     * go blocks seem like maybe the tough part
 
 Compiler stuff
-* big refactor:
-  * `build_ast_ir` should, for all applications of core functions, should emit code like `[Const(x, CoreFnId), Const(x + 1, <First Argument>) ... Const(x + n, <Second Argument>), Call(x, x, n)]`, using the `CoreFnId` of whatever the function being called is, rather than emitting direct instructions corresponding to the core functions that appear in the AST.
-    * A later optimization pass can recognize anywhere there's a `Const(x, CoreFnId)` followed some time later by a `Call(x, x, n)` and can optimize it to be equivalent to the current output. This will look similar to what `build_application_ir` currently does (and that function can be removed, `build_ast_ir` won't need it)
-    * Having this separated out will be beneficial later for making inlining/partial evaluation more powerful
-  * This will also be helpful for debugging the core functions and making sure their implementations always behave identically to the corresponding bytecode instructions, as I can write tests that evaluate both versions and asserts that they have the same output
 * support compiling the rest of the math functions
   * ==, zero?,  nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
 * support compiling boolean functions

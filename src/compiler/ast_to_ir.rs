@@ -1,8 +1,8 @@
 use std::{collections::HashMap, error::Error, fmt::Display};
 
 use crate::{
-  runtime::core_functions::CoreFnId, AritySpecifier, GenericValue, Instruction,
-  Num, Register, SymbolIndex,
+  runtime::core_functions::CoreFnId, AritySpecifier, ConstIndex, GenericValue,
+  Instruction, Num, Register, SymbolIndex,
 };
 
 use super::{
@@ -130,7 +130,22 @@ pub fn build_application_ir(
     Leaf(leaf) => match leaf {
       Token::Symbol(symbol) => {
         if let Some(fn_id) = CoreFnId::from_name(&symbol) {
-          use CoreFnId as F;
+          instructions.push(Const(
+            *taken_virtual_registers,
+            constants.len() as ConstIndex,
+          ));
+          instructions.push(Call(
+            *taken_virtual_registers + 1,
+            *taken_virtual_registers,
+            args.len() as u8,
+          ));
+          constants.push(CoreFn(fn_id));
+          for arg_register in args {
+            instructions.push(CopyArgument(arg_register))
+          }
+          *taken_virtual_registers += 2;
+          Ok(*taken_virtual_registers - 1)
+          /*use CoreFnId as F;
           if let Some(replacing_unary_instruction) = if args.len() == 1 {
             match fn_id {
               F::Rest => Some(Rest((args[0], *taken_virtual_registers))),
@@ -238,7 +253,7 @@ pub fn build_application_ir(
                 _ => Err(ASTError::InvalidArity(fn_id, args.len())),
               }
             }
-          }
+          }*/
         } else {
           todo!()
         }

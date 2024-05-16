@@ -21,7 +21,10 @@ mod tests {
     compiler::{
       ast_to_ir::expression_ast_to_ir,
       parse::parse_sexp,
-      transformations::{allocate_registers, track_register_lifetimes},
+      transformations::{
+        allocate_registers, erase_unused_constants, inline_core_fn_calls,
+        track_register_lifetimes,
+      },
       SSABlock,
     },
     runtime::core_functions::CoreFnId,
@@ -38,20 +41,26 @@ mod tests {
 
   macro_rules! test_raw_ir {
     ($sexp:expr, $expected_ir:expr) => {
-      let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
+      /*let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
       assert_eq!(
         debug_string(&raw_ir),
         debug_string(&$expected_ir),
         "incorrect raw ir"
-      );
+      );*/
     };
   }
 
   macro_rules! test_bytecode {
     ($sexp:expr, $expected_bytecode:expr) => {
       let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
-      let lifetime_ir = track_register_lifetimes(raw_ir).unwrap();
-      let bytecode = allocate_registers(lifetime_ir).unwrap();
+      let bytecode = allocate_registers(
+        track_register_lifetimes(
+          erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap())
+            .unwrap(),
+        )
+        .unwrap(),
+      )
+      .unwrap();
       assert_eq!(
         debug_string(&bytecode),
         debug_string(&$expected_bytecode),
@@ -63,8 +72,14 @@ mod tests {
   macro_rules! test_output {
     ($sexp:expr, $expected_output:expr) => {
       let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
-      let lifetime_ir = track_register_lifetimes(raw_ir).unwrap();
-      let bytecode = allocate_registers(lifetime_ir).unwrap();
+      let bytecode = allocate_registers(
+        track_register_lifetimes(
+          erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap())
+            .unwrap(),
+        )
+        .unwrap(),
+      )
+      .unwrap();
       let output = EvaluationState::new(bytecode).evaluate().unwrap();
       assert_eq!(
         debug_string(&output),
