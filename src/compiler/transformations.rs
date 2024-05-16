@@ -6,20 +6,25 @@ use std::{
 };
 
 use crate::{
-  blocks::GenericBlock, Block, ConstIndex, GenericValue, Instruction, Register,
-  Value,
+  blocks::GenericBlock, instructions, Block, ConstIndex, GenericValue,
+  Instruction, Register, Value,
 };
 
-use super::{SSABlock, SSAInstruction, SSARegister};
+use super::{SSABlock, SSAInstruction, SSARegister, SSAValue};
 
 type InstructionTimestamp = u16;
+use crate::runtime::core_functions::CoreFnId;
 use GenericValue::*;
 use Instruction::*;
 
 #[derive(Clone, Debug)]
 pub enum LifetimeError {
   UsedBeforeCreation(SSARegister, InstructionTimestamp),
-  OutputToExisting(SSARegister, InstructionTimestamp, InstructionTimestamp),
+  OutputToExisting(
+    SSARegister,
+    Option<InstructionTimestamp>,
+    InstructionTimestamp,
+  ),
   ReplacingNonexistent(SSARegister, InstructionTimestamp),
   UsedAfterReplacement(
     SSARegister,
@@ -33,7 +38,6 @@ pub enum LifetimeError {
     SSARegister,
     InstructionTimestamp,
   ),
-  Unused(SSARegister, InstructionTimestamp),
 }
 impl Display for LifetimeError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -48,7 +52,7 @@ impl Display for LifetimeError {
         f,
         "attempted to output to register {register} at timestamp \
          {new_timestamp}, when register was already created at timestamp \
-         {created_timestamp}"
+         {created_timestamp:?}"
       ),
       ReplacingNonexistent(register, timestamp) => write!(
         f,
@@ -77,12 +81,6 @@ impl Display for LifetimeError {
          but the register as already replaced by {already_replaced_register} at
          timestamp {already_replaced_timestamp}"
       ),
-      Unused(register, timestamp) => {
-        write!(
-          f,
-          "register {register}, created at timestamp {timestamp}, is never used"
-        )
-      }
     }
   }
 }
@@ -90,15 +88,23 @@ impl Error for LifetimeError {}
 
 #[derive(Clone, Debug)]
 pub struct RegisterLifetime {
-  creation: InstructionTimestamp,
+  creation: Option<InstructionTimestamp>,
   usages: Vec<InstructionTimestamp>,
   replacing: Option<SSARegister>,
   replaced_by: Option<SSARegister>,
 }
 impl RegisterLifetime {
+  fn new_preexisting() -> Self {
+    Self {
+      creation: None,
+      usages: vec![],
+      replacing: None,
+      replaced_by: None,
+    }
+  }
   fn new(creation_timestamp: InstructionTimestamp) -> Self {
     Self {
-      creation: creation_timestamp,
+      creation: Some(creation_timestamp),
       usages: vec![],
       replacing: None,
       replaced_by: None,
@@ -109,7 +115,7 @@ impl RegisterLifetime {
     replacing: SSARegister,
   ) -> Self {
     Self {
-      creation: creation_timestamp,
+      creation: Some(creation_timestamp),
       usages: vec![],
       replacing: Some(replacing),
       replaced_by: None,
@@ -118,91 +124,103 @@ impl RegisterLifetime {
   fn last_usage(&self) -> Option<InstructionTimestamp> {
     self.usages.last().cloned()
   }
+  fn is_used(&self) -> bool {
+    !self.usages.is_empty()
+  }
 }
+type Lifetimes = HashMap<SSARegister, RegisterLifetime>;
 
-pub fn track_register_lifetimes<M>(
-  block: SSABlock<M>,
-) -> Result<SSABlock<HashMap<SSARegister, RegisterLifetime>>, LifetimeError> {
-  block.translate(&|preallocated_registers, instructions, constants, _| {
-    let mut lifetimes: HashMap<SSARegister, RegisterLifetime> = HashMap::new();
-    for preallocated_register in 0..preallocated_registers {
-      lifetimes.insert(
-        preallocated_register as SSARegister,
-        RegisterLifetime::new(0),
-      );
-    }
-    for (timestamp, instruction) in instructions.iter().enumerate() {
-      let timestamp = timestamp as InstructionTimestamp;
-      let usages = instruction.register_lifetime_constraints();
-      for input_register in usages.inputs {
-        if let Some(lifetime) = lifetimes.get_mut(&input_register) {
-          if let Some(replaced_by) = lifetime.replaced_by {
-            return Err(LifetimeError::UsedAfterReplacement(
-              input_register,
-              timestamp,
-              replaced_by,
-              lifetime.last_usage().unwrap(),
-            ));
-          }
-          lifetime.usages.push(timestamp);
-        } else {
-          return Err(LifetimeError::UsedBeforeCreation(
+fn calculate_register_lifetimes<M>(
+  preallocated_registers: u8,
+  instructions: &Vec<SSAInstruction>,
+  constants: &Vec<SSAValue<M>>,
+) -> Result<Lifetimes, LifetimeError> {
+  let mut lifetimes: Lifetimes = Lifetimes::new();
+  for preallocated_register in 0..preallocated_registers {
+    lifetimes.insert(
+      preallocated_register as SSARegister,
+      RegisterLifetime::new_preexisting(),
+    );
+  }
+  for (timestamp, instruction) in instructions.iter().enumerate() {
+    let timestamp = timestamp as InstructionTimestamp;
+    let usages = instruction.usages();
+    for input_register in usages.inputs {
+      if let Some(lifetime) = lifetimes.get_mut(&input_register) {
+        if let Some(replaced_by) = lifetime.replaced_by {
+          return Err(LifetimeError::UsedAfterReplacement(
             input_register,
             timestamp,
+            replaced_by,
+            lifetime.last_usage().unwrap(),
           ));
         }
+        lifetime.usages.push(timestamp);
+      } else {
+        return Err(LifetimeError::UsedBeforeCreation(
+          input_register,
+          timestamp,
+        ));
       }
-      for output_register in usages.outputs {
-        if let Some(existing_lifetime) = lifetimes.get(&output_register) {
-          return Err(LifetimeError::OutputToExisting(
-            output_register,
-            existing_lifetime.creation,
-            timestamp,
-          ));
-        } else {
-          lifetimes.insert(output_register, RegisterLifetime::new(timestamp));
-        }
+    }
+    for output_register in usages.outputs {
+      if let Some(existing_lifetime) = lifetimes.get(&output_register) {
+        return Err(LifetimeError::OutputToExisting(
+          output_register,
+          existing_lifetime.creation,
+          timestamp,
+        ));
+      } else {
+        lifetimes.insert(output_register, RegisterLifetime::new(timestamp));
       }
-      for (from_register, to_register) in usages.replacements {
-        if let Some(from_lifetime) = lifetimes.get_mut(&from_register) {
-          if let Some(replaced_by_register) = from_lifetime.replaced_by {
-            return Err(LifetimeError::UsedAfterReplacement(
-              from_register,
-              timestamp,
-              replaced_by_register,
-              from_lifetime.last_usage().unwrap(),
-            ));
-          } else {
-            from_lifetime.usages.push(timestamp);
-            from_lifetime.replaced_by = Some(to_register);
-          }
-        } else {
-          return Err(LifetimeError::ReplacingNonexistent(
+    }
+    for (from_register, to_register) in usages.replacements {
+      if let Some(from_lifetime) = lifetimes.get_mut(&from_register) {
+        if let Some(replaced_by_register) = from_lifetime.replaced_by {
+          return Err(LifetimeError::UsedAfterReplacement(
             from_register,
             timestamp,
-          ));
-        }
-        if let Some(to_lifetime) = lifetimes.get(&to_register) {
-          return Err(LifetimeError::OutputToExisting(
-            to_register,
-            to_lifetime.creation,
-            timestamp,
+            replaced_by_register,
+            from_lifetime.last_usage().unwrap(),
           ));
         } else {
-          lifetimes.insert(
-            to_register,
-            RegisterLifetime::new_replacing(timestamp, from_register),
-          );
+          from_lifetime.usages.push(timestamp);
+          from_lifetime.replaced_by = Some(to_register);
         }
+      } else {
+        return Err(LifetimeError::ReplacingNonexistent(
+          from_register,
+          timestamp,
+        ));
+      }
+      if let Some(to_lifetime) = lifetimes.get(&to_register) {
+        return Err(LifetimeError::OutputToExisting(
+          to_register,
+          to_lifetime.creation,
+          timestamp,
+        ));
+      } else {
+        lifetimes.insert(
+          to_register,
+          RegisterLifetime::new_replacing(timestamp, from_register),
+        );
       }
     }
-    for (register, lifetime) in lifetimes.iter() {
-      if lifetime.usages.is_empty() {
-        return Err(LifetimeError::Unused(*register, lifetime.creation));
-      }
-    }
+  }
+  Ok(lifetimes)
+}
+
+pub fn track_register_lifetimes<M: Clone>(
+  block: SSABlock<M>,
+) -> Result<SSABlock<Lifetimes>, LifetimeError> {
+  block.translate(&|preallocated_registers, instructions, constants, _| {
+    let lifetimes = calculate_register_lifetimes(
+      preallocated_registers,
+      &instructions,
+      &constants,
+    )?;
     Ok(GenericBlock::new_with_metadata(
-      instructions.to_vec(),
+      instructions,
       constants,
       lifetimes,
     ))
@@ -275,7 +293,7 @@ pub fn allocate_registers(
             assert!(removed)
           }
           for (ssa_registser, register_lifetime) in lifetimes.iter() {
-            if register_lifetime.creation == timestamp
+            if register_lifetime.creation == Some(timestamp)
               && (timestamp != 0
                 || *ssa_registser >= preallocated_registers as usize)
             {
@@ -339,8 +357,193 @@ pub fn allocate_registers(
   })
 }
 
-pub fn inline_core_fns(
-  block: SSABlock<HashMap<SSARegister, RegisterLifetime>>,
-) -> SSABlock<()> {
-  todo!()
+fn get_max_register(
+  preallocated_registers: u8,
+  instructions: &Vec<SSAInstruction>,
+) -> SSARegister {
+  let mut max_register: SSARegister = 0;
+  for usage in instructions.iter().map(|instruction| instruction.usages()) {
+    for input in usage.inputs {
+      max_register = max_register.max(input)
+    }
+    for output in usage.outputs {
+      max_register = max_register.max(output)
+    }
+    for (old, new) in usage.replacements {
+      max_register = max_register.max(old).max(new)
+    }
+  }
+  max_register
+}
+
+pub fn inline_core_fn_calls<M: Clone>(
+  block: SSABlock<M>,
+) -> Result<SSABlock<Lifetimes>, LifetimeError> {
+  block.translate(&|preallocated_registers,
+                    mut instructions,
+                    mut constants,
+                    mut lifetimes|
+   -> Result<_, LifetimeError> {
+    let final_lifetimes = loop {
+      let lifetimes = calculate_register_lifetimes(
+        preallocated_registers,
+        &instructions,
+        &constants,
+      )?;
+      let mut modified = false;
+      for (timestamp, instruction) in instructions.iter().enumerate() {
+        if let Call(target, f_register, arg_count) = instruction {
+          if let Some(f_creation_timestamp) = lifetimes[f_register].creation {
+            if let Const(f_register, const_index) =
+              instructions[f_creation_timestamp as usize]
+            {
+              if let CoreFn(id) = constants[const_index as usize] {
+                use CoreFnId as F;
+                use SSAInstruction as I;
+                match id {
+                  F::Add => {
+                    let args: Vec<_> = ((timestamp + 1)
+                      ..(timestamp + 1 + *arg_count as usize))
+                      .map(|instruction_index| {
+                        match instructions[instruction_index] {
+                          CopyArgument(arg) => arg,
+                          StealArgument(arg) => arg,
+                          _ => panic!(
+                            "didn't find CopyArgument or StealArgument after \
+                             Call in inline_core_fn_calls"
+                          ),
+                        }
+                      })
+                      .collect();
+                    if *arg_count == 2 {
+                      instructions
+                        .splice(
+                          timestamp..(timestamp + 1 + *arg_count as usize),
+                          std::iter::once(I::Add(*target, args[0], args[1])),
+                        )
+                        .collect::<Vec<_>>();
+                      modified = true;
+                      break;
+                    } else {
+                      todo!()
+                    }
+                  }
+                  _ => todo!(),
+                }
+              }
+            }
+          }
+        }
+      }
+      if !modified {
+        break lifetimes;
+      }
+    };
+    Ok(GenericBlock::new_with_metadata(
+      instructions,
+      constants,
+      final_lifetimes,
+    ))
+  })
+}
+
+pub fn erase_unused_constants<M: Clone>(
+  block: SSABlock<M>,
+) -> Result<SSABlock<()>, LifetimeError> {
+  block.translate(&|preallocated_registers,
+                    mut instructions,
+                    mut constants,
+                    _| {
+    let lifetimes = calculate_register_lifetimes(
+      preallocated_registers,
+      &instructions,
+      &constants,
+    )?;
+    let mut filtered_instructions = vec![];
+    let mut filtered_constants = vec![];
+    for (timestamp, instruction) in instructions.into_iter().enumerate() {
+      if let Const(target, const_index) = instruction {
+        if lifetimes[&target].is_used() {
+          filtered_instructions
+            .push(Const(target, filtered_constants.len() as u16));
+          filtered_constants.push(constants[const_index as usize].clone());
+        }
+      } else {
+        filtered_instructions.push(instruction)
+      }
+    }
+    Ok(GenericBlock::new(filtered_instructions, filtered_constants))
+  })
+}
+
+mod tests {
+  use program_macro::{block, ssa_block};
+  use std::fmt::Debug;
+
+  use crate::{
+    blocks::GenericBlock,
+    compiler::{
+      ast_to_ir::expression_ast_to_ir,
+      parse::parse_sexp,
+      transformations::{
+        allocate_registers, erase_unused_constants, inline_core_fn_calls,
+        track_register_lifetimes,
+      },
+      SSABlock,
+    },
+    runtime::core_functions::CoreFnId,
+    Block, EvaluationState,
+    GenericValue::{self, *},
+    Instruction::*,
+    Num::{self, *},
+    Value,
+  };
+
+  fn debug_string<T: Debug>(x: &T) -> String {
+    format!("{:?}", x)
+  }
+
+  #[test]
+  fn inline_binary_addition() {
+    let raw_ir = ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, CoreFn(CoreFnId::Add)),
+      Call(3, 2, 2),
+      CopyArgument(0),
+      CopyArgument(1),
+      Return(3)
+    ];
+    let inlined_ir =
+      erase_unused_constants(inline_core_fn_calls(raw_ir.clone()).unwrap())
+        .unwrap();
+    let expected_inlined_ir =
+      ssa_block![Const(0, 1), Const(1, 2), Add(3, 0, 1), Return(3)];
+
+    let raw_ir_output = EvaluationState::new(
+      allocate_registers(track_register_lifetimes(raw_ir.clone()).unwrap())
+        .unwrap(),
+    )
+    .evaluate()
+    .unwrap();
+    let expected_ir_output = EvaluationState::new(
+      allocate_registers(
+        track_register_lifetimes(expected_inlined_ir.clone()).unwrap(),
+      )
+      .unwrap(),
+    )
+    .evaluate()
+    .unwrap();
+    assert_eq!(
+      debug_string(&raw_ir_output),
+      debug_string(&expected_ir_output)
+    );
+    assert_eq!(
+      debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
+      debug_string(&(
+        expected_inlined_ir.instructions,
+        expected_inlined_ir.constants
+      ))
+    );
+  }
 }

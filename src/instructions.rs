@@ -221,7 +221,7 @@ pub struct RegisterUsages<I, O, R> {
   pub replacements: Vec<R>,
 }
 impl<I: Clone, O: Clone, R: Clone> Instruction<I, O, R> {
-  pub fn register_lifetime_constraints(&self) -> RegisterUsages<I, O, R> {
+  pub fn usages(&self) -> RegisterUsages<I, O, R> {
     let (inputs, outputs, replacements) = match self {
       DebugPrint(_) => (vec![], vec![], vec![]),
       Clear(to) => (vec![], vec![to], vec![]),

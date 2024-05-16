@@ -22,7 +22,6 @@ pub type Register = u8;
 pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
-pub type CoreFnIndex = u8;
 pub type RuntimeInstruction = Instruction<Register, Register, Register>;
 
 pub struct EvaluationState {
@@ -429,15 +428,16 @@ impl EvaluationState {
                 self.move_args(arg_count, new_frame.beginning);
                 self.push_frame(new_frame);
               }
-              CoreFn(_) => {
-                panic!(
-                  "Call instruction called with CoreFn value, this should \
-                  never happen"
-                )
+              CoreFn(f) => {
+                let args = self.take_args(arg_count);
+                match CORE_FUNCTIONS[f](args) {
+                  Ok(output) => self.set_register(target, output),
+                  Err(e) => break 'instruction Err(e),
+                }
               }
               ExternalFn(external_fn) => {
-                let f = (*external_fn).f;
                 let args = self.take_args(arg_count);
+                let f = (*external_fn).f;
                 self.set_register(
                   target,
                   f(args).expect(

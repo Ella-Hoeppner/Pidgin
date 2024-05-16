@@ -121,7 +121,7 @@ impl TryFrom<Tree<String>> for TokenTree {
   }
 }
 
-mod test {
+mod tests {
   use Token::*;
 
   use super::Token;

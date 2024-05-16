@@ -8,6 +8,8 @@ General:
   * This will be helpful for debugging things tho, as it will be possible to write a error effect handler that e.g. prints the entire lexical scope to the console, or starts up a repl within that scope
 
 Runtime stuff:
+* for the `Const` instruction, take arguments out of the constants table rather than cloning them. I guess use `.replace(Nil)`. This will mean that often times the constants table will have to be cloned when entering a stack frame, but that can be avoided when the reference count of the block is 1 (not sure that it's easy to condition things on the reference count like that with the way things are currently set up, but this should be possible with some refactoring)
+  * This does mean that constants in the table can never be shared, but that seems worth it. If they can be shared then it would be a lot more work to keep track of when they can and can't be tsolen from the table.
 * destructuring
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
@@ -43,6 +45,7 @@ Compiler stuff
   * `build_ast_ir` should, for all applications of core functions, should emit code like `[Const(x, CoreFnId), Const(x + 1, <First Argument>) ... Const(x + n, <Second Argument>), Call(x, x, n)]`, using the `CoreFnId` of whatever the function being called is, rather than emitting direct instructions corresponding to the core functions that appear in the AST.
     * A later optimization pass can recognize anywhere there's a `Const(x, CoreFnId)` followed some time later by a `Call(x, x, n)` and can optimize it to be equivalent to the current output. This will look similar to what `build_application_ir` currently does (and that function can be removed, `build_ast_ir` won't need it)
     * Having this separated out will be beneficial later for making inlining/partial evaluation more powerful
+  * This will also be helpful for debugging the core functions and making sure their implementations always behave identically to the corresponding bytecode instructions, as I can write tests that evaluate both versions and asserts that they have the same output
 * support compiling the rest of the math functions
   * ==, zero?,  nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
 * support compiling boolean functions

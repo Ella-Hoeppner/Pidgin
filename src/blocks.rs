@@ -49,7 +49,7 @@ impl<I, O, R, M> GenericBlock<I, O, R, M> {
   }
 }
 
-impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
+impl<I: Clone, O: Clone, R: Clone, M: Clone> GenericBlock<I, O, R, M> {
   fn translate_inner<
     NewI: Clone,
     NewO: Clone,
@@ -58,12 +58,12 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
     E,
     F: Fn(
       u8,
-      &[Instruction<I, O, R>],
+      Vec<Instruction<I, O, R>>,
       Vec<GenericValue<NewI, NewO, NewR, NewM>>,
-      &M,
+      M,
     ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E>,
   >(
-    &self,
+    self,
     preallocated_registers: u8,
     translator: &F,
   ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E> {
@@ -75,6 +75,7 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
             f_ref.args.clone(),
             f_ref
               .block
+              .clone()
               .translate_inner(f_ref.args.register_count(), translator)?,
           )))
         }
@@ -96,9 +97,9 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
     }
     translator(
       preallocated_registers,
-      &self.instructions,
+      self.instructions.to_vec(),
       translated_constants,
-      &self.metadata,
+      self.metadata,
     )
   }
   pub fn translate<
@@ -109,12 +110,12 @@ impl<I: Clone, O: Clone, R: Clone, M> GenericBlock<I, O, R, M> {
     E,
     F: Fn(
       u8,
-      &[Instruction<I, O, R>],
+      Vec<Instruction<I, O, R>>,
       Vec<GenericValue<NewI, NewO, NewR, NewM>>,
-      &M,
+      M,
     ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E>,
   >(
-    &self,
+    self,
     translator: &F,
   ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E> {
     self.translate_inner(0, translator)

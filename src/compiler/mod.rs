@@ -24,6 +24,7 @@ mod tests {
       transformations::{allocate_registers, track_register_lifetimes},
       SSABlock,
     },
+    runtime::core_functions::CoreFnId,
     Block, EvaluationState,
     GenericValue::{self, *},
     Instruction::*,

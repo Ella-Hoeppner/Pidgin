@@ -13,8 +13,8 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  blocks::GenericBlock, ConstIndex, CoreFnIndex, CoroutineState,
-  GenericCompositeFunction, Instruction, Register, StackFrame,
+  blocks::GenericBlock, ConstIndex, CoroutineState, GenericCompositeFunction,
+  Instruction, Register, StackFrame,
 };
 
 use super::{
