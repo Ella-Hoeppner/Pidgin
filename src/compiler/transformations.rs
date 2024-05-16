@@ -416,16 +416,43 @@ pub fn inline_core_fn_calls<M: Clone>(
                   .collect();
                 if let Some(y) = match args.len() {
                   0 => todo!(),
-                  1 => todo!(),
+                  1 => {
+                    if let Some(nonreplacing_unary_instruction) = match fn_id {
+                      F::First => Some(First(*target, args[0])),
+                      F::Last => Some(Last(*target, args[0])),
+                      F::IsEmpty => Some(IsEmpty(*target, args[0])),
+                      _ => None,
+                    } {
+                      Some(vec![nonreplacing_unary_instruction])
+                    } else if let Some(replacing_unary_instruction) =
+                      match fn_id {
+                        F::Rest => Some(Rest((args[0], *target))),
+                        F::ButLast => Some(ButLast((args[0], *target))),
+                        _ => None,
+                      }
+                    {
+                      Some(vec![replacing_unary_instruction])
+                    } else {
+                      None
+                    }
+                  }
                   2 => {
-                    if let Some(binary_instruction) = match fn_id {
+                    if let Some(nonreplacing_binary_instruction) = match fn_id {
                       F::Add => Some(Add(*target, args[0], args[1])),
                       F::Subtract => Some(Subtract(*target, args[0], args[1])),
                       F::Multiply => Some(Multiply(*target, args[0], args[1])),
                       F::Divide => Some(Divide(*target, args[0], args[1])),
                       _ => None,
                     } {
-                      Some(vec![binary_instruction])
+                      Some(vec![nonreplacing_binary_instruction])
+                    } else if let Some(replacing_binary_instruction) =
+                      match fn_id {
+                        F::Push => Some(Push((args[0], *target), args[1])),
+                        F::Cons => Some(Cons((args[0], *target), args[1])),
+                        _ => None,
+                      }
+                    {
+                      Some(vec![replacing_binary_instruction])
                     } else {
                       None
                     }
@@ -533,6 +560,7 @@ pub fn erase_unused_constants<M: Clone>(
 mod tests {
   use program_macro::{block, ssa_block};
   use std::fmt::Debug;
+  use std::rc::Rc;
 
   use crate::{
     blocks::GenericBlock,
@@ -675,6 +703,80 @@ mod tests {
       Multiply(7, 2, 6),
       Multiply(5, 3, 7),
       Return(5)
+    ];
+    assert_eq!(
+      debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
+      debug_string(&(
+        expected_inlined_ir.instructions,
+        expected_inlined_ir.constants
+      ))
+    );
+  }
+
+  #[test]
+  fn inline_push() {
+    let raw_ir = ssa_block![
+      EmptyList(0),
+      Const(1, 5),
+      Const(2, CoreFn(CoreFnId::Push)),
+      Call(3, 2, 2),
+      CopyArgument(0),
+      CopyArgument(1),
+      Return(3)
+    ];
+    let inlined_ir =
+      erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap()).unwrap();
+    let expected_inlined_ir =
+      ssa_block![EmptyList(0), Const(1, 5), Push((0, 3), 1), Return(3)];
+    assert_eq!(
+      debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
+      debug_string(&(
+        expected_inlined_ir.instructions,
+        expected_inlined_ir.constants
+      ))
+    );
+  }
+
+  #[test]
+  fn inline_first() {
+    let raw_ir = ssa_block![
+      Const(0, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
+      Const(1, CoreFn(CoreFnId::First)),
+      Call(2, 1, 1),
+      CopyArgument(0),
+      Return(2)
+    ];
+    let inlined_ir =
+      erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap()).unwrap();
+    let expected_inlined_ir = ssa_block![
+      Const(0, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
+      First(2, 0),
+      Return(2)
+    ];
+    assert_eq!(
+      debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
+      debug_string(&(
+        expected_inlined_ir.instructions,
+        expected_inlined_ir.constants
+      ))
+    );
+  }
+
+  #[test]
+  fn inline_rest() {
+    let raw_ir = ssa_block![
+      Const(0, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
+      Const(1, CoreFn(CoreFnId::Rest)),
+      Call(2, 1, 1),
+      CopyArgument(0),
+      Return(2)
+    ];
+    let inlined_ir =
+      erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap()).unwrap();
+    let expected_inlined_ir = ssa_block![
+      Const(0, List(Rc::new(vec![1.into(), 2.into(), 3.into()]))),
+      Rest((0, 2)),
+      Return(2)
     ];
     assert_eq!(
       debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
