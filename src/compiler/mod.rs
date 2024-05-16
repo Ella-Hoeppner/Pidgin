@@ -934,8 +934,10 @@ mod tests {
     test_raw_ir!(
       sexp,
       (ssa_block![
+        Const(0, 2),
+        Const(1, 3),
         Const(
-          0,
+          2,
           GenericValue::composite_fn(
             2,
             ssa_block![
@@ -949,19 +951,19 @@ mod tests {
             ]
           )
         ),
-        Const(1, 2),
-        Const(2, 3),
-        Call(3, 0, 2),
+        Call(3, 2, 2),
+        CopyArgument(0),
         CopyArgument(1),
-        CopyArgument(2),
         Return(3)
       ])
     );
     test_bytecode!(
       sexp,
       (block![
+        Const(0, 2),
+        Const(1, 3),
         Const(
-          0,
+          2,
           Value::composite_fn(
             2,
             block![
@@ -972,12 +974,10 @@ mod tests {
             ]
           )
         ),
-        Const(1, 2),
-        Const(2, 3),
-        Call(0, 0, 2),
+        Call(2, 2, 2),
+        CopyArgument(0),
         CopyArgument(1),
-        CopyArgument(2),
-        Return(0)
+        Return(2)
       ])
     );
     test_output!(sexp, 36);

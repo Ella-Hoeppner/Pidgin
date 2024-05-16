@@ -42,7 +42,7 @@ Runtime stuff:
 
 Compiler stuff
 * support compiling the rest of the math functions
-  * ==, zero?,  nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
+  * ==, zero?, nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
 * support compiling boolean functions
   * =, not=, not, and, or, xor
 * support compiling type checkers, converters

@@ -117,43 +117,6 @@ impl From<Token> for SSAValue<()> {
   }
 }
 
-pub fn build_application_ir(
-  f: TokenTree,
-  args: Vec<SSARegister>,
-  bindings: &HashMap<SymbolIndex, u8>,
-  taken_virtual_registers: &mut usize,
-  instructions: &mut Vec<SSAInstruction>,
-  constants: &mut Vec<SSAValue<()>>,
-) -> Result<SSARegister, ASTError> {
-  match f {
-    Inner(_) => todo!(),
-    Leaf(leaf) => match leaf {
-      Token::Symbol(symbol) => {
-        if let Some(fn_id) = CoreFnId::from_name(&symbol) {
-          instructions.push(Const(
-            *taken_virtual_registers,
-            constants.len() as ConstIndex,
-          ));
-          instructions.push(Call(
-            *taken_virtual_registers + 1,
-            *taken_virtual_registers,
-            args.len() as u8,
-          ));
-          constants.push(CoreFn(fn_id));
-          for arg_register in args {
-            instructions.push(CopyArgument(arg_register))
-          }
-          *taken_virtual_registers += 2;
-          Ok(*taken_virtual_registers - 1)
-        } else {
-          todo!()
-        }
-      }
-      _ => todo!(),
-    },
-  }
-}
-
 pub fn push_constant(
   constant: SSAValue<()>,
   taken_virtual_registers: &mut usize,
@@ -177,8 +140,8 @@ pub fn build_ast_ir(
   match ast {
     Inner(list) => {
       let mut list_iter = list.into_iter();
-      if let Some(first_token) = list_iter.next() {
-        if first_token == Leaf(Token::Symbol("fn".to_string())) {
+      if let Some(first_subtree) = list_iter.next() {
+        if first_subtree == Leaf(Token::Symbol("fn".to_string())) {
           let args = list_iter.next();
           let mut new_bindings = bindings.clone();
           if let Some(Inner(arg_tokens)) = args {
@@ -236,14 +199,24 @@ pub fn build_ast_ir(
               )
             })
             .collect::<Result<Vec<SSARegister>, _>>()?;
-          build_application_ir(
-            first_token,
-            arg_registers,
+          let f_register = build_ast_ir(
+            first_subtree,
             bindings,
+            symbol_ledger,
             taken_virtual_registers,
             instructions,
             constants,
-          )
+          )?;
+          instructions.push(Call(
+            *taken_virtual_registers,
+            f_register,
+            arg_registers.len() as u8,
+          ));
+          for arg_register in arg_registers {
+            instructions.push(CopyArgument(arg_register))
+          }
+          *taken_virtual_registers += 1;
+          Ok(*taken_virtual_registers - 1)
         }
       } else {
         Err(ASTError::EmptyList)
