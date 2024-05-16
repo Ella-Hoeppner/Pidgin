@@ -11,6 +11,7 @@ use crate::{
 };
 
 use super::{SSABlock, SSAInstruction, SSARegister, SSAValue};
+use Instruction::*;
 
 type InstructionTimestamp = u16;
 use crate::runtime::core_functions::CoreFnId;
@@ -397,38 +398,91 @@ pub fn inline_core_fn_calls<M: Clone>(
             if let Const(f_register, const_index) =
               instructions[f_creation_timestamp as usize]
             {
-              if let CoreFn(id) = constants[const_index as usize] {
+              if let CoreFn(fn_id) = constants[const_index as usize] {
                 use CoreFnId as F;
                 use SSAInstruction as I;
-                match id {
-                  F::Add => {
-                    let args: Vec<_> = ((timestamp + 1)
-                      ..(timestamp + 1 + *arg_count as usize))
-                      .map(|instruction_index| {
-                        match instructions[instruction_index] {
-                          CopyArgument(arg) => arg,
-                          StealArgument(arg) => arg,
-                          _ => panic!(
-                            "didn't find CopyArgument or StealArgument after \
-                             Call in inline_core_fn_calls"
-                          ),
-                        }
-                      })
-                      .collect();
-                    if *arg_count == 2 {
-                      instructions
-                        .splice(
-                          timestamp..(timestamp + 1 + *arg_count as usize),
-                          std::iter::once(I::Add(*target, args[0], args[1])),
-                        )
-                        .collect::<Vec<_>>();
-                      modified = true;
-                      break;
+                let args: Vec<_> = ((timestamp + 1)
+                  ..(timestamp + 1 + *arg_count as usize))
+                  .map(|instruction_index| {
+                    match instructions[instruction_index] {
+                      CopyArgument(arg) => arg,
+                      StealArgument(arg) => arg,
+                      _ => panic!(
+                        "didn't find CopyArgument or StealArgument after \
+                         Call in inline_core_fn_calls"
+                      ),
+                    }
+                  })
+                  .collect();
+                if let Some(y) = match args.len() {
+                  0 => todo!(),
+                  1 => todo!(),
+                  2 => {
+                    if let Some(binary_instruction) = match fn_id {
+                      F::Add => Some(Add(*target, args[0], args[1])),
+                      F::Subtract => Some(Subtract(*target, args[0], args[1])),
+                      F::Multiply => Some(Multiply(*target, args[0], args[1])),
+                      F::Divide => Some(Divide(*target, args[0], args[1])),
+                      _ => None,
+                    } {
+                      Some(vec![binary_instruction])
                     } else {
-                      todo!()
+                      None
                     }
                   }
-                  _ => todo!(),
+                  arg_count => {
+                    let maybe_instruction_builder: Option<
+                      fn(
+                        SSARegister,
+                        SSARegister,
+                        SSARegister,
+                      ) -> SSAInstruction,
+                    > = match fn_id {
+                      F::Add => Some(|a, b, c| Add(a, b, c)),
+                      F::Multiply => Some(|a, b, c| Multiply(a, b, c)),
+                      _ => None,
+                    };
+                    if let Some(instruction_builder) = maybe_instruction_builder
+                    {
+                      let first_free_register =
+                        get_max_register(preallocated_registers, &instructions)
+                          + 1;
+                      let mut new_instructions = vec![instruction_builder(
+                        first_free_register,
+                        args[0],
+                        args[1],
+                      )];
+                      if arg_count == 3 {
+                        new_instructions.push(instruction_builder(
+                          *target,
+                          args[2],
+                          first_free_register,
+                        ));
+                      } else {
+                        for i in (0..(arg_count - 3)) {
+                          new_instructions.push(instruction_builder(
+                            first_free_register + i + 1,
+                            args[i + 2],
+                            first_free_register + i,
+                          ))
+                        }
+                        new_instructions.push(instruction_builder(
+                          *target,
+                          args[arg_count - 1],
+                          first_free_register + arg_count - 3,
+                        ))
+                      }
+                      Some(new_instructions)
+                    } else {
+                      None
+                    }
+                  }
+                } {
+                  instructions
+                    .splice(timestamp..(timestamp + 1 + *arg_count as usize), y)
+                    .collect::<Vec<_>>();
+                  modified = true;
+                  break;
                 }
               }
             }
@@ -515,29 +569,113 @@ mod tests {
       Return(3)
     ];
     let inlined_ir =
-      erase_unused_constants(inline_core_fn_calls(raw_ir.clone()).unwrap())
-        .unwrap();
+      erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap()).unwrap();
     let expected_inlined_ir =
       ssa_block![Const(0, 1), Const(1, 2), Add(3, 0, 1), Return(3)];
-
-    let raw_ir_output = EvaluationState::new(
-      allocate_registers(track_register_lifetimes(raw_ir.clone()).unwrap())
-        .unwrap(),
-    )
-    .evaluate()
-    .unwrap();
-    let expected_ir_output = EvaluationState::new(
-      allocate_registers(
-        track_register_lifetimes(expected_inlined_ir.clone()).unwrap(),
-      )
-      .unwrap(),
-    )
-    .evaluate()
-    .unwrap();
     assert_eq!(
-      debug_string(&raw_ir_output),
-      debug_string(&expected_ir_output)
+      debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
+      debug_string(&(
+        expected_inlined_ir.instructions,
+        expected_inlined_ir.constants
+      ))
     );
+  }
+
+  #[test]
+  fn inline_trinary_addition() {
+    let raw_ir = ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, CoreFn(CoreFnId::Add)),
+      Call(4, 3, 3),
+      CopyArgument(0),
+      CopyArgument(1),
+      CopyArgument(2),
+      Return(4)
+    ];
+    let inlined_ir =
+      erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap()).unwrap();
+    let expected_inlined_ir = ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Add(5, 0, 1),
+      Add(4, 2, 5),
+      Return(4)
+    ];
+    assert_eq!(
+      debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
+      debug_string(&(
+        expected_inlined_ir.instructions,
+        expected_inlined_ir.constants
+      ))
+    );
+  }
+
+  #[test]
+  fn inline_quaternary_addition() {
+    let raw_ir = ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, 4),
+      Const(4, CoreFn(CoreFnId::Add)),
+      Call(5, 4, 4),
+      CopyArgument(0),
+      CopyArgument(1),
+      CopyArgument(2),
+      CopyArgument(3),
+      Return(5)
+    ];
+    let inlined_ir =
+      erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap()).unwrap();
+    let expected_inlined_ir = ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, 4),
+      Add(6, 0, 1),
+      Add(7, 2, 6),
+      Add(5, 3, 7),
+      Return(5)
+    ];
+    assert_eq!(
+      debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
+      debug_string(&(
+        expected_inlined_ir.instructions,
+        expected_inlined_ir.constants
+      ))
+    );
+  }
+
+  #[test]
+  fn inline_quaternary_multiplication() {
+    let raw_ir = ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, 4),
+      Const(4, CoreFn(CoreFnId::Multiply)),
+      Call(5, 4, 4),
+      CopyArgument(0),
+      CopyArgument(1),
+      CopyArgument(2),
+      CopyArgument(3),
+      Return(5)
+    ];
+    let inlined_ir =
+      erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap()).unwrap();
+    let expected_inlined_ir = ssa_block![
+      Const(0, 1),
+      Const(1, 2),
+      Const(2, 3),
+      Const(3, 4),
+      Multiply(6, 0, 1),
+      Multiply(7, 2, 6),
+      Multiply(5, 3, 7),
+      Return(5)
+    ];
     assert_eq!(
       debug_string(&(inlined_ir.instructions, inlined_ir.constants)),
       debug_string(&(
