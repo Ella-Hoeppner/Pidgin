@@ -1,9 +1,7 @@
-use minivec::MiniVec;
 use std::{
   any::Any,
   cell::RefCell,
   collections::{HashMap, HashSet},
-  error::Error,
   fmt::{Debug, Display},
   hash::Hash,
   ops::{Add, Div, Mul, Neg, Sub},
@@ -13,12 +11,12 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-  blocks::GenericBlock, ConstIndex, CoroutineState, GenericCompositeFunction,
-  Instruction, Register, StackFrame,
+  blocks::GenericBlock,
+  runtime::{control::GenericCompositeFunction, vm::Register},
 };
 
 use super::{
-  control::{Block, CompositeFunction, PausedCoroutine},
+  control::{CompositeFunction, PausedCoroutine},
   core_functions::CoreFnId,
   error::{PidginError, PidginResult},
   vm::SymbolIndex,
@@ -291,7 +289,7 @@ impl From<u8> for AritySpecifier {
 }
 
 #[derive(Clone, Debug)]
-pub enum GenericValue<I, O, R, M> {
+pub(crate) enum GenericValue<I, O, R, M> {
   Nil,
   Bool(bool),
   Char(char),
@@ -434,8 +432,7 @@ impl Value {
       Coroutine(x) => format!(
         "coroutine ({})",
         if let Some(maybe_paused_coroutine) = &**x {
-          if let Some(paused_coroutine) = (&*(*maybe_paused_coroutine).borrow())
-          {
+          if let Some(paused_coroutine) = &*(*maybe_paused_coroutine).borrow() {
             format!(
               "{}, awaiting {} arguments",
               if paused_coroutine.started {

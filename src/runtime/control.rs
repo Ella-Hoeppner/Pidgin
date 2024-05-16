@@ -1,8 +1,11 @@
 use std::rc::Rc;
 
 use crate::{
-  blocks::GenericBlock, AritySpecifier, ConstIndex, Instruction, Register,
-  RuntimeInstruction, StackIndex, Value,
+  blocks::GenericBlock,
+  runtime::{
+    data::{AritySpecifier, Value},
+    vm::{Register, RuntimeInstruction, StackIndex},
+  },
 };
 
 const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
@@ -89,7 +92,7 @@ impl PausedCoroutine {
     (active_frame, self.state)
   }
   pub fn resume_from_child(mut self) -> (StackFrame, CoroutineState) {
-    let mut active_frame = self
+    let active_frame = self
       .state
       .paused_frames
       .pop()

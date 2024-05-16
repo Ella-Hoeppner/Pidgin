@@ -8,20 +8,20 @@ pub mod vm;
 mod tests {
   use std::rc::Rc;
 
-  use crate::runtime::control::CompositeFunction;
-  use crate::runtime::error::PidginError;
-  use crate::Block;
-  use crate::EvaluationState;
   use crate::{
-    runtime::core_functions::CoreFnId,
-    ConstIndex, ExternalFunction,
-    GenericValue::{self, *},
-    Instruction::*,
-    Num::{self, *},
-    Register, Value,
+    instructions::Instruction::*,
+    runtime::{
+      control::Block,
+      core_functions::CoreFnId,
+      data::{
+        ExternalFunction,
+        GenericValue::{self, *},
+        Num, Value,
+      },
+      error::PidginError,
+      vm::EvaluationState,
+    },
   };
-  use minivec::mini_vec;
-  use ordered_float::OrderedFloat;
   use program_macro::block;
 
   macro_rules! assert_register {
@@ -81,6 +81,7 @@ mod tests {
     (8, -2.)
   );
 
+  #[test]
   fn environment_lookup() {
     let mut state = EvaluationState::new(block![Lookup(0, 0)]);
     state.bind_symbol(0, "test!");

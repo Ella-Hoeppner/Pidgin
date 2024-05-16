@@ -1,24 +1,23 @@
 use std::{collections::HashMap, error::Error, fmt::Display};
 
 use crate::{
-  runtime::core_functions::CoreFnId, AritySpecifier, ConstIndex, GenericValue,
-  Instruction, Num, Register, SymbolIndex,
+  instructions::Instruction::*,
+  runtime::{core_functions::CoreFnId, data::GenericValue::*, vm::SymbolIndex},
 };
 
 use super::{
-  parse::{CantParseTokenError, Token, TokenTree, Tree},
+  parse::{
+    CantParseTokenError, Token, TokenTree,
+    Tree::{self, *},
+  },
   SSABlock, SSAInstruction, SSARegister, SSAValue,
 };
-
-use GenericValue::*;
-use Instruction::*;
-use Tree::*;
 
 #[derive(Debug, Clone)]
 pub enum ASTError {
   Parse(CantParseTokenError),
   EmptyList,
-  InvalidArity(CoreFnId, usize),
+  //InvalidArity(CoreFnId, usize),
   InvalidFunctionDefintionArgumentList(Option<TokenTree>),
   InvalidFunctionDefintionArgument(TokenTree),
   FunctionDefinitionMissingBody,
@@ -34,14 +33,14 @@ impl Display for ASTError {
       EmptyList => {
         write!(f, "found empty when parsing AST")
       }
-      InvalidArity(fn_id, given) => {
+      /*InvalidArity(fn_id, given) => {
         write!(
           f,
           "invalid number of arguments {} for function {}",
           given,
           fn_id.name()
         )
-      }
+      }*/
       InvalidFunctionDefintionArgumentList(arg_list) => {
         write!(
           f,
@@ -102,18 +101,6 @@ pub fn token_to_value(
     Token::FloatLiteral(f) => f.into(),
     Token::StringLiteral(s) => s.into(),
     Token::Symbol(s) => Symbol(symbol_ledger.symbol_index(s)),
-  }
-}
-
-impl From<Token> for SSAValue<()> {
-  fn from(token: Token) -> Self {
-    match token {
-      Token::Nil => Nil,
-      Token::IntLiteral(i) => i.into(),
-      Token::FloatLiteral(f) => f.into(),
-      Token::StringLiteral(s) => s.into(),
-      Token::Symbol(s) => todo!(),
-    }
   }
 }
 

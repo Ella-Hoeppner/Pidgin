@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, fmt::Display};
 
 use crate::{
   blocks::GenericBlock,
-  compiler::{SSABlock, SSAInstruction, SSARegister, SSAValue},
+  compiler::{SSABlock, SSAInstruction, SSARegister},
 };
 
 use super::InstructionTimestamp;
@@ -17,12 +17,6 @@ pub enum LifetimeError {
   ),
   ReplacingNonexistent(SSARegister, InstructionTimestamp),
   UsedAfterReplacement(
-    SSARegister,
-    InstructionTimestamp,
-    SSARegister,
-    InstructionTimestamp,
-  ),
-  ReplacingAfterReplacement(
     SSARegister,
     InstructionTimestamp,
     SSARegister,
@@ -57,17 +51,6 @@ impl Display for LifetimeError {
       ) => write!(
         f,
         "attempting to use register {register} at timestamp {timestamp}, \
-         but the register as already replaced by {already_replaced_register} at
-         timestamp {already_replaced_timestamp}"
-      ),
-      ReplacingAfterReplacement(
-        register,
-        timestamp,
-        already_replaced_register,
-        already_replaced_timestamp,
-      ) => write!(
-        f,
-        "attempting to replace register {register} at timestamp {timestamp}, \
          but the register as already replaced by {already_replaced_register} at
          timestamp {already_replaced_timestamp}"
       ),
@@ -120,10 +103,9 @@ impl RegisterLifetime {
 }
 pub(crate) type Lifetimes = HashMap<SSARegister, RegisterLifetime>;
 
-pub(crate) fn calculate_register_lifetimes<M>(
+pub(crate) fn calculate_register_lifetimes(
   preallocated_registers: u8,
   instructions: &Vec<SSAInstruction>,
-  constants: &Vec<SSAValue<M>>,
 ) -> Result<Lifetimes, LifetimeError> {
   let mut lifetimes: Lifetimes = Lifetimes::new();
   for preallocated_register in 0..preallocated_registers {
@@ -204,11 +186,8 @@ pub fn track_register_lifetimes<M: Clone>(
   block: SSABlock<M>,
 ) -> Result<SSABlock<Lifetimes>, LifetimeError> {
   block.translate(&|preallocated_registers, instructions, constants, _| {
-    let lifetimes = calculate_register_lifetimes(
-      preallocated_registers,
-      &instructions,
-      &constants,
-    )?;
+    let lifetimes =
+      calculate_register_lifetimes(preallocated_registers, &instructions)?;
     Ok(GenericBlock::new_with_metadata(
       instructions,
       constants,

@@ -1,6 +1,4 @@
-use std::{ops::Index, rc::Rc};
-
-use crate::{ConstIndex, SymbolIndex};
+use crate::runtime::vm::{ConstIndex, SymbolIndex};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Instruction<I, O, R> {

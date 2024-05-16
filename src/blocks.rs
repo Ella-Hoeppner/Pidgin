@@ -1,9 +1,12 @@
 use std::{ops::Index, rc::Rc};
 
-use crate::{GenericCompositeFunction, GenericValue, Instruction};
-
-use GenericValue::*;
-use Instruction::*;
+use crate::{
+  instructions::Instruction,
+  runtime::{
+    control::GenericCompositeFunction,
+    data::GenericValue::{self, *},
+  },
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericBlock<I, O, R, M> {

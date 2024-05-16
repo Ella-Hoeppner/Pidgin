@@ -2,7 +2,9 @@ pub mod ast_to_ir;
 pub mod parse;
 pub mod transformations;
 
-use crate::{blocks::GenericBlock, GenericValue, Instruction};
+use crate::{
+  blocks::GenericBlock, instructions::Instruction, runtime::data::GenericValue,
+};
 
 pub type SSARegister = usize;
 pub type SSAInstruction =
@@ -13,6 +15,7 @@ pub type SSAValue<M> =
   GenericValue<SSARegister, SSARegister, (SSARegister, SSARegister), M>;
 
 mod tests {
+  #![allow(warnings)]
   use program_macro::{block, ssa_block};
   use std::fmt::Debug;
 
@@ -28,12 +31,13 @@ mod tests {
       },
       SSABlock,
     },
+    instructions::Instruction::*,
+    runtime::control::Block,
     runtime::core_functions::CoreFnId,
-    Block, EvaluationState,
-    GenericValue::{self, *},
-    Instruction::*,
-    Num::{self, *},
-    Value,
+    runtime::data::GenericValue::{self, *},
+    runtime::data::Num::{self, *},
+    runtime::data::Value,
+    runtime::vm::EvaluationState,
   };
 
   fn debug_string<T: Debug>(x: &T) -> String {

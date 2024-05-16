@@ -3,40 +3,34 @@ use crate::{
   compiler::{
     transformations::get_max_register, SSABlock, SSAInstruction, SSARegister,
   },
-  GenericValue, Instruction,
+  instructions::Instruction::*,
+  runtime::{core_functions::CoreFnId, data::GenericValue::*},
 };
 
 use super::lifetimes::{
   calculate_register_lifetimes, LifetimeError, Lifetimes,
 };
-use crate::runtime::core_functions::CoreFnId;
-use GenericValue::*;
-use Instruction::*;
 
 pub fn inline_core_fn_calls<M: Clone>(
   block: SSABlock<M>,
 ) -> Result<SSABlock<Lifetimes>, LifetimeError> {
   block.translate(&|preallocated_registers,
                     mut instructions,
-                    mut constants,
-                    mut lifetimes|
+                    constants,
+                    _|
    -> Result<_, LifetimeError> {
     let final_lifetimes = loop {
-      let lifetimes = calculate_register_lifetimes(
-        preallocated_registers,
-        &instructions,
-        &constants,
-      )?;
+      let lifetimes =
+        calculate_register_lifetimes(preallocated_registers, &instructions)?;
       let mut modified = false;
       for (timestamp, instruction) in instructions.iter().enumerate() {
         if let Call(target, f_register, arg_count) = instruction {
           if let Some(f_creation_timestamp) = lifetimes[f_register].creation {
-            if let Const(f_register, const_index) =
+            if let Const(_, const_index) =
               instructions[f_creation_timestamp as usize]
             {
               if let CoreFn(fn_id) = constants[const_index as usize] {
                 use CoreFnId as F;
-                use SSAInstruction as I;
                 let args: Vec<_> = ((timestamp + 1)
                   ..(timestamp + 1 + *arg_count as usize))
                   .map(|instruction_index| {
@@ -159,7 +153,7 @@ pub fn inline_core_fn_calls<M: Clone>(
                             args[2],
                           ));
                         } else {
-                          for i in (0..(arg_count - 3)) {
+                          for i in 0..(arg_count - 3) {
                             new_instructions.push(instruction_builder(
                               first_free_register + i + 1,
                               first_free_register + i,
@@ -179,7 +173,7 @@ pub fn inline_core_fn_calls<M: Clone>(
                     }
                   },
                 } {
-                  instructions
+                  let _ = instructions
                     .splice(
                       timestamp..(timestamp + 1 + *arg_count as usize),
                       replacement_instructions,
@@ -206,28 +200,21 @@ pub fn inline_core_fn_calls<M: Clone>(
 }
 
 mod tests {
+  #![allow(warnings)]
   use program_macro::{block, ssa_block};
   use std::fmt::Debug;
   use std::rc::Rc;
 
   use crate::{
-    blocks::GenericBlock,
     compiler::{
-      ast_to_ir::expression_ast_to_ir,
-      parse::parse_sexp,
       transformations::{
         cleanup::erase_unused_constants, core_inlining::inline_core_fn_calls,
-        lifetimes::track_register_lifetimes,
-        register_allocation::allocate_registers,
       },
       SSABlock,
     },
+    instructions::Instruction::*,
     runtime::core_functions::CoreFnId,
-    Block, EvaluationState,
-    GenericValue::{self, *},
-    Instruction::*,
-    Num::{self, *},
-    Value,
+    runtime::data::GenericValue::{self, *},
   };
 
   fn debug_string<T: Debug>(x: &T) -> String {

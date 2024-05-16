@@ -7,7 +7,7 @@ use std::{
 use crate::{
   blocks::GenericBlock,
   compiler::{SSABlock, SSARegister},
-  Block, Register,
+  runtime::{control::Block, vm::Register},
 };
 
 use super::lifetimes::Lifetimes;
@@ -15,7 +15,7 @@ use super::lifetimes::Lifetimes;
 #[derive(Clone, Debug)]
 pub enum RegisterAllocationError {}
 impl Display for RegisterAllocationError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match *self {}
   }
 }

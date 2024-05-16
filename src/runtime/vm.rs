@@ -1,17 +1,21 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use minivec::{mini_vec, MiniVec};
-
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
 use crate::{
-  string_utils::indent_lines, GenericValue, Instruction, Num, Value,
+  instructions::Instruction::{self, *},
+  runtime::{
+    control::{CoroutineState, StackFrame},
+    data::{
+      AritySpecifier,
+      GenericValue::*,
+      Num::{self, *},
+      Value,
+    },
+  },
+  string_utils::indent_lines,
 };
-use crate::{AritySpecifier, CoroutineState, StackFrame};
-use GenericValue::*;
-use Instruction::*;
-use Num::*;
 
 use take_mut::take;
 
@@ -103,7 +107,7 @@ impl EvaluationState {
     self.current_coroutine.paused_frames.push(frame);
   }
   fn complete_child_coroutine(&mut self) -> Option<StackFrame> {
-    if let Some((child_coroutine_stack_index, mut parent_coroutine)) =
+    if let Some((child_coroutine_stack_index, parent_coroutine)) =
       self.parent_coroutine_stack.pop()
     {
       let (frame, coroutine_state) = parent_coroutine.resume_from_child();
@@ -147,7 +151,7 @@ impl EvaluationState {
     kill: bool,
   ) {
     let return_stack_index = self.current_frame.return_stack_index;
-    let (child_coroutine_stack_index, mut parent_coroutine) = self
+    let (child_coroutine_stack_index, parent_coroutine) = self
       .parent_coroutine_stack
       .pop()
       .expect("attempted to yield_coroutine with no paused parent coroutinees");
@@ -588,7 +592,7 @@ impl EvaluationState {
                 List(list) => todo!(),
                 Hashmap(map) => todo!(),
                 Hashset(set) => todo!(),
-                other => {
+                _ => {
                   break 'instruction Err(PidginError::CantApply);
                 }
               }

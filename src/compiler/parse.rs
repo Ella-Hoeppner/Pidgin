@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-use crate::runtime::core_functions::CoreFnId;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tree<T> {
   Inner(Vec<Tree<T>>),
@@ -122,9 +120,9 @@ impl TryFrom<Tree<String>> for TokenTree {
 }
 
 mod tests {
-  use Token::*;
-
+  #![allow(warnings)]
   use super::Token;
+  use Token::*;
   #[test]
   fn parse_int() {
     assert_eq!(Token::try_from("1"), Ok(IntLiteral(1)));
