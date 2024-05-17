@@ -1,7 +1,7 @@
 use crate::runtime::vm::{ConstIndex, SymbolIndex};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Instruction<I, O, R> {
+pub enum GenericInstruction<I, O, R> {
   DebugPrint(u8),
 
   // Register manipulation
@@ -211,14 +211,14 @@ pub enum Instruction<I, O, R> {
   ToSet(O, I),
   ToError(O, I),
 }
-use Instruction::*;
+use GenericInstruction::*;
 
 pub struct RegisterUsages<I, O, R> {
   pub inputs: Vec<I>,
   pub outputs: Vec<O>,
   pub replacements: Vec<R>,
 }
-impl<I: Clone, O: Clone, R: Clone> Instruction<I, O, R> {
+impl<I: Clone, O: Clone, R: Clone> GenericInstruction<I, O, R> {
   pub fn usages(&self) -> RegisterUsages<I, O, R> {
     let (inputs, outputs, replacements) = match self {
       DebugPrint(_) => (vec![], vec![], vec![]),
@@ -408,7 +408,7 @@ impl<I: Clone, O: Clone, R: Clone> Instruction<I, O, R> {
     }
   }
 }
-impl<I, O, R> Instruction<I, O, R> {
+impl<I, O, R> GenericInstruction<I, O, R> {
   pub fn translate<
     NewI,
     NewO,
@@ -421,7 +421,7 @@ impl<I, O, R> Instruction<I, O, R> {
     input_translator: InputTranslator,
     output_translator: OututTranslator,
     replacement_translator: ReplacementTranslator,
-  ) -> Instruction<NewI, NewO, NewR> {
+  ) -> GenericInstruction<NewI, NewO, NewR> {
     match self {
       DebugPrint(a) => DebugPrint(a),
       Clear(a) => Clear(output_translator(a)),

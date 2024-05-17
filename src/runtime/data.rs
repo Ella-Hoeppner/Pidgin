@@ -289,7 +289,7 @@ impl From<u8> for AritySpecifier {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum GenericValue<I, O, R, M> {
+pub enum GenericValue<I, O, R, M> {
   Nil,
   Bool(bool),
   Char(char),

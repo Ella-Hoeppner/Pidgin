@@ -2,15 +2,17 @@ simple decrement from 10,000,000 to 0 test:
   * Pidgin vm
     * code:
       ```rust
+      use block_macros::block;
+      use pidgin::{Block, EvaluationState, GenericInstruction::*, Value};
       let time = std::time::Instant::now();
-      let program = program![
+      let program = block![
         Const(0, 100000000),
         Const(
           1,
-          CompositeFn(Rc::new(CompositeFunction::new(
+          Value::composite_fn(
             1,
-            vec![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
-          )))
+            block![IsPos(1, 0), If(1), Dec(0, 0), Jump(0), EndIf, Return(0)]
+          )
         ),
         Call(0, 1, 1),
         StealArgument(0),
@@ -19,7 +21,7 @@ simple decrement from 10,000,000 to 0 test:
       state.evaluate().unwrap();
       println!("{}", time.elapsed().as_secs_f64())
       ```
-    * runtime: 1.799 seconds (with release build, debug build is much slower)
+    * runtime: 1.796 seconds (with release build, debug build is much slower)
   * babashka
     * code:
       ```clj

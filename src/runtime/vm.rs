@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
 use crate::{
-  instructions::Instruction::{self, *},
+  instructions::GenericInstruction::{self, *},
   runtime::{
     control::{CoroutineState, StackFrame},
     data::{
@@ -26,7 +26,7 @@ pub type Register = u8;
 pub type StackIndex = u16;
 pub type SymbolIndex = u16;
 pub type ConstIndex = u16;
-pub type RuntimeInstruction = Instruction<Register, Register, Register>;
+pub type Instruction = GenericInstruction<Register, Register, Register>;
 
 pub struct EvaluationState {
   current_frame: StackFrame,
@@ -263,7 +263,7 @@ impl EvaluationState {
     let frame = self.create_fn_stack_frame(f, return_stack_index);
     self.push_frame(frame);
   }
-  fn next_instruction(&mut self) -> RuntimeInstruction {
+  fn next_instruction(&mut self) -> Instruction {
     self.current_frame.next_instruction()
   }
   fn skip_to_endif(&mut self) {

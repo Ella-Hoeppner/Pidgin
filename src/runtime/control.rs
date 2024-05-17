@@ -5,7 +5,7 @@ use crate::{
   compiler::transformations::register_allocation::get_max_register,
   runtime::{
     data::{AritySpecifier, Value},
-    vm::{Register, RuntimeInstruction, StackIndex},
+    vm::{Instruction, Register, StackIndex},
   },
 };
 
@@ -13,10 +13,7 @@ const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 
 pub type Block = GenericBlock<Register, Register, Register, Register>;
 impl Block {
-  pub fn new(
-    instructions: Vec<RuntimeInstruction>,
-    constants: Vec<Value>,
-  ) -> Self {
+  pub fn new(instructions: Vec<Instruction>, constants: Vec<Value>) -> Self {
     let max_register = get_max_register(&instructions);
     Block {
       instructions: instructions.into(),
@@ -153,7 +150,7 @@ impl StackFrame {
       return_stack_index,
     }
   }
-  pub fn next_instruction(&mut self) -> RuntimeInstruction {
+  pub fn next_instruction(&mut self) -> Instruction {
     let instruction = self.block[self.instruction_index].clone();
     self.instruction_index += 1;
     instruction

@@ -4,15 +4,13 @@ use crate::{
   compiler::{error::CompilationError, SSABlock, SSARegister},
   runtime::{
     control::Block,
-    vm::{Register, RuntimeInstruction},
+    vm::{Instruction, Register},
   },
 };
 
 use super::lifetimes::Lifetimes;
 
-pub(crate) fn get_max_register(
-  instructions: &Vec<RuntimeInstruction>,
-) -> Register {
+pub(crate) fn get_max_register(instructions: &Vec<Instruction>) -> Register {
   let mut max_register = 0;
   for usage in instructions.iter().map(|instruction| instruction.usages()) {
     for input in usage.inputs {

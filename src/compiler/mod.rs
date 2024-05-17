@@ -4,12 +4,12 @@ pub mod parse;
 pub mod transformations;
 
 use crate::{
-  blocks::GenericBlock, instructions::Instruction, runtime::data::GenericValue,
+  blocks::GenericBlock, instructions::GenericInstruction, runtime::data::GenericValue,
 };
 
 pub type SSARegister = usize;
 pub type SSAInstruction =
-  Instruction<SSARegister, SSARegister, (SSARegister, SSARegister)>;
+  GenericInstruction<SSARegister, SSARegister, (SSARegister, SSARegister)>;
 pub type SSAValue<M> =
   GenericValue<SSARegister, SSARegister, (SSARegister, SSARegister), M>;
 pub type SSABlock<M> =
@@ -39,7 +39,7 @@ mod tests {
       ast_to_ir::expression_ast_to_ir, parse::parse_sexp,
       transformations::raw_ir_to_bytecode, SSABlock,
     },
-    instructions::Instruction::*,
+    instructions::GenericInstruction::*,
     runtime::control::Block,
     runtime::core_functions::CoreFnId,
     runtime::data::GenericValue::{self, *},

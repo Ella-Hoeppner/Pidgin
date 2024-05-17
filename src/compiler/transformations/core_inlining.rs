@@ -4,7 +4,7 @@ use crate::{
     transformations::get_max_ssa_register, SSABlock, SSAInstruction,
     SSARegister,
   },
-  instructions::Instruction::*,
+  instructions::GenericInstruction::*,
   runtime::{core_functions::CoreFnId, data::GenericValue::*},
 };
 
@@ -217,7 +217,7 @@ mod tests {
       },
       SSABlock,
     },
-    instructions::Instruction::*,
+    instructions::GenericInstruction::*,
     runtime::core_functions::CoreFnId,
     runtime::data::GenericValue::{self, *},
   };

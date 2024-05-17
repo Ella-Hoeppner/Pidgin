@@ -9,7 +9,7 @@ mod tests {
   use std::rc::Rc;
 
   use crate::{
-    instructions::Instruction::*,
+    instructions::GenericInstruction::*,
     runtime::{
       control::Block,
       core_functions::CoreFnId,

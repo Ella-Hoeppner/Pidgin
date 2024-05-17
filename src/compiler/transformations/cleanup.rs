@@ -1,4 +1,4 @@
-use crate::{compiler::SSABlock, instructions::Instruction::*};
+use crate::{compiler::SSABlock, instructions::GenericInstruction::*};
 
 use super::{
   super::error::CompilationError, lifetimes::calculate_register_lifetimes,

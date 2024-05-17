@@ -1,7 +1,7 @@
 use std::{collections::HashMap, error::Error, fmt::Display};
 
 use crate::{
-  instructions::Instruction::*,
+  instructions::GenericInstruction::*,
   runtime::{core_functions::CoreFnId, data::GenericValue::*, vm::SymbolIndex},
 };
 
