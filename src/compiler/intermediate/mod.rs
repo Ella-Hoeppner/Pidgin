@@ -1,5 +1,6 @@
 pub mod cleanup;
 pub mod core_inlining;
+pub mod error;
 pub mod lifetimes;
 pub mod register_allocation;
 
@@ -10,7 +11,9 @@ use self::{
   lifetimes::track_register_lifetimes, register_allocation::allocate_registers,
 };
 
-use super::{error::CompilationError, SSABlock, SSAInstruction, SSARegister};
+use error::IntermediateCompilationError;
+
+use super::{SSABlock, SSAInstruction, SSARegister};
 
 pub(crate) type InstructionTimestamp = u16;
 
@@ -36,7 +39,7 @@ fn get_max_ssa_register(
 
 pub(crate) fn raw_ir_to_bytecode(
   raw_ir: SSABlock<()>,
-) -> Result<Block, CompilationError> {
+) -> Result<Block, IntermediateCompilationError> {
   allocate_registers(track_register_lifetimes(erase_unused_constants(
     inline_core_fn_calls(raw_ir)?,
   )?)?)

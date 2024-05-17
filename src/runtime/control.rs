@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
   blocks::GenericBlock,
-  compiler::transformations::register_allocation::get_max_register,
+  compiler::intermediate::register_allocation::get_max_register,
   runtime::{
     data::{AritySpecifier, Value},
     vm::{Instruction, Register, StackIndex},

@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-  compiler::{error::CompilationError, SSABlock, SSARegister},
+  compiler::{
+    intermediate::error::IntermediateCompilationError, SSABlock, SSARegister,
+  },
   runtime::{
     control::Block,
     vm::{Instruction, Register},
@@ -28,7 +30,7 @@ pub(crate) fn get_max_register(instructions: &Vec<Instruction>) -> Register {
 
 pub(crate) fn allocate_registers(
   block: SSABlock<Lifetimes>,
-) -> Result<Block, CompilationError> {
+) -> Result<Block, IntermediateCompilationError> {
   block.translate(&|preallocated_registers,
                     instructions,
                     constants,

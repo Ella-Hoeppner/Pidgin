@@ -10,8 +10,8 @@ pub use runtime::{
 };
 
 pub fn evaluate_pidgin_sexp(sexp: String) -> PidginResult<String> {
-  use crate::compiler::transformations::raw_ir_to_bytecode;
-  use compiler::{ast_to_ir::expression_ast_to_ir, parse::parse_sexp};
+  use crate::compiler::intermediate::raw_ir_to_bytecode;
+  use compiler::ast::{parse::parse_sexp, to_ir::expression_ast_to_ir};
   let raw_ir = expression_ast_to_ir(parse_sexp(&sexp)).unwrap();
   let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
   let mut state = EvaluationState::new(bytecode);

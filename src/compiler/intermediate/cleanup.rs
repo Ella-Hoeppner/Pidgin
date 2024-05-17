@@ -1,12 +1,10 @@
 use crate::{compiler::SSABlock, instructions::GenericInstruction::*};
 
-use super::{
-  super::error::CompilationError, lifetimes::calculate_register_lifetimes,
-};
+use super::{error::IntermediateCompilationError, lifetimes::calculate_register_lifetimes};
 
 pub fn erase_unused_constants<M: Clone>(
   block: SSABlock<M>,
-) -> Result<SSABlock<()>, CompilationError> {
+) -> Result<SSABlock<()>, IntermediateCompilationError> {
   block.translate(&|preallocated_registers, instructions, constants, _| {
     let lifetimes =
       calculate_register_lifetimes(preallocated_registers, &instructions)?;

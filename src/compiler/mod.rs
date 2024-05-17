@@ -1,10 +1,9 @@
-pub mod ast_to_ir;
-pub mod error;
-pub mod parse;
-pub mod transformations;
+pub mod ast;
+pub mod intermediate;
 
 use crate::{
-  blocks::GenericBlock, instructions::GenericInstruction, runtime::data::GenericValue,
+  blocks::GenericBlock, instructions::GenericInstruction,
+  runtime::data::GenericValue,
 };
 
 pub type SSARegister = usize;
@@ -36,8 +35,9 @@ mod tests {
   use crate::{
     blocks::GenericBlock,
     compiler::{
-      ast_to_ir::expression_ast_to_ir, parse::parse_sexp,
-      transformations::raw_ir_to_bytecode, SSABlock,
+      ast::{parse::parse_sexp, to_ir::expression_ast_to_ir},
+      intermediate::raw_ir_to_bytecode,
+      SSABlock,
     },
     instructions::GenericInstruction::*,
     runtime::control::Block,
@@ -348,6 +348,14 @@ mod tests {
       ])
     );
     test_output!(sexp, 720);
+  }
+
+  #[test]
+  fn empty_form() {
+    let sexp = "()";
+    test_raw_ir!(sexp, ssa_block![EmptyList(0), Return(0)]);
+    test_bytecode!(sexp, block![EmptyList(0), Return(0)]);
+    test_output!(sexp, vec![]);
   }
 
   #[test]

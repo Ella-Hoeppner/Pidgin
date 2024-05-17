@@ -2,10 +2,10 @@ use std::{error::Error, fmt::Display};
 
 use crate::compiler::SSARegister;
 
-use super::transformations::InstructionTimestamp;
+use super::InstructionTimestamp;
 
 #[derive(Clone, Debug)]
-pub enum CompilationError {
+pub enum IntermediateCompilationError {
   UsedBeforeCreation(SSARegister, InstructionTimestamp),
   OutputToExisting(
     SSARegister,
@@ -20,9 +20,9 @@ pub enum CompilationError {
     InstructionTimestamp,
   ),
 }
-impl Display for CompilationError {
+impl Display for IntermediateCompilationError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    use CompilationError::*;
+    use IntermediateCompilationError::*;
     match *self {
       UsedBeforeCreation(register, timestamp) => write!(
         f,
@@ -54,4 +54,4 @@ impl Display for CompilationError {
     }
   }
 }
-impl Error for CompilationError {}
+impl Error for IntermediateCompilationError {}

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::collections::HashMap;
 
 use crate::{
   instructions::GenericInstruction::*,
@@ -6,103 +6,11 @@ use crate::{
 };
 
 use super::{
-  parse::{
-    CantParseTokenError, Token, TokenTree,
-    Tree::{self, *},
-  },
-  SSABlock, SSAInstruction, SSARegister, SSAValue,
+  super::{SSABlock, SSAInstruction, SSARegister, SSAValue},
+  error::ASTError,
+  token::{token_to_value, SymbolLedger, Token, TokenTree},
+  tree::Tree::{self, *},
 };
-
-#[derive(Debug, Clone)]
-pub enum ASTError {
-  Parse(CantParseTokenError),
-  EmptyList,
-  //InvalidArity(CoreFnId, usize),
-  InvalidFunctionDefintionArgumentList(Option<TokenTree>),
-  InvalidFunctionDefintionArgument(TokenTree),
-  FunctionDefinitionMissingBody,
-  UnboundSymbol(String),
-}
-impl Display for ASTError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    use ASTError::*;
-    match self {
-      Parse(e) => {
-        write!(f, "{}", e)
-      }
-      EmptyList => {
-        write!(f, "found empty when parsing AST")
-      }
-      /*InvalidArity(fn_id, given) => {
-        write!(
-          f,
-          "invalid number of arguments {} for function {}",
-          given,
-          fn_id.name()
-        )
-      }*/
-      InvalidFunctionDefintionArgumentList(arg_list) => {
-        write!(
-          f,
-          "invalid argument list for function definition: {:?}",
-          arg_list,
-        )
-      }
-      InvalidFunctionDefintionArgument(arg) => {
-        write!(
-          f,
-          "invalid argument name for function definition: {:?}",
-          arg
-        )
-      }
-      FunctionDefinitionMissingBody => {
-        write!(f, "no body for function definition")
-      }
-      UnboundSymbol(symbol_name) => {
-        write!(f, "encountered unbound symbol {symbol_name}")
-      }
-    }
-  }
-}
-impl Error for ASTError {}
-
-#[derive(Debug, Clone, Default)]
-pub struct SymbolLedger {
-  names_to_indeces: HashMap<String, SymbolIndex>,
-  indeces_to_names: HashMap<SymbolIndex, String>,
-}
-impl SymbolLedger {
-  fn symbol_index(&mut self, symbol: String) -> SymbolIndex {
-    self
-      .names_to_indeces
-      .get(&symbol)
-      .cloned()
-      .unwrap_or_else(|| {
-        let next_free_index = self.names_to_indeces.len() as u16;
-        self
-          .indeces_to_names
-          .insert(next_free_index, symbol.clone());
-        self.names_to_indeces.insert(symbol, next_free_index);
-        next_free_index
-      })
-  }
-  fn symbol_name(&self, index: SymbolIndex) -> Option<&String> {
-    self.indeces_to_names.get(&index)
-  }
-}
-
-pub fn token_to_value(
-  symbol_ledger: &mut SymbolLedger,
-  token: Token,
-) -> SSAValue<()> {
-  match token {
-    Token::Nil => Nil,
-    Token::IntLiteral(i) => i.into(),
-    Token::FloatLiteral(f) => f.into(),
-    Token::StringLiteral(s) => s.into(),
-    Token::Symbol(s) => Symbol(symbol_ledger.symbol_index(s)),
-  }
-}
 
 pub fn push_constant(
   constant: SSAValue<()>,
@@ -206,7 +114,9 @@ pub fn build_ast_ir(
           Ok(*taken_virtual_registers - 1)
         }
       } else {
-        Err(ASTError::EmptyList)
+        instructions.push(EmptyList(*taken_virtual_registers));
+        *taken_virtual_registers += 1;
+        Ok(*taken_virtual_registers - 1)
       }
     }
     Leaf(s) => {
@@ -247,7 +157,7 @@ pub fn expression_ast_to_ir(
   let mut constants = vec![];
   let mut ledger = SymbolLedger::default();
   let last_register = build_ast_ir(
-    ast.try_into().map_err(|e| ASTError::Parse(e))?,
+    ast.try_into()?,
     &HashMap::new(),
     &mut ledger,
     &mut taken_virtual_registers,

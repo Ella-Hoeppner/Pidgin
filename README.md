@@ -47,8 +47,6 @@ Compiler stuff
   * =, not=, not, and, or, xor
 * support compiling type checkers, converters
   * nil?, bool?, char?, num?, int?, float?, symbol?, str?, list?, map?, set?, collection?, fn?, error?, bool, char, num, int, float, symbol, to-list, to-map, to-set, error
-* get rid of `EvaluationState::consumption`, determine stack frame offsets via results of lifetime analysis
-  * rerun the benchmark in `main.rs` after this, curious how much of a difference it makes
 * lambda-lifting
   * this will be an AST-level transformation
     * basically, in `build_ast_ir`, whenever a `fn` is encountered and `bindings` is non-empty, the 

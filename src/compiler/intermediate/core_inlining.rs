@@ -1,26 +1,25 @@
 use crate::{
   blocks::GenericBlock,
   compiler::{
-    transformations::get_max_ssa_register, SSABlock, SSAInstruction,
-    SSARegister,
+    intermediate::get_max_ssa_register, SSABlock, SSAInstruction, SSARegister,
   },
   instructions::GenericInstruction::*,
   runtime::{core_functions::CoreFnId, data::GenericValue::*},
 };
 
 use super::{
-  super::error::CompilationError,
+  error::IntermediateCompilationError,
   lifetimes::{calculate_register_lifetimes, Lifetimes},
 };
 
 pub fn inline_core_fn_calls<M: Clone>(
   block: SSABlock<M>,
-) -> Result<SSABlock<Lifetimes>, CompilationError> {
+) -> Result<SSABlock<Lifetimes>, IntermediateCompilationError> {
   block.translate(&|preallocated_registers,
                     mut instructions,
                     constants,
                     _|
-   -> Result<_, CompilationError> {
+   -> Result<_, IntermediateCompilationError> {
     let final_lifetimes = loop {
       let lifetimes =
         calculate_register_lifetimes(preallocated_registers, &instructions)?;
@@ -212,7 +211,7 @@ mod tests {
 
   use crate::{
     compiler::{
-      transformations::{
+      intermediate::{
         cleanup::erase_unused_constants, core_inlining::inline_core_fn_calls,
       },
       SSABlock,

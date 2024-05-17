@@ -5,7 +5,7 @@ use crate::{
   compiler::{SSABlock, SSAInstruction, SSARegister},
 };
 
-use super::{super::error::CompilationError, InstructionTimestamp};
+use super::{error::IntermediateCompilationError, InstructionTimestamp};
 
 #[derive(Clone, Debug)]
 pub struct RegisterLifetime {
@@ -54,7 +54,7 @@ pub(crate) type Lifetimes = HashMap<SSARegister, RegisterLifetime>;
 pub(crate) fn calculate_register_lifetimes(
   preallocated_registers: u8,
   instructions: &Vec<SSAInstruction>,
-) -> Result<Lifetimes, CompilationError> {
+) -> Result<Lifetimes, IntermediateCompilationError> {
   let mut lifetimes: Lifetimes = Lifetimes::new();
   for preallocated_register in 0..preallocated_registers {
     lifetimes.insert(
@@ -68,7 +68,7 @@ pub(crate) fn calculate_register_lifetimes(
     for input_register in usages.inputs {
       if let Some(lifetime) = lifetimes.get_mut(&input_register) {
         if let Some(replaced_by) = lifetime.replaced_by {
-          return Err(CompilationError::UsedAfterReplacement(
+          return Err(IntermediateCompilationError::UsedAfterReplacement(
             input_register,
             timestamp,
             replaced_by,
@@ -77,7 +77,7 @@ pub(crate) fn calculate_register_lifetimes(
         }
         lifetime.usages.push(timestamp);
       } else {
-        return Err(CompilationError::UsedBeforeCreation(
+        return Err(IntermediateCompilationError::UsedBeforeCreation(
           input_register,
           timestamp,
         ));
@@ -85,7 +85,7 @@ pub(crate) fn calculate_register_lifetimes(
     }
     for output_register in usages.outputs {
       if let Some(existing_lifetime) = lifetimes.get(&output_register) {
-        return Err(CompilationError::OutputToExisting(
+        return Err(IntermediateCompilationError::OutputToExisting(
           output_register,
           existing_lifetime.creation,
           timestamp,
@@ -97,7 +97,7 @@ pub(crate) fn calculate_register_lifetimes(
     for (from_register, to_register) in usages.replacements {
       if let Some(from_lifetime) = lifetimes.get_mut(&from_register) {
         if let Some(replaced_by_register) = from_lifetime.replaced_by {
-          return Err(CompilationError::UsedAfterReplacement(
+          return Err(IntermediateCompilationError::UsedAfterReplacement(
             from_register,
             timestamp,
             replaced_by_register,
@@ -108,13 +108,13 @@ pub(crate) fn calculate_register_lifetimes(
           from_lifetime.replaced_by = Some(to_register);
         }
       } else {
-        return Err(CompilationError::ReplacingNonexistent(
+        return Err(IntermediateCompilationError::ReplacingNonexistent(
           from_register,
           timestamp,
         ));
       }
       if let Some(to_lifetime) = lifetimes.get(&to_register) {
-        return Err(CompilationError::OutputToExisting(
+        return Err(IntermediateCompilationError::OutputToExisting(
           to_register,
           to_lifetime.creation,
           timestamp,
@@ -132,7 +132,7 @@ pub(crate) fn calculate_register_lifetimes(
 
 pub fn track_register_lifetimes<M: Clone>(
   block: SSABlock<M>,
-) -> Result<SSABlock<Lifetimes>, CompilationError> {
+) -> Result<SSABlock<Lifetimes>, IntermediateCompilationError> {
   block.translate(&|preallocated_registers, instructions, constants, _| {
     let lifetimes =
       calculate_register_lifetimes(preallocated_registers, &instructions)?;
