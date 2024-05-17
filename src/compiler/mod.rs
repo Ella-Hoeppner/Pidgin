@@ -1,4 +1,5 @@
 pub mod ast_to_ir;
+pub mod error;
 pub mod parse;
 pub mod transformations;
 
@@ -9,27 +10,34 @@ use crate::{
 pub type SSARegister = usize;
 pub type SSAInstruction =
   Instruction<SSARegister, SSARegister, (SSARegister, SSARegister)>;
-pub type SSABlock<M> =
-  GenericBlock<SSARegister, SSARegister, (SSARegister, SSARegister), M>;
 pub type SSAValue<M> =
   GenericValue<SSARegister, SSARegister, (SSARegister, SSARegister), M>;
+pub type SSABlock<M> =
+  GenericBlock<SSARegister, SSARegister, (SSARegister, SSARegister), M>;
+impl SSABlock<()> {
+  pub fn new(
+    instructions: Vec<SSAInstruction>,
+    constants: Vec<SSAValue<()>>,
+  ) -> Self {
+    Self {
+      instructions: instructions.into(),
+      constants: constants.into(),
+      metadata: (),
+    }
+  }
+}
 
 mod tests {
-  #![allow(warnings)]
-  use program_macro::{block, ssa_block};
+  #![allow(unused_imports)]
+  #![allow(unused)]
+  use block_macros::{block, ssa_block};
   use std::fmt::Debug;
 
   use crate::{
     blocks::GenericBlock,
     compiler::{
-      ast_to_ir::expression_ast_to_ir,
-      parse::parse_sexp,
-      transformations::{
-        cleanup::erase_unused_constants, core_inlining::inline_core_fn_calls,
-        lifetimes::track_register_lifetimes,
-        register_allocation::allocate_registers,
-      },
-      SSABlock,
+      ast_to_ir::expression_ast_to_ir, parse::parse_sexp,
+      transformations::raw_ir_to_bytecode, SSABlock,
     },
     instructions::Instruction::*,
     runtime::control::Block,
@@ -58,14 +66,7 @@ mod tests {
   macro_rules! test_bytecode {
     ($sexp:expr, $expected_bytecode:expr) => {
       let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
-      let bytecode = allocate_registers(
-        track_register_lifetimes(
-          erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap())
-            .unwrap(),
-        )
-        .unwrap(),
-      )
-      .unwrap();
+      let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
       assert_eq!(
         debug_string(&bytecode),
         debug_string(&$expected_bytecode),
@@ -77,14 +78,7 @@ mod tests {
   macro_rules! test_output {
     ($sexp:expr, $expected_output:expr) => {
       let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
-      let bytecode = allocate_registers(
-        track_register_lifetimes(
-          erase_unused_constants(inline_core_fn_calls(raw_ir).unwrap())
-            .unwrap(),
-        )
-        .unwrap(),
-      )
-      .unwrap();
+      let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
       let output = EvaluationState::new(bytecode).evaluate().unwrap();
       assert_eq!(
         debug_string(&output),

@@ -3,11 +3,18 @@ pub mod core_inlining;
 pub mod lifetimes;
 pub mod register_allocation;
 
-use super::{SSAInstruction, SSARegister};
+use crate::runtime::control::Block;
 
-type InstructionTimestamp = u16;
+use self::{
+  cleanup::erase_unused_constants, core_inlining::inline_core_fn_calls,
+  lifetimes::track_register_lifetimes, register_allocation::allocate_registers,
+};
 
-fn get_max_register(
+use super::{error::CompilationError, SSABlock, SSAInstruction, SSARegister};
+
+pub(crate) type InstructionTimestamp = u16;
+
+fn get_max_ssa_register(
   preallocated_registers: u8,
   instructions: &Vec<SSAInstruction>,
 ) -> SSARegister {
@@ -25,4 +32,12 @@ fn get_max_register(
     }
   }
   max_register
+}
+
+pub(crate) fn raw_ir_to_bytecode(
+  raw_ir: SSABlock<()>,
+) -> Result<Block, CompilationError> {
+  allocate_registers(track_register_lifetimes(erase_unused_constants(
+    inline_core_fn_calls(raw_ir)?,
+  )?)?)
 }

@@ -318,7 +318,7 @@ impl<I, O, R, M> GenericValue<I, O, R, M> {
   }
 }
 
-pub type Value = GenericValue<Register, Register, Register, ()>;
+pub type Value = GenericValue<Register, Register, Register, Register>;
 use GenericValue::*;
 
 impl<I, O, R, M> PartialEq for GenericValue<I, O, R, M> {

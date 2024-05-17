@@ -1,12 +1,12 @@
-use crate::{
-  blocks::GenericBlock, compiler::SSABlock, instructions::Instruction::*,
-};
+use crate::{compiler::SSABlock, instructions::Instruction::*};
 
-use super::lifetimes::{calculate_register_lifetimes, LifetimeError};
+use super::{
+  super::error::CompilationError, lifetimes::calculate_register_lifetimes,
+};
 
 pub fn erase_unused_constants<M: Clone>(
   block: SSABlock<M>,
-) -> Result<SSABlock<()>, LifetimeError> {
+) -> Result<SSABlock<()>, CompilationError> {
   block.translate(&|preallocated_registers, instructions, constants, _| {
     let lifetimes =
       calculate_register_lifetimes(preallocated_registers, &instructions)?;
@@ -23,6 +23,6 @@ pub fn erase_unused_constants<M: Clone>(
         filtered_instructions.push(instruction)
       }
     }
-    Ok(GenericBlock::new(filtered_instructions, filtered_constants))
+    Ok(SSABlock::new(filtered_instructions, filtered_constants))
   })
 }

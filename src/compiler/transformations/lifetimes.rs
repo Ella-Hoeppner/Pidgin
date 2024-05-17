@@ -1,63 +1,11 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::collections::HashMap;
 
 use crate::{
   blocks::GenericBlock,
   compiler::{SSABlock, SSAInstruction, SSARegister},
 };
 
-use super::InstructionTimestamp;
-
-#[derive(Clone, Debug)]
-pub enum LifetimeError {
-  UsedBeforeCreation(SSARegister, InstructionTimestamp),
-  OutputToExisting(
-    SSARegister,
-    Option<InstructionTimestamp>,
-    InstructionTimestamp,
-  ),
-  ReplacingNonexistent(SSARegister, InstructionTimestamp),
-  UsedAfterReplacement(
-    SSARegister,
-    InstructionTimestamp,
-    SSARegister,
-    InstructionTimestamp,
-  ),
-}
-impl Display for LifetimeError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    use LifetimeError::*;
-    match *self {
-      UsedBeforeCreation(register, timestamp) => write!(
-        f,
-        "attempted to use register {register} before creation at \
-         timestamp {timestamp}"
-      ),
-      OutputToExisting(register, created_timestamp, new_timestamp) => write!(
-        f,
-        "attempted to output to register {register} at timestamp \
-         {new_timestamp}, when register was already created at timestamp \
-         {created_timestamp:?}"
-      ),
-      ReplacingNonexistent(register, timestamp) => write!(
-        f,
-        "attempting to replace register {register} at timestamp {timestamp}, \
-         but the register does not exist"
-      ),
-      UsedAfterReplacement(
-        register,
-        timestamp,
-        already_replaced_register,
-        already_replaced_timestamp,
-      ) => write!(
-        f,
-        "attempting to use register {register} at timestamp {timestamp}, \
-         but the register as already replaced by {already_replaced_register} at
-         timestamp {already_replaced_timestamp}"
-      ),
-    }
-  }
-}
-impl Error for LifetimeError {}
+use super::{super::error::CompilationError, InstructionTimestamp};
 
 #[derive(Clone, Debug)]
 pub struct RegisterLifetime {
@@ -106,7 +54,7 @@ pub(crate) type Lifetimes = HashMap<SSARegister, RegisterLifetime>;
 pub(crate) fn calculate_register_lifetimes(
   preallocated_registers: u8,
   instructions: &Vec<SSAInstruction>,
-) -> Result<Lifetimes, LifetimeError> {
+) -> Result<Lifetimes, CompilationError> {
   let mut lifetimes: Lifetimes = Lifetimes::new();
   for preallocated_register in 0..preallocated_registers {
     lifetimes.insert(
@@ -120,7 +68,7 @@ pub(crate) fn calculate_register_lifetimes(
     for input_register in usages.inputs {
       if let Some(lifetime) = lifetimes.get_mut(&input_register) {
         if let Some(replaced_by) = lifetime.replaced_by {
-          return Err(LifetimeError::UsedAfterReplacement(
+          return Err(CompilationError::UsedAfterReplacement(
             input_register,
             timestamp,
             replaced_by,
@@ -129,7 +77,7 @@ pub(crate) fn calculate_register_lifetimes(
         }
         lifetime.usages.push(timestamp);
       } else {
-        return Err(LifetimeError::UsedBeforeCreation(
+        return Err(CompilationError::UsedBeforeCreation(
           input_register,
           timestamp,
         ));
@@ -137,7 +85,7 @@ pub(crate) fn calculate_register_lifetimes(
     }
     for output_register in usages.outputs {
       if let Some(existing_lifetime) = lifetimes.get(&output_register) {
-        return Err(LifetimeError::OutputToExisting(
+        return Err(CompilationError::OutputToExisting(
           output_register,
           existing_lifetime.creation,
           timestamp,
@@ -149,7 +97,7 @@ pub(crate) fn calculate_register_lifetimes(
     for (from_register, to_register) in usages.replacements {
       if let Some(from_lifetime) = lifetimes.get_mut(&from_register) {
         if let Some(replaced_by_register) = from_lifetime.replaced_by {
-          return Err(LifetimeError::UsedAfterReplacement(
+          return Err(CompilationError::UsedAfterReplacement(
             from_register,
             timestamp,
             replaced_by_register,
@@ -160,13 +108,13 @@ pub(crate) fn calculate_register_lifetimes(
           from_lifetime.replaced_by = Some(to_register);
         }
       } else {
-        return Err(LifetimeError::ReplacingNonexistent(
+        return Err(CompilationError::ReplacingNonexistent(
           from_register,
           timestamp,
         ));
       }
       if let Some(to_lifetime) = lifetimes.get(&to_register) {
-        return Err(LifetimeError::OutputToExisting(
+        return Err(CompilationError::OutputToExisting(
           to_register,
           to_lifetime.creation,
           timestamp,
@@ -184,7 +132,7 @@ pub(crate) fn calculate_register_lifetimes(
 
 pub fn track_register_lifetimes<M: Clone>(
   block: SSABlock<M>,
-) -> Result<SSABlock<Lifetimes>, LifetimeError> {
+) -> Result<SSABlock<Lifetimes>, CompilationError> {
   block.translate(&|preallocated_registers, instructions, constants, _| {
     let lifetimes =
       calculate_register_lifetimes(preallocated_registers, &instructions)?;

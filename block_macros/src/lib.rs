@@ -116,7 +116,7 @@ fn generic_block(block_type_name: &str, input: TokenStream) -> TokenStream {
       .into_iter()
       .map(|x| format!("({}).into()", x))
       .collect::<Vec<_>>()
-      .join(", ")
+      .join(", "),
   )
   .parse()
   .unwrap()

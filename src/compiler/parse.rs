@@ -120,7 +120,7 @@ impl TryFrom<Tree<String>> for TokenTree {
 }
 
 mod tests {
-  #![allow(warnings)]
+  #![allow(unused_imports)]
   use super::Token;
   use Token::*;
   #[test]

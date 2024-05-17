@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use crate::{
   blocks::GenericBlock,
+  compiler::transformations::register_allocation::get_max_register,
   runtime::{
     data::{AritySpecifier, Value},
     vm::{Register, RuntimeInstruction, StackIndex},
@@ -10,7 +11,20 @@ use crate::{
 
 const STACK_CAPACITY: usize = 1000; //u16::MAX as usize + 1;
 
-pub type Block = GenericBlock<Register, Register, Register, ()>;
+pub type Block = GenericBlock<Register, Register, Register, Register>;
+impl Block {
+  pub fn new(
+    instructions: Vec<RuntimeInstruction>,
+    constants: Vec<Value>,
+  ) -> Self {
+    let max_register = get_max_register(&instructions);
+    Block {
+      instructions: instructions.into(),
+      constants: constants.into(),
+      metadata: max_register,
+    }
+  }
+}
 
 #[derive(Clone, Debug)]
 pub struct GenericCompositeFunction<I, O, R, M> {
@@ -31,7 +45,7 @@ impl<I, O, R, M> GenericCompositeFunction<I, O, R, M> {
 }
 
 pub type CompositeFunction =
-  GenericCompositeFunction<Register, Register, Register, ()>;
+  GenericCompositeFunction<Register, Register, Register, Register>;
 
 #[derive(Debug)]
 pub struct CoroutineState {

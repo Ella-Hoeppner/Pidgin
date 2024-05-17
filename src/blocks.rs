@@ -20,18 +20,6 @@ impl<I, O, R, M> Index<usize> for GenericBlock<I, O, R, M> {
     &self.instructions[index]
   }
 }
-impl<I, O, R> GenericBlock<I, O, R, ()> {
-  pub fn new(
-    instructions: Vec<Instruction<I, O, R>>,
-    constants: Vec<GenericValue<I, O, R, ()>>,
-  ) -> Self {
-    Self {
-      instructions: instructions.into(),
-      constants: constants.into(),
-      metadata: (),
-    }
-  }
-}
 impl<I, O, R, M> GenericBlock<I, O, R, M> {
   pub fn new_with_metadata(
     instructions: Vec<Instruction<I, O, R>>,

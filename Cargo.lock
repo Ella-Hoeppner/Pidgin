@@ -9,6 +9,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1fdabc7756949593fe60f30ec81974b613357de856987752631dea1e3394c80"
 
 [[package]]
+name = "block_macros"
+version = "0.0.0"
+
+[[package]]
 name = "enum-map"
 version = "2.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -27,12 +31,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "minivec"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2485db5de8046822eec8897b7779dce1b27af6a856cde7abd3a23e394f437d94"
 
 [[package]]
 name = "num-traits"
@@ -56,10 +54,9 @@ dependencies = [
 name = "pidgin"
 version = "0.1.0"
 dependencies = [
+ "block_macros",
  "enum-map",
- "minivec",
  "ordered-float",
- "program_macro",
  "take_mut",
 ]
 
@@ -71,10 +68,6 @@ checksum = "3d1597b0c024618f09a9c3b8655b7e430397a36d23fdafec26d6965e9eec3eba"
 dependencies = [
  "unicode-ident",
 ]
-
-[[package]]
-name = "program_macro"
-version = "0.0.0"
 
 [[package]]
 name = "quote"

@@ -1,5 +1,5 @@
 [package]
-name = "program_macro"
+name = "block_macros"
 
 [lib]
 proc-macro = true

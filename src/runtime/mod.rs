@@ -22,7 +22,7 @@ mod tests {
       vm::EvaluationState,
     },
   };
-  use program_macro::block;
+  use block_macros::block;
 
   macro_rules! assert_register {
     ($state:expr, $register:expr, $value:expr) => {

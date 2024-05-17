@@ -1,24 +1,26 @@
 use crate::{
   blocks::GenericBlock,
   compiler::{
-    transformations::get_max_register, SSABlock, SSAInstruction, SSARegister,
+    transformations::get_max_ssa_register, SSABlock, SSAInstruction,
+    SSARegister,
   },
   instructions::Instruction::*,
   runtime::{core_functions::CoreFnId, data::GenericValue::*},
 };
 
-use super::lifetimes::{
-  calculate_register_lifetimes, LifetimeError, Lifetimes,
+use super::{
+  super::error::CompilationError,
+  lifetimes::{calculate_register_lifetimes, Lifetimes},
 };
 
 pub fn inline_core_fn_calls<M: Clone>(
   block: SSABlock<M>,
-) -> Result<SSABlock<Lifetimes>, LifetimeError> {
+) -> Result<SSABlock<Lifetimes>, CompilationError> {
   block.translate(&|preallocated_registers,
                     mut instructions,
                     constants,
                     _|
-   -> Result<_, LifetimeError> {
+   -> Result<_, CompilationError> {
     let final_lifetimes = loop {
       let lifetimes =
         calculate_register_lifetimes(preallocated_registers, &instructions)?;
@@ -48,8 +50,10 @@ pub fn inline_core_fn_calls<M: Clone>(
                   F::CreateList => Some(if *arg_count == 0 {
                     vec![EmptyList(*target)]
                   } else {
-                    let max_register =
-                      get_max_register(preallocated_registers, &instructions);
+                    let max_register = get_max_ssa_register(
+                      preallocated_registers,
+                      &instructions,
+                    );
                     let mut list_instructions =
                       vec![EmptyList(max_register + 1)];
                     for i in 0..*arg_count as usize - 1 {
@@ -137,7 +141,7 @@ pub fn inline_core_fn_calls<M: Clone>(
                       if let Some(instruction_builder) =
                         maybe_instruction_builder
                       {
-                        let first_free_register = get_max_register(
+                        let first_free_register = get_max_ssa_register(
                           preallocated_registers,
                           &instructions,
                         ) + 1;
@@ -200,8 +204,9 @@ pub fn inline_core_fn_calls<M: Clone>(
 }
 
 mod tests {
-  #![allow(warnings)]
-  use program_macro::{block, ssa_block};
+  #![allow(unused_imports)]
+  #![allow(unused)]
+  use block_macros::{block, ssa_block};
   use std::fmt::Debug;
   use std::rc::Rc;
 

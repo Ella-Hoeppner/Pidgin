@@ -53,6 +53,10 @@ Compiler stuff
   * this will be an AST-level transformation
     * basically, in `build_ast_ir`, whenever a `fn` is encountered and `bindings` is non-empty, the 
 * support compiling if statements
+  * Maybe it would make sense have a new `EagerIf` instruction that takes 2 registers and just returns the value of one or the other based on a boolean register (which will also just be used as the return register). This wouldn't do a short-circuiting optimization. The compiler could then just emit, for an `(if ...)` statement, 2 thunks (which could later be lambda-lifted) for each side of the if, and use `EagerIf` to put one of the two into a register, then `Call` that function.
+    * There could be an optimization pass that transforms this pattern into the more optimized `If` `Else` `End` instructions, but that pass can come relatively late in the compilation pipeline, so other passes don't have to worry about being the existence of `If`s or `Jump`s
+      * However, this pass does need to be followed by a function inlining pass, as it would just intersperse `Call`s of the thunks between the `If` `Else` and `End` instructions, so it wouldn't be optimally efficient without a later function inlining step.
+    * I guess this needs to happen at the AST level, since it will come before lambda-lifting. I guess `if` could just be a macro that transforms `(if <cond> <a> <B>)` into `((if-eager <cond> (fn () <a>) (fn () <b>)))`.
 * IR-level optimizations:
   * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
   * [`Call`, `Return`] -> `CallAndReturn`
