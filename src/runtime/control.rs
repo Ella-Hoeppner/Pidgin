@@ -51,21 +51,18 @@ pub type CompositeFunction =
 pub struct CoroutineState {
   pub stack: Vec<Value>,
   pub paused_frames: Vec<StackFrame>,
-  pub consumption: StackIndex,
 }
 impl CoroutineState {
   pub fn new() -> Self {
     Self {
       stack: std::iter::repeat(Value::Nil).take(STACK_CAPACITY).collect(),
       paused_frames: vec![],
-      consumption: 0,
     }
   }
   pub fn new_with_root_frame(root_frame: StackFrame) -> Self {
     Self {
       stack: std::iter::repeat(Value::Nil).take(STACK_CAPACITY).collect(),
       paused_frames: vec![root_frame],
-      consumption: 0,
     }
   }
   pub fn pause(
@@ -129,16 +126,16 @@ impl From<CompositeFunction> for PausedCoroutine {
 pub struct StackFrame {
   pub beginning: StackIndex,
   pub calling_function: Option<Rc<CompositeFunction>>,
-  pub instructions: Block,
+  pub block: Block,
   pub instruction_index: usize,
   pub return_stack_index: StackIndex,
 }
 impl StackFrame {
-  pub fn root(instructions: Block) -> Self {
+  pub fn root(block: Block) -> Self {
     Self {
       beginning: 0,
       calling_function: None,
-      instructions,
+      block,
       instruction_index: 0,
       return_stack_index: 0,
     }
@@ -150,15 +147,18 @@ impl StackFrame {
   ) -> Self {
     Self {
       beginning,
-      instructions: f.block.clone(),
+      block: f.block.clone(),
       instruction_index: 0,
       calling_function: Some(f),
       return_stack_index,
     }
   }
   pub fn next_instruction(&mut self) -> RuntimeInstruction {
-    let instruction = self.instructions[self.instruction_index].clone();
+    let instruction = self.block[self.instruction_index].clone();
     self.instruction_index += 1;
     instruction
+  }
+  pub fn stack_consumption(&self) -> StackIndex {
+    self.block.metadata as StackIndex
   }
 }

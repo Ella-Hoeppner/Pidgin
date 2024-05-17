@@ -59,9 +59,10 @@ impl EvaluationState {
         let frame = window[0].unwrap();
         let maybe_next_frame = window[1];
         let start = frame.beginning;
-        let end = maybe_next_frame
-          .map(|next_frame| next_frame.beginning)
-          .unwrap_or(self.current_coroutine.consumption);
+        let end = start
+          + maybe_next_frame
+            .unwrap_or(&self.current_frame)
+            .stack_consumption();
         format!(
           "{}\n{}",
           pad(
@@ -74,7 +75,7 @@ impl EvaluationState {
           ),
           indent_lines(
             7,
-            (start..end)
+            (start..=end)
               .map(|i| format!("{}: {}", i, self.get_stack(i).description()))
               .collect::<Vec<String>>()
               .join("\n")
@@ -137,7 +138,6 @@ impl EvaluationState {
   }
   fn return_value(&mut self, value: Value) -> Option<Value> {
     if let Some(completed_frame) = self.complete_frame() {
-      self.current_coroutine.consumption = completed_frame.beginning;
       self.set_stack(completed_frame.return_stack_index, value);
       None
     } else {
@@ -194,8 +194,6 @@ impl EvaluationState {
   }
   fn set_stack_usize(&mut self, index: usize, value: Value) {
     self.current_coroutine.stack[index] = value;
-    self.current_coroutine.consumption =
-      self.current_coroutine.consumption.max(index as u16 + 1);
   }
   fn set_stack(&mut self, index: StackIndex, value: Value) {
     self.set_stack_usize(index as usize, value);
@@ -241,17 +239,9 @@ impl EvaluationState {
     self.steal_stack(self.register_stack_index(register))
   }
   pub(crate) fn get_register(&self, register: Register) -> &Value {
-    #[cfg(debug_assertions)]
-    if register as usize >= self.current_coroutine.consumption as usize {
-      panic!("trying to access register that hasn't been set yet")
-    }
     self.get_stack(self.register_stack_index(register))
   }
   pub(crate) fn get_register_mut(&mut self, register: Register) -> &mut Value {
-    #[cfg(debug_assertions)]
-    if register as usize >= self.current_coroutine.consumption as usize {
-      panic!("trying to access register that hasn't been set yet")
-    }
     self.get_stack_mut(self.register_stack_index(register))
   }
   fn create_fn_stack_frame(
@@ -261,7 +251,7 @@ impl EvaluationState {
   ) -> StackFrame {
     StackFrame::for_fn(
       f,
-      self.current_coroutine.consumption,
+      self.current_frame.beginning + self.current_frame.stack_consumption() + 1,
       return_stack_index,
     )
   }
@@ -375,8 +365,7 @@ impl EvaluationState {
   }
   pub fn evaluate(&mut self) -> PidginResult<Option<Value>> {
     loop {
-      if self.current_frame.instruction_index
-        >= self.current_frame.instructions.len()
+      if self.current_frame.instruction_index >= self.current_frame.block.len()
       {
         break;
       }
@@ -402,8 +391,7 @@ impl EvaluationState {
           Const(result, const_index) => {
             self.set_register(
               result,
-              self.current_frame.instructions.constants[const_index as usize]
-                .clone(),
+              self.current_frame.block.constants[const_index as usize].clone(),
             );
           }
           Print(value) => {
@@ -577,8 +565,6 @@ impl EvaluationState {
                     new_frame.beginning,
                     &mut completed_frame,
                   );
-                  self.current_coroutine.consumption =
-                    completed_frame.beginning + arg_count as StackIndex;
                   self.push_frame(new_frame);
                 }
                 ExternalFn(_) => todo!(),
@@ -617,8 +603,6 @@ impl EvaluationState {
                 new_frame.beginning,
                 &mut completed_frame,
               );
-              self.current_coroutine.consumption =
-                completed_frame.beginning + arg_count as StackIndex;
               self.push_frame(new_frame);
             } else {
               panic!("CallSelfAndReturn failed to complete the current frame")
