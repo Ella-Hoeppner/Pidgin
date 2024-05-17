@@ -2,6 +2,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 
 # to-do
 General:
+* destructuring
 * Add a "debug mode" to the runtime + compiler. In this mode, each stackframe carries a HashMap describing the local environment. On the runtime side, this means there needs to be an extra `LocalBind` instruction that adds values to that hashmap. On the compiler side, that instruction needs to be emitted at the start of every function for each input, with the proper name given the lexical scope.
   * Most optimizations will probably have to be disabled in this mode. Specifically, function inlining will probably be impossible.
   * This mode will probably be *much* slower, not only because of the disabling of optimziations, but also because the local environment will keep the reference count of all collections above 1 at all times, so the runtime will have to clone a collection for every single modification
@@ -20,7 +21,6 @@ Runtime stuff:
     * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values
       * a rust iterator would work for the realizers of built-in functions, but I want there to be a function to turn a coroutine into a lazy list, and I'm not sure a rust iter could capture that...
         * I guess there could be a `Realizer` enum type with `Iterator` and `Coroutine` variants?
-* destructuring
 * support partially-applied functions
   * these should store a function and a vec of arguments passed to it
   * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
@@ -55,7 +55,7 @@ Compiler stuff
     * There could be an optimization pass that transforms this pattern into the more optimized `If` `Else` `End` instructions, but that pass can come relatively late in the compilation pipeline, so other passes don't have to worry about being the existence of `If`s or `Jump`s
       * However, this pass does need to be followed by a function inlining pass, as it would just intersperse `Call`s of the thunks between the `If` `Else` and `End` instructions, so it wouldn't be optimally efficient without a later function inlining step.
     * I guess this needs to happen at the AST level, since it will come before lambda-lifting. I guess `if` could just be a macro that transforms `(if <cond> <a> <B>)` into `((if-eager <cond> (fn () <a>) (fn () <b>)))`.
-* IR-level optimizations:
+* IR-level optimization passess:
   * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
   * [`Call`, `Return`] -> `CallAndReturn`
   * [`CallSelf`, `Return`] -> `CallSelfAndReturn`
@@ -63,6 +63,7 @@ Compiler stuff
   * [`ApplySelf`, `Return`] -> `CallSelfAndReturn`
   * [`Clear`, `Clear`] -> `Clear2`, [`Clear`, `Clear`, `Clear`] -> `Clear3`
     * need to implement `Clear2` and `Clear3` first
+  * `Const(x, List(vec![]))` -> `EmptyList`
   * [`EmptyList`, `Const`, `Push` ... `Const`, `Push`] -> [`Const(Full List)`]
     * Maybe even - if some elements are constant and some aren't, replace the `EmptyList .. Push` chain with a `Const(List)` with the size of the full list and all the constant values inlined, followed by `Set` instructions to add in the non-constant values
   * translate `Map` over constant lists can to a sequence of individual function applications

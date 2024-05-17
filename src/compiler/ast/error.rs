@@ -1,12 +1,12 @@
 use std::{error::Error, fmt::Display};
 
-use super::token::TokenTree;
+use super::{expressions::Expression, token::TokenTree};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ASTError {
   CantParseToken(String),
-  InvalidFunctionDefintionArgumentList(Option<TokenTree>),
-  InvalidFunctionDefintionArgument(TokenTree),
+  InvalidFunctionDefintionArgumentNameList(Option<TokenTree>),
+  InvalidFunctionDefintionArgumentName(Expression),
   FunctionDefinitionMissingBody,
   UnboundSymbol(String),
 }
@@ -17,14 +17,14 @@ impl Display for ASTError {
       CantParseToken(s) => {
         write!(f, "failed to parse token: \"{}\"", s)
       }
-      InvalidFunctionDefintionArgumentList(arg_list) => {
+      InvalidFunctionDefintionArgumentNameList(arg_list) => {
         write!(
           f,
           "invalid argument list for function definition: {:?}",
           arg_list,
         )
       }
-      InvalidFunctionDefintionArgument(arg) => {
+      InvalidFunctionDefintionArgumentName(arg) => {
         write!(
           f,
           "invalid argument name for function definition: {:?}",

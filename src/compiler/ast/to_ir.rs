@@ -8,8 +8,9 @@ use crate::{
 use super::{
   super::{SSABlock, SSAInstruction, SSARegister, SSAValue},
   error::ASTError,
-  token::{token_to_value, SymbolLedger, Token, TokenTree},
-  tree::Tree::{self, *},
+  expressions::Expression,
+  token::SymbolLedger,
+  tree::Tree,
 };
 
 pub fn push_constant(
@@ -24,103 +25,16 @@ pub fn push_constant(
   *taken_virtual_registers - 1
 }
 
-pub fn build_ast_ir(
-  ast: TokenTree,
+pub fn build_expression_ir(
+  expression: Expression,
   bindings: &HashMap<SymbolIndex, u8>,
   symbol_ledger: &mut SymbolLedger,
   taken_virtual_registers: &mut usize,
   instructions: &mut Vec<SSAInstruction>,
   constants: &mut Vec<SSAValue<()>>,
 ) -> Result<SSARegister, ASTError> {
-  match ast {
-    Inner(list) => {
-      let mut list_iter = list.into_iter();
-      if let Some(first_subtree) = list_iter.next() {
-        if first_subtree == Leaf(Token::Symbol("fn".to_string())) {
-          let args = list_iter.next();
-          let mut new_bindings = bindings.clone();
-          if let Some(Inner(arg_tokens)) = args {
-            let arg_count = arg_tokens.len() as u8;
-            for arg_token in arg_tokens {
-              if let Leaf(Token::Symbol(arg_name)) = arg_token {
-                new_bindings.insert(
-                  symbol_ledger.symbol_index(arg_name),
-                  new_bindings.len() as u8,
-                );
-              } else {
-                return Err(ASTError::InvalidFunctionDefintionArgument(
-                  arg_token,
-                ));
-              }
-            }
-            if let Some(body) = list_iter.next() {
-              let mut function_instructions = vec![];
-              let mut function_constants = vec![];
-              let function_return_register = build_ast_ir(
-                body,
-                &new_bindings,
-                symbol_ledger,
-                &mut (arg_count.clone() as SSARegister),
-                &mut function_instructions,
-                &mut function_constants,
-              )?;
-              function_instructions.push(Return(function_return_register));
-              let f = SSAValue::composite_fn(
-                arg_count,
-                SSABlock::new(function_instructions, function_constants),
-              );
-              Ok(push_constant(
-                f,
-                taken_virtual_registers,
-                instructions,
-                constants,
-              ))
-            } else {
-              return Err(ASTError::FunctionDefinitionMissingBody);
-            }
-          } else {
-            return Err(ASTError::InvalidFunctionDefintionArgumentList(args));
-          }
-        } else {
-          let arg_registers = list_iter
-            .map(|arg| {
-              build_ast_ir(
-                arg,
-                bindings,
-                symbol_ledger,
-                taken_virtual_registers,
-                instructions,
-                constants,
-              )
-            })
-            .collect::<Result<Vec<SSARegister>, _>>()?;
-          let f_register = build_ast_ir(
-            first_subtree,
-            bindings,
-            symbol_ledger,
-            taken_virtual_registers,
-            instructions,
-            constants,
-          )?;
-          instructions.push(Call(
-            *taken_virtual_registers,
-            f_register,
-            arg_registers.len() as u8,
-          ));
-          for arg_register in arg_registers {
-            instructions.push(CopyArgument(arg_register))
-          }
-          *taken_virtual_registers += 1;
-          Ok(*taken_virtual_registers - 1)
-        }
-      } else {
-        instructions.push(EmptyList(*taken_virtual_registers));
-        *taken_virtual_registers += 1;
-        Ok(*taken_virtual_registers - 1)
-      }
-    }
-    Leaf(s) => {
-      let value = token_to_value(symbol_ledger, s.clone());
+  match expression {
+    Expression::Literal(value) => {
       if let Symbol(symbol_index) = value {
         if let Some(binding_index) = bindings.get(&symbol_index) {
           Ok(*binding_index as SSARegister)
@@ -146,20 +60,92 @@ pub fn build_ast_ir(
         ))
       }
     }
+    Expression::Application(subexpressions) => {
+      let mut subexpressions_iter = subexpressions.into_iter();
+      let first_subexpression = subexpressions_iter.next().expect(
+        "Encountered Expression::Application with no inner subexpressions \
+        (this should never happen, as empty forms should become empty
+        list literals)",
+      );
+      let arg_registers = subexpressions_iter
+        .map(|arg| {
+          build_expression_ir(
+            arg,
+            bindings,
+            symbol_ledger,
+            taken_virtual_registers,
+            instructions,
+            constants,
+          )
+        })
+        .collect::<Result<Vec<SSARegister>, _>>()?;
+      let f_register = build_expression_ir(
+        first_subexpression,
+        bindings,
+        symbol_ledger,
+        taken_virtual_registers,
+        instructions,
+        constants,
+      )?;
+      instructions.push(Call(
+        *taken_virtual_registers,
+        f_register,
+        arg_registers.len() as u8,
+      ));
+      for arg_register in arg_registers {
+        instructions.push(CopyArgument(arg_register))
+      }
+      *taken_virtual_registers += 1;
+      Ok(*taken_virtual_registers - 1)
+    }
+    Expression::Function { arg_names, body } => {
+      let mut new_bindings = bindings.clone();
+      let arg_count = arg_names.len() as u8;
+      for arg_name in arg_names {
+        new_bindings.insert(arg_name, new_bindings.len() as u8);
+      }
+      match body.len() {
+        0 => Err(ASTError::FunctionDefinitionMissingBody),
+        1 => {
+          let mut function_instructions = vec![];
+          let mut function_constants = vec![];
+          let function_return_register = build_expression_ir(
+            body.into_iter().next().unwrap(),
+            &new_bindings,
+            symbol_ledger,
+            &mut (arg_count.clone() as SSARegister),
+            &mut function_instructions,
+            &mut function_constants,
+          )?;
+          function_instructions.push(Return(function_return_register));
+          let f = SSAValue::composite_fn(
+            arg_count,
+            SSABlock::new(function_instructions, function_constants),
+          );
+          Ok(push_constant(
+            f,
+            taken_virtual_registers,
+            instructions,
+            constants,
+          ))
+        }
+        _ => {
+          todo!("can't handle functions with multiple expressions in body yet")
+        }
+      }
+    }
   }
 }
 
-pub fn expression_ast_to_ir(
-  ast: Tree<String>,
-) -> Result<SSABlock<()>, ASTError> {
+pub fn ast_to_ir(ast: Tree<String>) -> Result<SSABlock<()>, ASTError> {
   let mut taken_virtual_registers = 0;
   let mut instructions = vec![];
   let mut constants = vec![];
-  let mut ledger = SymbolLedger::default();
-  let last_register = build_ast_ir(
-    ast.try_into()?,
+  let mut symbol_ledger = SymbolLedger::default();
+  let last_register = build_expression_ir(
+    Expression::from_token_tree(ast.try_into()?, &mut symbol_ledger)?,
     &HashMap::new(),
-    &mut ledger,
+    &mut symbol_ledger,
     &mut taken_virtual_registers,
     &mut instructions,
     &mut constants,

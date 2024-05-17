@@ -35,7 +35,7 @@ mod tests {
   use crate::{
     blocks::GenericBlock,
     compiler::{
-      ast::{parse::parse_sexp, to_ir::expression_ast_to_ir},
+      ast::{parse::parse_sexp, to_ir::ast_to_ir},
       intermediate::raw_ir_to_bytecode,
       SSABlock,
     },
@@ -54,7 +54,7 @@ mod tests {
 
   macro_rules! test_raw_ir {
     ($sexp:expr, $expected_ir:expr) => {
-      let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
+      let raw_ir = ast_to_ir(parse_sexp($sexp)).unwrap();
       assert_eq!(
         debug_string(&raw_ir),
         debug_string(&$expected_ir),
@@ -65,7 +65,7 @@ mod tests {
 
   macro_rules! test_bytecode {
     ($sexp:expr, $expected_bytecode:expr) => {
-      let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
+      let raw_ir = ast_to_ir(parse_sexp($sexp)).unwrap();
       let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
       assert_eq!(
         debug_string(&bytecode),
@@ -77,7 +77,7 @@ mod tests {
 
   macro_rules! test_output {
     ($sexp:expr, $expected_output:expr) => {
-      let raw_ir = expression_ast_to_ir(parse_sexp($sexp)).unwrap();
+      let raw_ir = ast_to_ir(parse_sexp($sexp)).unwrap();
       let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
       let output = EvaluationState::new(bytecode).evaluate().unwrap();
       assert_eq!(
@@ -353,8 +353,17 @@ mod tests {
   #[test]
   fn empty_form() {
     let sexp = "()";
-    test_raw_ir!(sexp, ssa_block![EmptyList(0), Return(0)]);
-    test_bytecode!(sexp, block![EmptyList(0), Return(0)]);
+    test_raw_ir!(
+      sexp,
+      ssa_block![
+        Const(0, GenericValue::List(std::rc::Rc::new(vec![]))),
+        Return(0)
+      ]
+    );
+    test_bytecode!(
+      sexp,
+      block![Const(0, Value::List(std::rc::Rc::new(vec![]))), Return(0)]
+    );
     test_output!(sexp, vec![]);
   }
 
