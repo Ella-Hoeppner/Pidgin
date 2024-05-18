@@ -64,8 +64,9 @@ Compiler stuff
   * =, not=, not, and, or, xor
 * support compiling type checkers, converters
   * nil?, bool?, char?, num?, int?, float?, symbol?, str?, list?, map?, set?, collection?, fn?, error?, bool, char, num, int, float, symbol, to-list, to-map, to-set, error
-* lambda-lifting
-  * this will be an AST-level transformation
+* Make sure shadowing isn't allowed.
+  * Basically just check that arg names of functions aren't core fn names or bound in any enclosing unctions
+  * later there will be special syntax for allowing shadowing, but we can worry about that once GSE is in place, for now we can just entirely disallow it
 * support quoting
   * `Expression` should have a special variant case for this
     * lift_lambdas needs to avoid replacing quoted forms

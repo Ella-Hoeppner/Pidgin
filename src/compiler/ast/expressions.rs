@@ -15,6 +15,7 @@ pub(crate) enum Expression {
     body: Vec<Expression>,
   },
 }
+use itertools::Itertools;
 use Expression::*;
 
 impl Expression {
@@ -86,23 +87,49 @@ impl Expression {
     }
   }
 
+  fn unbound_internal_symbols(
+    &self,
+    bindings: &Vec<SymbolIndex>,
+  ) -> Vec<SymbolIndex> {
+    match self {
+      Literal(value) => {
+        if let SSAValue::Symbol(symbol) = value {
+          if bindings.contains(symbol) {
+            vec![]
+          } else {
+            vec![*symbol]
+          }
+        } else {
+          vec![]
+        }
+      }
+      Application(subexpressions) => subexpressions
+        .iter()
+        .flat_map(|subexpression| {
+          subexpression.unbound_internal_symbols(bindings)
+        })
+        .collect(),
+      Function { arg_names, body } => body
+        .iter()
+        .flat_map(|subexpression| {
+          subexpression.unbound_internal_symbols(
+            &bindings.iter().chain(arg_names.iter()).cloned().collect(),
+          )
+        })
+        .collect(),
+    }
+  }
+
   fn replace_symbols(
     self,
     to_replace: &Vec<SymbolIndex>,
     symbol_ledger: &mut SymbolLedger,
     replacements: &mut Vec<(SymbolIndex, SymbolIndex)>,
   ) -> Self {
-    println!("trying to replace symbols... {to_replace:?}");
     match self {
       Literal(value) => {
         if let SSAValue::Symbol(original_symbol) = value {
-          println!(
-            "symbol {}: {:?}",
-            original_symbol,
-            symbol_ledger.symbol_name(&original_symbol)
-          );
           if to_replace.contains(&original_symbol) {
-            println!("replacing symbol!!!!!!!!!!!!!!!!!!!");
             Literal(SSAValue::Symbol(
               replacements
                 .iter()
@@ -157,8 +184,8 @@ impl Expression {
     self,
     parent_bindings: &Vec<SymbolIndex>,
     symbol_ledger: &mut SymbolLedger,
-  ) -> Self {
-    match self {
+  ) -> Result<Self, ASTError> {
+    Ok(match self {
       Literal(value) => Literal(value),
       Application(subexpressions) => Application(
         subexpressions
@@ -166,35 +193,73 @@ impl Expression {
           .map(|subexpression| {
             subexpression.lift_lambdas(&parent_bindings, symbol_ledger)
           })
-          .collect(),
+          .collect::<Result<_, _>>()?,
       ),
       Function { arg_names, body } => {
-        println!("lifting function!!");
-        let mut replacements = vec![];
-        let new_body = body
-          .into_iter()
-          .map(|expression| {
-            println!("lifting and replacing symbols in body");
-            let new_bindings: Vec<SymbolIndex> = parent_bindings
-              .iter()
-              .chain(arg_names.iter())
-              .cloned()
-              .collect();
-            expression
-              .replace_symbols(
-                &parent_bindings,
-                symbol_ledger,
-                &mut replacements,
-              )
-              .lift_lambdas(&new_bindings, symbol_ledger)
+        let unbound_body_symbols: Vec<SymbolIndex> = body
+          .iter()
+          .flat_map(|body_expression| {
+            body_expression.unbound_internal_symbols(&arg_names)
           })
-          .collect::<Vec<_>>();
-        if replacements.is_empty() {
+          .unique()
+          .filter(|body_symbol| !symbol_ledger.is_built_in(body_symbol))
+          .collect();
+        for unbound_body_symbol in unbound_body_symbols.iter() {
+          if !parent_bindings.contains(unbound_body_symbol) {
+            return Err(ASTError::UnboundSymbol(
+              symbol_ledger
+                .symbol_name(unbound_body_symbol)
+                .unwrap()
+                .clone(),
+            ));
+          }
+        }
+        if unbound_body_symbols.is_empty() {
           Function {
+            body: body
+              .into_iter()
+              .map(|expression| {
+                let new_bindings: Vec<SymbolIndex> = parent_bindings
+                  .iter()
+                  .chain(arg_names.iter())
+                  .cloned()
+                  .collect();
+                expression.lift_lambdas(&new_bindings, symbol_ledger)
+              })
+              .collect::<Result<Vec<_>, _>>()?,
             arg_names,
-            body: new_body,
           }
         } else {
+          let mut replacements = vec![];
+          let new_body = body
+            .into_iter()
+            .map(|expression| {
+              let replaced_expression = expression.replace_symbols(
+                &unbound_body_symbols,
+                symbol_ledger,
+                &mut replacements,
+              );
+              let new_bindings: Vec<SymbolIndex> = parent_bindings
+                .iter()
+                .map(|parent_binding| {
+                  if let Some(replacement_binding) = replacements
+                    .iter()
+                    .filter_map(|(original_symbol, new_symbol)| {
+                      (original_symbol == parent_binding).then(|| new_symbol)
+                    })
+                    .next()
+                  {
+                    replacement_binding
+                  } else {
+                    parent_binding
+                  }
+                })
+                .chain(arg_names.iter())
+                .cloned()
+                .collect();
+              replaced_expression.lift_lambdas(&new_bindings, symbol_ledger)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
           Expression::Application(
             std::iter::once(Expression::from_token(
               Token::Symbol("partial".to_string()),
@@ -215,7 +280,7 @@ impl Expression {
           )
         }
       }
-    }
+    })
   }
 
   pub(crate) fn to_string(&self, symbol_ledger: &SymbolLedger) -> String {
@@ -275,7 +340,8 @@ mod tests {
       &mut symbol_ledger,
     )
     .unwrap()
-    .lift_lambdas(&vec![], &mut symbol_ledger);
+    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .unwrap();
     assert_eq!(
       lifted_expression.to_string(&symbol_ledger),
       "(fn (x) (* x x))"
@@ -290,7 +356,8 @@ mod tests {
       &mut symbol_ledger,
     )
     .unwrap()
-    .lift_lambdas(&vec![], &mut symbol_ledger);
+    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .unwrap();
     assert_eq!(
       lifted_expression.to_string(&symbol_ledger),
       "(fn (x) (partial (fn (__gensym_0 y) (* __gensym_0 y)) x))"
@@ -307,13 +374,14 @@ mod tests {
       &mut symbol_ledger,
     )
     .unwrap()
-    .lift_lambdas(&vec![], &mut symbol_ledger);
+    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .unwrap();
     assert_eq!(
       lifted_expression.to_string(&symbol_ledger),
       "(fn (x) \
          (partial (fn (__gensym_0 y) \
-                    (partial (fn (__gensym_2 __gensym_1 z) \
-                               (* __gensym_2 __gensym_1 z)) \
+                    (partial (fn (__gensym_1 __gensym_2 z) \
+                               (* __gensym_1 __gensym_2 z)) \
                              __gensym_0 \
                              y)) \
                   x))"

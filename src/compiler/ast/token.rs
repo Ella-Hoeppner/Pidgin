@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
   compiler::SSAValue,
-  runtime::{data::GenericValue, vm::SymbolIndex},
+  runtime::{core_functions::CoreFnId, data::GenericValue, vm::SymbolIndex},
 };
 
 use super::{error::ASTError, tree::Tree};
@@ -65,9 +65,9 @@ impl TryFrom<Tree<String>> for TokenTree {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct SymbolLedger {
+pub(crate) struct SymbolLedger {
   gensym_count: u16,
-  names_to_indeces: HashMap<String, SymbolIndex>,
+  pub(crate) names_to_indeces: HashMap<String, SymbolIndex>,
   indeces_to_names: HashMap<SymbolIndex, String>,
 }
 impl SymbolLedger {
@@ -92,6 +92,13 @@ impl SymbolLedger {
     let symbol_name = format!("{GENSYM_PREFIX}{}", self.gensym_count);
     self.gensym_count += 1;
     self.symbol_index(symbol_name)
+  }
+  pub(crate) fn is_built_in(&self, index: &SymbolIndex) -> bool {
+    CoreFnId::from_name(self.symbol_name(index).expect(
+      "called is_built_in with symbol index that doesn't map to any \
+      registered symbol",
+    ))
+    .is_some()
   }
 }
 

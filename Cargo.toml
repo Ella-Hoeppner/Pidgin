@@ -8,3 +8,4 @@ enum-map = "2.7.3"
 ordered-float = "4.2.0"
 take_mut = "0.2.2"
 block_macros = { path = "block_macros" }
+itertools = "0.13.0"
