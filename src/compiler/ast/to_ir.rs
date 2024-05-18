@@ -60,6 +60,7 @@ pub fn build_expression_ir(
         ))
       }
     }
+    Expression::Quoted(subexpression) => todo!(),
     Expression::Application(subexpressions) => {
       let mut subexpressions_iter = subexpressions.into_iter();
       let first_subexpression = subexpressions_iter.next().expect(

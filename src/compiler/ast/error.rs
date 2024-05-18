@@ -9,6 +9,7 @@ pub enum ASTError {
   InvalidFunctionDefintionArgumentName(Expression),
   FunctionDefinitionMissingBody,
   UnboundSymbol(String),
+  MultipleExpressionsInQuote,
 }
 impl Display for ASTError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -36,6 +37,9 @@ impl Display for ASTError {
       }
       UnboundSymbol(symbol_name) => {
         write!(f, "encountered unbound symbol {symbol_name}")
+      }
+      MultipleExpressionsInQuote => {
+        write!(f, "multiple subexpressions found in (quote ...) form")
       }
     }
   }

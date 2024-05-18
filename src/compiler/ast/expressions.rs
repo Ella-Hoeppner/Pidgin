@@ -9,6 +9,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expression {
   Literal(SSAValue<()>),
+  Quoted(Box<Expression>),
   Application(Vec<Expression>),
   Function {
     arg_names: Vec<SymbolIndex>,
@@ -37,50 +38,70 @@ impl Expression {
         if subtrees.len() == 0 {
           Ok(Literal(SSAValue::List(vec![].into())))
         } else {
-          if subtrees[0] == TokenTree::Leaf(Token::Symbol("fn".to_string())) {
-            let mut subtrees_iter = subtrees.into_iter().skip(1);
-            let maybe_arg_names = subtrees_iter.next();
-            if let Some(TokenTree::Inner(arg_names)) = maybe_arg_names {
-              Ok(Function {
-                arg_names: arg_names
-                  .into_iter()
-                  .map(|arg_name_subtree| {
-                    let arg_name_expression = Expression::from_token_tree(
-                      arg_name_subtree,
+          if let TokenTree::Leaf(Token::Symbol(first_symbol)) = &subtrees[0] {
+            match first_symbol.as_str() {
+              "fn" => {
+                let mut subtrees_iter = subtrees.into_iter().skip(1);
+                let maybe_arg_names = subtrees_iter.next();
+                return if let Some(TokenTree::Inner(arg_names)) =
+                  maybe_arg_names
+                {
+                  Ok(Function {
+                    arg_names: arg_names
+                      .into_iter()
+                      .map(|arg_name_subtree| {
+                        let arg_name_expression = Expression::from_token_tree(
+                          arg_name_subtree,
+                          symbol_ledger,
+                        )?;
+                        if let Literal(SSAValue::Symbol(
+                          arg_name_symbol_index,
+                        )) = arg_name_expression
+                        {
+                          Ok(arg_name_symbol_index)
+                        } else {
+                          Err(ASTError::InvalidFunctionDefintionArgumentName(
+                            arg_name_expression,
+                          ))
+                        }
+                      })
+                      .collect::<Result<_, _>>()?,
+                    body: subtrees_iter
+                      .map(|body_subtree| {
+                        Expression::from_token_tree(body_subtree, symbol_ledger)
+                      })
+                      .collect::<Result<_, _>>()?,
+                  })
+                } else {
+                  Err(ASTError::InvalidFunctionDefintionArgumentNameList(
+                    maybe_arg_names,
+                  ))
+                };
+              }
+              "quote" => {
+                return if subtrees.len() == 2 {
+                  Ok(Quoted(
+                    Expression::from_token_tree(
+                      subtrees.into_iter().skip(1).next().unwrap(),
                       symbol_ledger,
-                    )?;
-                    if let Literal(SSAValue::Symbol(arg_name_symbol_index)) =
-                      arg_name_expression
-                    {
-                      Ok(arg_name_symbol_index)
-                    } else {
-                      Err(ASTError::InvalidFunctionDefintionArgumentName(
-                        arg_name_expression,
-                      ))
-                    }
-                  })
-                  .collect::<Result<_, _>>()?,
-                body: subtrees_iter
-                  .map(|body_subtree| {
-                    Expression::from_token_tree(body_subtree, symbol_ledger)
-                  })
-                  .collect::<Result<_, _>>()?,
-              })
-            } else {
-              Err(ASTError::InvalidFunctionDefintionArgumentNameList(
-                maybe_arg_names,
-              ))
+                    )?
+                    .into(),
+                  ))
+                } else {
+                  Err(ASTError::MultipleExpressionsInQuote)
+                }
+              }
+              _ => (),
             }
-          } else {
-            Ok(Application(
-              subtrees
-                .into_iter()
-                .map(|subtree| {
-                  Expression::from_token_tree(subtree, symbol_ledger)
-                })
-                .collect::<Result<_, _>>()?,
-            ))
           }
+          Ok(Application(
+            subtrees
+              .into_iter()
+              .map(|subtree| {
+                Expression::from_token_tree(subtree, symbol_ledger)
+              })
+              .collect::<Result<_, _>>()?,
+          ))
         }
       }
       Tree::Leaf(token) => Ok(Self::from_token(token, symbol_ledger)),
@@ -103,6 +124,7 @@ impl Expression {
           vec![]
         }
       }
+      Quoted(_subexpression) => vec![],
       Application(subexpressions) => subexpressions
         .iter()
         .flat_map(|subexpression| {
@@ -152,6 +174,7 @@ impl Expression {
           Literal(value)
         }
       }
+      Quoted(subexpression) => Quoted(subexpression),
       Application(subexpressions) => Application(
         subexpressions
           .into_iter()
@@ -187,6 +210,7 @@ impl Expression {
   ) -> Result<Self, ASTError> {
     Ok(match self {
       Literal(value) => Literal(value),
+      Quoted(subexpression) => Quoted(subexpression),
       Application(subexpressions) => Application(
         subexpressions
           .into_iter()
@@ -286,6 +310,9 @@ impl Expression {
   pub(crate) fn to_string(&self, symbol_ledger: &SymbolLedger) -> String {
     match self {
       Literal(value) => value.description(Some(symbol_ledger)),
+      Quoted(subexpression) => {
+        format!("(quote {})", subexpression.to_string(symbol_ledger))
+      }
       Application(subexpressions) => format!(
         "({})",
         subexpressions
@@ -330,6 +357,22 @@ mod tests {
     .unwrap()
     .replace_symbols(&vec![x_index], &mut symbol_ledger, &mut vec![]);
     assert_eq!(replaced_expression.to_string(&symbol_ledger), "__gensym_0")
+  }
+
+  #[test]
+  fn replace_symbols_ignores_quotes() {
+    let mut symbol_ledger = SymbolLedger::default();
+    let x_index = symbol_ledger.symbol_index("x".to_string());
+    let replaced_expression = Expression::from_token_tree(
+      parse_sexp("(x (quote x))").try_into().unwrap(),
+      &mut symbol_ledger,
+    )
+    .unwrap()
+    .replace_symbols(&vec![x_index], &mut symbol_ledger, &mut vec![]);
+    assert_eq!(
+      replaced_expression.to_string(&symbol_ledger),
+      "(__gensym_0 (quote x))"
+    )
   }
 
   #[test]
@@ -385,6 +428,24 @@ mod tests {
                              __gensym_0 \
                              y)) \
                   x))"
+    );
+  }
+
+  #[test]
+  fn lambda_lifting_ignores_quotes() {
+    let mut symbol_ledger = SymbolLedger::default();
+    let lifted_expression = Expression::from_token_tree(
+      parse_sexp("(fn (x) (fn (y) (list (quote x) y)))")
+        .try_into()
+        .unwrap(),
+      &mut symbol_ledger,
+    )
+    .unwrap()
+    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .unwrap();
+    assert_eq!(
+      lifted_expression.to_string(&symbol_ledger),
+      "(fn (x) (fn (y) (list (quote x) y)))"
     );
   }
 }
