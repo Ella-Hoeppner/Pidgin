@@ -13,8 +13,25 @@ Runtime stuff:
   * This does mean that constants in the table can never be shared, but that seems worth it. If they could be shared then it would be a lot more work to keep track of when they can and can't be tsolen from the table. Single use of constants make various things in compilation and IR transformation easier anyhow.
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
-* replace coroutines with effect handlers
+* make coroutines immutable
+  * When invoked, they shouldn't modify the continuation referenced by the original coroutine object. Instead, they should clone that continuation, and only modify the clone. When a corutine yields, the it will always return a list of 2 values to the site that called it:
+    1. a new coroutine, with a continuation from where the yield happened
+    2. the value passed to the `yield` from inside the coroutine
+  * This way, coroutines will be immutable objects, and if you want to continue from the place where they left off, you'll just use the new coroutine returned from the invocation of the last one. This will also mean that coroutines are multi-shot.
+  * This can use the "steal rather than clone when RC=1" optimization on the continuations to avoid a big slowdown from unnecessarily cloning coroutines that are used as single-shot, while still fully supporting multi-shot coroutines
+    * oof, I think this means that `Call` needs to be refactored to use a replacable register, used for both the thing being called and the return value...
+      * that'll touch a lot of stuff... definitely doable though
+      * I guess this same change will be necessary to do the "steal rather than clone when RC=1" optimization on the constant tables of function blocks, so this is worth doing anyways
+* add effect handlers
   * get rid of cells I guess? You can just emulate them with a "state" handler
+    * A state handler probably wouldn't be quite as efficient as cells... but on the other hand, this would make the language purely functional. Seems worth it I think?
+    * I could keep cells but also have a "state" handler (or let people build their own), and encourage the use of the state handler by default, but have cells for performance-critical stuff?
+      * Cells wouldn't really play nicely with mutliple resumptions of coroutines or continuations in effects, which could be a pretty big footgun.
+      * this isn't really a performance-critical language of course, but the idea of taking out a feature that would help with performance just to avoid making people who aren't careful or don't know what their doing confused doesn't feel right...
+        * maybe having the language be purely functional, i.e. not having atoms, would allow some optimizations later on that would outweigh this cost?
+          * idk what exactly these optimizations would be though...
+          * and even if the core language is purely functional, there's never really gunna be a way to guarantee that that still holds once rust interop is involved, so maybe that already rules out any hypothetical optimizations like that
+      * Maybe if I optimize continuations/effects enough then there wouldn't even be a performance difference. Specifically I'm thinking of like - in situations where the compiler can guarantee that default "state" handler hasn't been overwritten, and the current scope isn't inside anything that could potentially be executed multiple times as a continuation, it could optimize away the state handler and just use actual mutable state?
 * handle external errors
 * support laziness
   * add a new type for a lazy sequence (not sure what to call it... `Lazy`? `Iterator`?)
@@ -49,7 +66,9 @@ Compiler stuff
   * nil?, bool?, char?, num?, int?, float?, symbol?, str?, list?, map?, set?, collection?, fn?, error?, bool, char, num, int, float, symbol, to-list, to-map, to-set, error
 * lambda-lifting
   * this will be an AST-level transformation
-    * basically, in `build_ast_ir`, whenever a `fn` is encountered and `bindings` is non-empty, the 
+* support quoting
+  * `Expression` should have a special variant case for this
+    * lift_lambdas needs to avoid replacing quoted forms
 * support compiling if statements
   * Maybe it would make sense have a new `EagerIf` instruction that takes 2 registers and just returns the value of one or the other based on a boolean register (which will also just be used as the return register). This wouldn't do a short-circuiting optimization. The compiler could then just emit, for an `(if ...)` statement, 2 thunks (which could later be lambda-lifted) for each side of the if, and use `EagerIf` to put one of the two into a register, then `Call` that function.
     * There could be an optimization pass that transforms this pattern into the more optimized `If` `Else` `End` instructions, but that pass can come relatively late in the compilation pipeline, so other passes don't have to worry about being the existence of `If`s or `Jump`s
@@ -64,6 +83,8 @@ Compiler stuff
   * [`Clear`, `Clear`] -> `Clear2`, [`Clear`, `Clear`, `Clear`] -> `Clear3`
     * need to implement `Clear2` and `Clear3` first
   * `Const(x, List(vec![]))` -> `EmptyList`
+  * `Const(x, Int(i))` -> `ConstInt(x, i)` (when the int fits in an `i16`)
+    * `ConstInt` will be a new instruction that holds a register index and an `i16`. Small integers come up a lot in practice, and this would avoid the indirection and overhead involved in looking into the constant table, so this seems pretty worthwhile.
   * [`EmptyList`, `Const`, `Push` ... `Const`, `Push`] -> [`Const(Full List)`]
     * Maybe even - if some elements are constant and some aren't, replace the `EmptyList .. Push` chain with a `Const(List)` with the size of the full list and all the constant values inlined, followed by `Set` instructions to add in the non-constant values
   * translate `Map` over constant lists can to a sequence of individual function applications

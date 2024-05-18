@@ -76,7 +76,11 @@ impl EvaluationState {
           indent_lines(
             7,
             (start..=end)
-              .map(|i| format!("{}: {}", i, self.get_stack(i).description()))
+              .map(|i| format!(
+                "{}: {}",
+                i,
+                self.get_stack(i).description(None)
+              ))
               .collect::<Vec<String>>()
               .join("\n")
           ),
@@ -91,7 +95,7 @@ impl EvaluationState {
     bindings
       .into_iter()
       .map(|(symbol_index, value)| {
-        format!("{}: {}", symbol_index, value.description())
+        format!("{}: {}", symbol_index, value.description(None))
       })
       .collect::<Vec<String>>()
       .join("\n")
@@ -395,7 +399,7 @@ impl EvaluationState {
             );
           }
           Print(value) => {
-            println!("{}", self.get_register(value).description())
+            println!("{}", self.get_register(value).description(None))
           }
           Return(value) => {
             let return_value = self.steal_register(value);

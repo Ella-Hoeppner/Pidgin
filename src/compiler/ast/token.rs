@@ -7,6 +7,8 @@ use crate::{
 
 use super::{error::ASTError, tree::Tree};
 
+const GENSYM_PREFIX: &str = "__gensym_";
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
   Nil,
@@ -64,6 +66,7 @@ impl TryFrom<Tree<String>> for TokenTree {
 
 #[derive(Debug, Clone, Default)]
 pub struct SymbolLedger {
+  gensym_count: u16,
   names_to_indeces: HashMap<String, SymbolIndex>,
   indeces_to_names: HashMap<SymbolIndex, String>,
 }
@@ -82,8 +85,13 @@ impl SymbolLedger {
         next_free_index
       })
   }
-  pub(crate) fn symbol_name(&self, index: SymbolIndex) -> Option<&String> {
-    self.indeces_to_names.get(&index)
+  pub(crate) fn symbol_name(&self, index: &SymbolIndex) -> Option<&String> {
+    self.indeces_to_names.get(index)
+  }
+  pub(crate) fn generate_unique_symbol(&mut self) -> SymbolIndex {
+    let symbol_name = format!("{GENSYM_PREFIX}{}", self.gensym_count);
+    self.gensym_count += 1;
+    self.symbol_index(symbol_name)
   }
 }
 
@@ -101,8 +109,8 @@ pub fn token_to_value(
   }
 }
 
+#[cfg(test)]
 mod tests {
-  #![allow(unused_imports)]
   use super::Token;
   use Token::*;
   #[test]

@@ -39,7 +39,7 @@ pub fn build_expression_ir(
         if let Some(binding_index) = bindings.get(&symbol_index) {
           Ok(*binding_index as SSARegister)
         } else {
-          let symbol_name = symbol_ledger.symbol_name(symbol_index).unwrap();
+          let symbol_name = symbol_ledger.symbol_name(&symbol_index).unwrap();
           if let Some(fn_id) = CoreFnId::from_name(&symbol_name) {
             Ok(push_constant(
               CoreFn(fn_id),

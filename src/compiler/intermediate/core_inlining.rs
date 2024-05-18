@@ -202,10 +202,9 @@ pub fn inline_core_fn_calls<M: Clone>(
   })
 }
 
+#[cfg(test)]
 mod tests {
-  #![allow(unused_imports)]
-  #![allow(unused)]
-  use block_macros::{block, ssa_block};
+  use block_macros::ssa_block;
   use std::fmt::Debug;
   use std::rc::Rc;
 
@@ -218,7 +217,7 @@ mod tests {
     },
     instructions::GenericInstruction::*,
     runtime::core_functions::CoreFnId,
-    runtime::data::GenericValue::{self, *},
+    runtime::data::GenericValue::*,
   };
 
   fn debug_string<T: Debug>(x: &T) -> String {

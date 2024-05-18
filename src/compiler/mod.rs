@@ -26,14 +26,12 @@ impl SSABlock<()> {
   }
 }
 
+#[cfg(test)]
 mod tests {
-  #![allow(unused_imports)]
-  #![allow(unused)]
   use block_macros::{block, ssa_block};
   use std::fmt::Debug;
 
   use crate::{
-    blocks::GenericBlock,
     compiler::{
       ast::{parse::parse_sexp, to_ir::ast_to_ir},
       intermediate::raw_ir_to_bytecode,
@@ -43,7 +41,6 @@ mod tests {
     runtime::control::Block,
     runtime::core_functions::CoreFnId,
     runtime::data::GenericValue::{self, *},
-    runtime::data::Num::{self, *},
     runtime::data::Value,
     runtime::vm::EvaluationState,
   };

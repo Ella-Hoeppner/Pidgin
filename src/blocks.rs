@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::{ops::Index, rc::Rc};
 
 use crate::{
@@ -7,6 +8,17 @@ use crate::{
     data::GenericValue::{self, *},
   },
 };
+
+/*
+
+<
+  I: PartialEq + Hash,
+  O: PartialEq + Hash,
+  R: PartialEq + Hash,
+  M: PartialEq + Hash,
+>
+
+*/
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericBlock<I, O, R, M> {

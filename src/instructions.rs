@@ -371,7 +371,6 @@ impl<I: Clone, O: Clone, R: Clone> GenericInstruction<I, O, R> {
       CreateCoroutine(from_and_to) => (vec![], vec![], vec![from_and_to]),
       IsCoroutineAlive(to, from) => (vec![from], vec![to], vec![]),
       Yield(from) => (vec![], vec![from], vec![]),
-      //Call(to, from, _) => (vec![from], vec![to], vec![]),
       YieldAndAccept(from, arg_count, first_register) => todo!(),
       IsNil(to, from) => (vec![from], vec![to], vec![]),
       IsBool(to, from) => (vec![from], vec![to], vec![]),

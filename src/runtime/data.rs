@@ -12,6 +12,7 @@ use ordered_float::OrderedFloat;
 
 use crate::{
   blocks::GenericBlock,
+  compiler::ast::token::SymbolLedger,
   runtime::{control::GenericCompositeFunction, vm::Register},
 };
 
@@ -345,28 +346,8 @@ impl<I, O, R, M> PartialEq for GenericValue<I, O, R, M> {
 }
 impl<I, O, R, M> Eq for GenericValue<I, O, R, M> {}
 
-impl Hash for Value {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    todo!()
-  }
-}
-
-impl Value {
-  pub fn as_num(&self) -> PidginResult<&Num> {
-    match self {
-      Number(n) => Ok(n),
-      Nil => Ok(&Int(0)),
-      _ => Err(PidginError::CantCastToNum),
-    }
-  }
-  pub fn as_bool(&self) -> bool {
-    match self {
-      Bool(value) => *value,
-      Nil => false,
-      _ => true,
-    }
-  }
-  pub fn description(&self) -> String {
+impl<I, O, R, M> GenericValue<I, O, R, M> {
+  pub fn description(&self, symbol_ledger: Option<&SymbolLedger>) -> String {
     match self {
       Nil => "nil".to_string(),
       Bool(b) => b.to_string(),
@@ -386,7 +367,7 @@ impl Value {
           "[{}]",
           values
             .iter()
-            .map(|v| v.description())
+            .map(|v| v.description(symbol_ledger))
             .collect::<Vec<String>>()
             .join(", ")
         )
@@ -395,7 +376,9 @@ impl Value {
         "{{{}}}",
         hashmap
           .iter()
-          .map(|(key, value)| key.description() + " " + &value.description())
+          .map(|(key, value)| key.description(symbol_ledger)
+            + " "
+            + &value.description(symbol_ledger))
           .collect::<Vec<String>>()
           .join(", ")
       ),
@@ -403,11 +386,20 @@ impl Value {
         "#{{{}}}",
         hashset
           .iter()
-          .map(|value| value.description())
+          .map(|value| value.description(symbol_ledger))
           .collect::<Vec<String>>()
           .join(", ")
       ),
-      Symbol(index) => format!("symbol {}", index),
+      Symbol(index) => {
+        if let Some(symbol_ledger) = symbol_ledger {
+          symbol_ledger
+            .symbol_name(index)
+            .cloned()
+            .unwrap_or(format!("<unrecognized symbol, index {index}>"))
+        } else {
+          format!("<symbol {}>", index)
+        }
+      }
       Str(s) => format!("\"{}\"", s),
       CompositeFn(composite_fn) => {
         format!(
@@ -453,6 +445,29 @@ impl Value {
       Error(e) => format!("error: {}", e),
     }
   }
+}
+
+impl Hash for Value {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    todo!()
+  }
+}
+
+impl Value {
+  pub fn as_num(&self) -> PidginResult<&Num> {
+    match self {
+      Number(n) => Ok(n),
+      Nil => Ok(&Int(0)),
+      _ => Err(PidginError::CantCastToNum),
+    }
+  }
+  pub fn as_bool(&self) -> bool {
+    match self {
+      Bool(value) => *value,
+      Nil => false,
+      _ => true,
+    }
+  }
   pub fn external<T: Any>(external_object: T) -> Self {
     ExternalObject(Rc::new(Rc::new(external_object)))
   }
@@ -470,7 +485,7 @@ impl Value {
 
 impl Display for Value {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}", self.description())
+    write!(f, "{}", self.description(None))
   }
 }
 
