@@ -5,7 +5,7 @@ use crate::{
   compiler::intermediate::register_allocation::get_max_register,
   runtime::{
     data::{AritySpecifier, Value},
-    vm::{Instruction, Register, StackIndex},
+    evaluation::{Instruction, Register, StackIndex},
   },
 };
 

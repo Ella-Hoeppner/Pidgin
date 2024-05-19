@@ -13,7 +13,7 @@ use ordered_float::OrderedFloat;
 use crate::{
   blocks::GenericBlock,
   compiler::ast::token::SymbolLedger,
-  runtime::{control::GenericCompositeFunction, vm::Register},
+  runtime::{control::GenericCompositeFunction, evaluation::Register},
   GenericInstruction,
 };
 
@@ -21,7 +21,7 @@ use super::{
   control::{CompositeFunction, PausedCoroutine},
   core_functions::CoreFnId,
   error::{PidginError, PidginResult},
-  vm::SymbolIndex,
+  evaluation::SymbolIndex,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

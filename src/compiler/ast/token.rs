@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
   compiler::SSAValue,
-  runtime::{core_functions::CoreFnId, data::GenericValue, vm::SymbolIndex},
+  runtime::{
+    core_functions::CoreFnId, data::GenericValue, evaluation::SymbolIndex,
+  },
 };
 
 use super::{error::ASTError, tree::Tree};

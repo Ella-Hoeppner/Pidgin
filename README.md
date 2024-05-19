@@ -9,6 +9,10 @@ General:
   * This will be helpful for debugging things tho, as it will be possible to write a error effect handler that e.g. prints the entire lexical scope to the console, or starts up a repl within that scope
 
 Runtime stuff:
+* support partially-applied functions
+  * these should store a function and a vec of arguments passed to it
+  * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
+  * I guess the `Compose` and `Memoize` instructions might need special vm-level machinery too?
 * for the `Const` instruction, take arguments out of the constants table rather than cloning them. I guess use `.replace(Nil)`. This will mean that often times the constants table will have to be cloned when entering a stack frame, but that can be avoided when the reference count of the block is 1 (not sure that it's easy to condition things on the reference count like that with the way things are currently set up, but this should be possible with some refactoring)
   * This does mean that constants in the table can never be shared, but that seems worth it. If they could be shared then it would be a lot more work to keep track of when they can and can't be tsolen from the table. Single use of constants make various things in compilation and IR transformation easier anyhow.
 * support multi-arity composite functions
@@ -38,10 +42,6 @@ Runtime stuff:
     * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values
       * a rust iterator would work for the realizers of built-in functions, but I want there to be a function to turn a coroutine into a lazy list, and I'm not sure a rust iter could capture that...
         * I guess there could be a `Realizer` enum type with `Iterator` and `Coroutine` variants?
-* support partially-applied functions
-  * these should store a function and a vec of arguments passed to it
-  * this will of course be helpful for implementing the `Partial` instruction, but also I think it will be necessary for lambda lifting
-  * I guess the `Compose` and `Memoize` instructions might need special vm-level machinery too?
 * add string manipulation instructions
 * implement remaining instructions, and write tests
 * add an ability to overload certain core functions like `=` and `+` for specific `ExternalObject` types
@@ -58,6 +58,8 @@ Runtime stuff:
     * go blocks seem like maybe the tough part
 
 Compiler stuff
+* support successive evaluation of multiple top-level forms, including a `def` special form
+  * once this is done we can actually implement a repl! :D
 * support compiling the rest of the math functions
   * ==, zero?, nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
 * support compiling boolean functions
@@ -67,8 +69,6 @@ Compiler stuff
 * Make sure shadowing isn't allowed.
   * Basically just check that arg names of functions aren't core fn names or bound in any enclosing unctions
   * later there will be special syntax for allowing shadowing, but we can worry about that once GSE is in place, for now we can just entirely disallow it
-* support successive evaluation of multiple top-level forms, including a `def` special form
-  * once this is done we can actually implement a repl! :D
 * support unquoting
   * I'm acutally not really sure how other lisps handle this internally. The most obvious solution to me seems to just be building the whole quoted tree with `nil`s in place of the unquoted values, then wrapping the quoted form with `(set-in <quoted form> <path to unquoted form> <unquoted value>)`.
     * iirc this is basically what I did in kudzu
@@ -85,6 +85,9 @@ Compiler stuff
     * I guess this needs to happen at the AST level, since it will come before lambda-lifting. I guess `if` could just be a macro that transforms `(if <cond> <a> <B>)` into `((if-eager <cond> (fn () <a>) (fn () <b>)))`.
 * IR-level optimization passess:
   * Function inlining
+  * Constant folding
+    * important special case: a const list, which is later modified with `SetIn`
+      * this is the bytecode that unquoting will emit, so it's important to get this right
   * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
   * [`Call`, `Return`] -> `CallAndReturn`
   * [`CallSelf`, `Return`] -> `CallSelfAndReturn`

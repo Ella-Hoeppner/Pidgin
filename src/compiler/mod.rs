@@ -42,7 +42,7 @@ mod tests {
     runtime::core_functions::CoreFnId,
     runtime::data::GenericValue::{self, *},
     runtime::data::Value,
-    runtime::vm::EvaluationState,
+    runtime::evaluation::EvaluationState,
   };
 
   fn debug_string<T: Debug>(x: &T) -> String {

@@ -1,4 +1,4 @@
-use crate::runtime::vm::{ConstIndex, SymbolIndex};
+use crate::runtime::evaluation::{ConstIndex, SymbolIndex};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GenericInstruction<I, O, R> {

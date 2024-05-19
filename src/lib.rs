@@ -6,7 +6,7 @@ mod string_utils;
 
 pub use instructions::GenericInstruction;
 pub use runtime::{
-  control::Block, data::Value, error::PidginResult, vm::EvaluationState,
+  control::Block, data::Value, error::PidginResult, evaluation::EvaluationState,
 };
 
 pub fn evaluate_pidgin_sexp(sexp: String) -> PidginResult<String> {

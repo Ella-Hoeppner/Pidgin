@@ -6,7 +6,7 @@ use crate::{
   },
   runtime::{
     control::Block,
-    vm::{Instruction, Register},
+    evaluation::{Instruction, Register},
   },
 };
 

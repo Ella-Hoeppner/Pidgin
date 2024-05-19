@@ -1,4 +1,4 @@
-use crate::{compiler::SSAValue, runtime::vm::SymbolIndex};
+use crate::{compiler::SSAValue, runtime::evaluation::SymbolIndex};
 
 use super::{
   error::ASTError,

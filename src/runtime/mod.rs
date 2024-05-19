@@ -2,7 +2,7 @@ pub mod control;
 pub mod core_functions;
 pub mod data;
 pub mod error;
-pub mod vm;
+pub mod evaluation;
 
 #[cfg(test)]
 mod tests {
@@ -19,7 +19,7 @@ mod tests {
         Num, Value,
       },
       error::PidginError,
-      vm::EvaluationState,
+      evaluation::EvaluationState,
     },
   };
   use block_macros::block;
