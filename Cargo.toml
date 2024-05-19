@@ -9,3 +9,4 @@ ordered-float = "4.2.0"
 take_mut = "0.2.2"
 block_macros = { path = "block_macros" }
 itertools = "0.13.0"
+rustyline = { version = "14.0.0", features = ["with-file-history"] }

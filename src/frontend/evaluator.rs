@@ -62,17 +62,16 @@ impl Evaluator {
   ) -> PidginResult<Block> {
     Ok(raw_ir_to_bytecode(ir)?)
   }
-  fn eval_bytecode(&self, block: Block) -> RuntimeResult<Option<Value>> {
-    EvaluationState::new(block).evaluate(&self.global_environment)
+  fn eval_bytecode(&self, block: Block) -> RuntimeResult<Value> {
+    EvaluationState::new(block)
+      .evaluate(&self.global_environment)
+      .map(|value| value.unwrap_or(Value::Nil))
   }
   pub fn get_binding(&mut self, name: &str) -> Option<&Value> {
     let symbol_index = self.symbol_ledger.symbol_index(name.to_string());
     self.global_environment.get(&symbol_index)
   }
-  pub fn eval(
-    &mut self,
-    expression_string: &str,
-  ) -> PidginResult<Option<Value>> {
+  pub fn eval(&mut self, expression_string: &str) -> PidginResult<Value> {
     let expression = self.parse(expression_string)?;
     if let Some((name, value_expression)) =
       expression.as_definition(&self.symbol_ledger)?
@@ -80,9 +79,7 @@ impl Evaluator {
       let ir = self.compile_ast_to_ir(value_expression)?;
       let bytecode = self.compile_ir_to_bytecode(ir)?;
       let value = self.eval_bytecode(bytecode)?;
-      self
-        .global_environment
-        .insert(name, value.clone().unwrap_or(Value::Nil));
+      self.global_environment.insert(name, value.clone());
       Ok(value)
     } else {
       let ir = self.compile_ast_to_ir(expression)?;

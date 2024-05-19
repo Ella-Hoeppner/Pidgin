@@ -1,3 +1,5 @@
+use pidgin::repl;
+
 fn dec_loop_benchmark() {
   /*use block_macros::block;
   use pidgin::{
@@ -21,6 +23,11 @@ fn dec_loop_benchmark() {
   println!("{}", time.elapsed().as_secs_f64())*/
 }
 
+fn start_repl() {
+  repl().unwrap()
+}
+
 fn main() {
-  dec_loop_benchmark()
+  //dec_loop_benchmark()
+  start_repl()
 }

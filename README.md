@@ -59,8 +59,6 @@ Runtime stuff:
     * go blocks seem like maybe the tough part
 
 Compiler stuff
-* support successive evaluation of multiple top-level forms, including a `def` special form
-  * once this is done we can actually implement a repl! :D
 * support compiling the rest of the math functions
   * ==, zero?, nan?, even?, odd?, pos?, neg?, inc, dec, single-arg -, abs, floor, ceil, sqrt, exp, exp2, ln, log2, pow, mod, quot, min, max, >, <, >=, <=, rand
 * support compiling boolean functions

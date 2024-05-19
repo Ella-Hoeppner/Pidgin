@@ -9,7 +9,7 @@ mod tests {
 
   fn assert_eval_eq<V: Into<Value>>(expr: &str, expected_value: V) {
     let mut evaluator = Evaluator::default();
-    assert_eq!(evaluator.eval(expr), Ok(Some(expected_value.into())))
+    assert_eq!(evaluator.eval(expr), Ok(expected_value.into()))
   }
 
   #[test]
@@ -38,6 +38,6 @@ mod tests {
   fn evaluate_def_and_usage() {
     let mut evaluator = Evaluator::default();
     evaluator.eval("(def x 5)").unwrap();
-    assert_eq!(evaluator.eval("x"), Ok(Some(5.into())))
+    assert_eq!(evaluator.eval("x"), Ok(5.into()))
   }
 }
