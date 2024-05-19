@@ -144,22 +144,3 @@ pub fn build_expression_ir(
     }
   }
 }
-
-pub fn ast_to_ir(
-  ast: Tree<String>,
-  symbol_ledger: &mut SymbolLedger,
-) -> ASTResult<SSABlock<()>> {
-  let mut taken_virtual_registers = 0;
-  let mut instructions = vec![];
-  let mut constants = vec![];
-  let last_register = build_expression_ir(
-    Expression::from_token_tree(ast.try_into()?, symbol_ledger)?,
-    &HashMap::new(),
-    symbol_ledger,
-    &mut taken_virtual_registers,
-    &mut instructions,
-    &mut constants,
-  )?;
-  instructions.push(Return(last_register));
-  Ok(SSABlock::new(instructions, constants))
-}

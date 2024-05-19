@@ -3,10 +3,11 @@ use std::{error::Error, fmt::Display};
 use super::expressions::{Expression, LiteralTree};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ASTError {
+pub(crate) enum ASTError {
   CantParseToken(String),
   InvalidFunctionDefintionArgumentNameList(Option<LiteralTree>),
   InvalidFunctionDefintionArgumentName(Expression),
+  InvalidDefLength(usize),
   FunctionDefinitionMissingBody,
   UnboundSymbol(String),
   MultipleExpressionsInQuote,
@@ -33,6 +34,9 @@ impl Display for ASTError {
           "invalid argument name for function definition: {:?}",
           arg
         )
+      }
+      InvalidDefLength(length) => {
+        write!(f, "def needs 2 arguments, got {length}")
       }
       FunctionDefinitionMissingBody => {
         write!(f, "no body for function definition")

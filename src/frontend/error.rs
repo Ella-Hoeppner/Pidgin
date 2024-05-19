@@ -44,8 +44,3 @@ impl Display for PidginError {
 impl Error for PidginError {}
 
 pub type PidginResult<T> = Result<T, PidginError>;
-pub(crate) fn to_pidgin_result<T, E: Into<PidginError>>(
-  result: Result<T, E>,
-) -> PidginResult<T> {
-  result.map_err(|err| err.into())
-}

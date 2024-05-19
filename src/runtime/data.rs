@@ -13,8 +13,8 @@ use ordered_float::OrderedFloat;
 use crate::{
   blocks::GenericBlock,
   compiler::ast::token::SymbolLedger,
+  instructions::GenericInstruction,
   runtime::{control::GenericCompositeFunction, evaluation::Register},
-  GenericInstruction,
 };
 
 use super::{

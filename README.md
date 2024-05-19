@@ -3,6 +3,7 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 General:
 * destructuring
+  * this should work for `def` as well as, unlike >:( Clojure >:(
 * Add a "debug mode" to the runtime + compiler. In this mode, each stackframe carries a HashMap describing the local environment. On the runtime side, this means there needs to be an extra `LocalBind` instruction that adds values to that hashmap. On the compiler side, that instruction needs to be emitted at the start of every function for each input, with the proper name given the lexical scope.
   * Most optimizations will probably have to be disabled in this mode. Specifically, function inlining will probably be impossible.
   * This mode will probably be *much* slower, not only because of the disabling of optimziations, but also because the local environment will keep the reference count of all collections above 1 at all times, so the runtime will have to clone a collection for every single modification

@@ -12,7 +12,7 @@ use super::{error::ASTError, tree::Tree};
 const GENSYM_PREFIX: &str = "__gensym_";
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
+pub(crate) enum Token {
   Nil,
   IntLiteral(i64),
   FloatLiteral(f64),
@@ -56,7 +56,7 @@ impl TryFrom<&str> for Token {
   }
 }
 
-pub type TokenTree = Tree<Token>;
+pub(crate) type TokenTree = Tree<Token>;
 
 impl TryFrom<Tree<String>> for TokenTree {
   type Error = ASTError;

@@ -69,12 +69,6 @@ impl LiteralTree {
   }
 }
 
-#[derive(PartialEq, Clone, Copy)]
-enum QuoteType {
-  Normal,
-  Hard,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expression {
   Literal(SSAValue<()>),
@@ -92,97 +86,83 @@ impl Expression {
   fn from_literal_tree(
     literal_tree: LiteralTree,
     symbol_ledger: &mut SymbolLedger,
-    mut quote_stack: Vec<QuoteType>,
   ) -> ASTResult<Self> {
     match literal_tree {
       Tree::Leaf(literal) => Ok(Literal(literal)),
       Tree::Inner(subtrees) => {
         if let Tree::Leaf(LiteralValue::Symbol(first_symbol)) = &subtrees[0] {
-          if quote_stack.is_empty() {
-            match symbol_ledger
-              .symbol_name(first_symbol)
-              .expect(
-                "no symbol name found for symbol index encountered in \
+          match symbol_ledger
+            .symbol_name(first_symbol)
+            .expect(
+              "no symbol name found for symbol index encountered in \
                 Expression::from_literal_tree",
-              )
-              .as_str()
-            {
-              "fn" => {
-                let mut subtrees_iter = subtrees.into_iter().skip(1);
-                let maybe_arg_names = subtrees_iter.next();
-                return if let Some(Tree::Inner(arg_names)) = maybe_arg_names {
-                  Ok(Function {
-                    arg_names: arg_names
-                      .into_iter()
-                      .map(|arg_name_subtree| {
-                        let arg_name_expression =
-                          Expression::from_literal_tree(
-                            arg_name_subtree,
-                            symbol_ledger,
-                            quote_stack.clone(),
-                          )?;
-                        if let Literal(SSAValue::Symbol(
-                          arg_name_symbol_index,
-                        )) = arg_name_expression
-                        {
-                          Ok(arg_name_symbol_index)
-                        } else {
-                          Err(ASTError::InvalidFunctionDefintionArgumentName(
-                            arg_name_expression,
-                          ))
-                        }
-                      })
-                      .collect::<Result<_, _>>()?,
-                    body: subtrees_iter
-                      .map(|body_subtree| {
-                        Expression::from_literal_tree(
-                          body_subtree,
-                          symbol_ledger,
-                          quote_stack.clone(),
-                        )
-                      })
-                      .collect::<Result<_, _>>()?,
-                  })
-                } else {
-                  Err(ASTError::InvalidFunctionDefintionArgumentNameList(
-                    maybe_arg_names,
-                  ))
-                };
-              }
-              "quote" => {
-                return if subtrees.len() == 2 {
-                  Ok(Quoted(subtrees.into_iter().skip(1).next().unwrap()))
-                } else {
-                  Err(ASTError::MultipleExpressionsInQuote)
-                }
-              }
-              "hard-quote" => {
-                return if subtrees.len() == 2 {
-                  Ok(Quoted(subtrees.into_iter().skip(1).next().unwrap()))
-                } else {
-                  Err(ASTError::MultipleExpressionsInHardQuote)
-                }
-              }
-              "unquote" => {
-                return if subtrees.len() == 2 {
-                  todo!("unquoting isn't implemented yet!")
-                } else {
-                  Err(ASTError::MultipleExpressionsInUnquote)
-                }
-              }
-              _ => (),
+            )
+            .as_str()
+          {
+            "fn" => {
+              let mut subtrees_iter = subtrees.into_iter().skip(1);
+              let maybe_arg_names = subtrees_iter.next();
+              return if let Some(Tree::Inner(arg_names)) = maybe_arg_names {
+                Ok(Function {
+                  arg_names: arg_names
+                    .into_iter()
+                    .map(|arg_name_subtree| {
+                      let arg_name_expression = Expression::from_literal_tree(
+                        arg_name_subtree,
+                        symbol_ledger,
+                      )?;
+                      if let Literal(SSAValue::Symbol(arg_name_symbol_index)) =
+                        arg_name_expression
+                      {
+                        Ok(arg_name_symbol_index)
+                      } else {
+                        Err(ASTError::InvalidFunctionDefintionArgumentName(
+                          arg_name_expression,
+                        ))
+                      }
+                    })
+                    .collect::<Result<_, _>>()?,
+                  body: subtrees_iter
+                    .map(|body_subtree| {
+                      Expression::from_literal_tree(body_subtree, symbol_ledger)
+                    })
+                    .collect::<Result<_, _>>()?,
+                })
+              } else {
+                Err(ASTError::InvalidFunctionDefintionArgumentNameList(
+                  maybe_arg_names,
+                ))
+              };
             }
+            "quote" => {
+              return if subtrees.len() == 2 {
+                Ok(Quoted(subtrees.into_iter().skip(1).next().unwrap()))
+              } else {
+                Err(ASTError::MultipleExpressionsInQuote)
+              }
+            }
+            "hard-quote" => {
+              return if subtrees.len() == 2 {
+                Ok(Quoted(subtrees.into_iter().skip(1).next().unwrap()))
+              } else {
+                Err(ASTError::MultipleExpressionsInHardQuote)
+              }
+            }
+            "unquote" => {
+              return if subtrees.len() == 2 {
+                todo!("unquoting isn't implemented yet!")
+              } else {
+                Err(ASTError::MultipleExpressionsInUnquote)
+              }
+            }
+            _ => (),
           }
         }
         Ok(List(
           subtrees
             .into_iter()
             .map(|subtree| {
-              Expression::from_literal_tree(
-                subtree,
-                symbol_ledger,
-                quote_stack.clone(),
-              )
+              Expression::from_literal_tree(subtree, symbol_ledger)
             })
             .collect::<Result<_, _>>()?,
         ))
@@ -196,7 +176,6 @@ impl Expression {
     Self::from_literal_tree(
       LiteralTree::from_token_tree(token_tree, symbol_ledger)?,
       symbol_ledger,
-      vec![],
     )
   }
   fn unbound_internal_symbols(
@@ -427,6 +406,40 @@ impl Expression {
           .collect::<Vec<String>>()
           .join(" ")
       ),
+    }
+  }
+
+  pub(crate) fn as_definition(
+    &self,
+    symbol_ledger: &SymbolLedger,
+  ) -> ASTResult<Option<(SymbolIndex, Expression)>> {
+    if let Expression::List(subexpressions) = self {
+      if let Literal(SSAValue::Symbol(symbol_index)) = subexpressions[0] {
+        if symbol_ledger.symbol_name(&symbol_index).expect(
+          "unregistered symbol encountered in Expression::as_definition",
+        ) == "def"
+        {
+          if subexpressions.len() == 3 {
+            Ok(Some((
+              if let Literal(SSAValue::Symbol(name_index)) = &subexpressions[1]
+              {
+                *name_index
+              } else {
+                todo!("destructing of `def`s doesn't work yet!")
+              },
+              subexpressions[2].clone(),
+            )))
+          } else {
+            Err(ASTError::InvalidDefLength(subexpressions.len()))
+          }
+        } else {
+          Ok(None)
+        }
+      } else {
+        Ok(None)
+      }
+    } else {
+      Ok(None)
     }
   }
 }

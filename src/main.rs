@@ -1,6 +1,8 @@
 fn dec_loop_benchmark() {
-  use block_macros::block;
-  use pidgin::{Block, EvaluationState, GenericInstruction::*, Value};
+  /*use block_macros::block;
+  use pidgin::{
+    runtime::control::Block, EvaluationState, GenericInstruction::*, Value,
+  };
   let time = std::time::Instant::now();
   let program = block![
     Const(0, 100000000),
@@ -16,7 +18,7 @@ fn dec_loop_benchmark() {
   ];
   let mut state = EvaluationState::new(program);
   state.evaluate().unwrap();
-  println!("{}", time.elapsed().as_secs_f64())
+  println!("{}", time.elapsed().as_secs_f64())*/
 }
 
 fn main() {

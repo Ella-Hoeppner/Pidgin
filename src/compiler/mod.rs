@@ -29,11 +29,11 @@ impl SSABlock<()> {
 #[cfg(test)]
 mod tests {
   use block_macros::{block, ssa_block};
-  use std::fmt::Debug;
+  use std::{collections::HashMap, fmt::Debug};
 
   use crate::{
     compiler::{
-      ast::{parse::parse_sexp, to_ir::ast_to_ir, token::SymbolLedger},
+      ast::{parse::parse_sexp, token::SymbolLedger},
       intermediate::raw_ir_to_bytecode,
       SSABlock,
     },
@@ -45,8 +45,31 @@ mod tests {
     runtime::evaluation::EvaluationState,
   };
 
+  use super::ast::{
+    error::ASTResult, expressions::Expression, to_ir::build_expression_ir,
+    tree::Tree,
+  };
+
   fn debug_string<T: Debug>(x: &T) -> String {
     format!("{:?}", x)
+  }
+
+  fn ast_to_ir(
+    ast: Tree<String>,
+    symbol_ledger: &mut SymbolLedger,
+  ) -> ASTResult<SSABlock<()>> {
+    let mut instructions = vec![];
+    let mut constants = vec![];
+    let last_register = build_expression_ir(
+      Expression::from_token_tree(ast.try_into()?, symbol_ledger)?,
+      &HashMap::new(),
+      symbol_ledger,
+      &mut 0,
+      &mut instructions,
+      &mut constants,
+    )?;
+    instructions.push(Return(last_register));
+    Ok(SSABlock::new(instructions, constants))
   }
 
   macro_rules! test_raw_ir {
