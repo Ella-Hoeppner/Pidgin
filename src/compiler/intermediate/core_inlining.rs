@@ -8,18 +8,18 @@ use crate::{
 };
 
 use super::{
-  error::IntermediateCompilationError,
+  error::IntermediateCompilationResult,
   lifetimes::{calculate_register_lifetimes, Lifetimes},
 };
 
 pub fn inline_core_fn_calls<M: Clone>(
   block: SSABlock<M>,
-) -> Result<SSABlock<Lifetimes>, IntermediateCompilationError> {
+) -> IntermediateCompilationResult<SSABlock<Lifetimes>> {
   block.translate(&|preallocated_registers,
                     mut instructions,
                     constants,
                     _|
-   -> Result<_, IntermediateCompilationError> {
+   -> IntermediateCompilationResult<_> {
     let final_lifetimes = loop {
       let lifetimes =
         calculate_register_lifetimes(preallocated_registers, &instructions)?;

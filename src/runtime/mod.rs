@@ -18,7 +18,7 @@ mod tests {
         GenericValue::{self, *},
         Num, Value,
       },
-      error::PidginError,
+      error::RuntimeError,
       evaluation::EvaluationState,
     },
   };
@@ -701,7 +701,7 @@ mod tests {
       DebugPrint(0),
       IsCoroutineAlive(5, 0)
     ],
-    (3, PidginError::CantCastToNum),
+    (3, RuntimeError::CantCastToNum),
     (4, true),
     (5, false)
   );

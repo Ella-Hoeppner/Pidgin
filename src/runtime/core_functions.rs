@@ -6,7 +6,7 @@ use crate::runtime::{
     Num::{self, *},
     Value,
   },
-  error::PidginResult,
+  error::RuntimeResult,
 };
 use enum_map::{Enum, EnumMap};
 
@@ -412,7 +412,7 @@ impl Display for CoreFnId {
 
 pub(crate) const CORE_FUNCTIONS: EnumMap<
   CoreFnId,
-  fn(Vec<Value>) -> PidginResult<Value>,
+  fn(Vec<Value>) -> RuntimeResult<Value>,
 > = EnumMap::from_array([
   // Print
   |_args: Vec<Value>| todo!(),
@@ -475,7 +475,7 @@ pub(crate) const CORE_FUNCTIONS: EnumMap<
     let nums = args
       .iter()
       .map(|v| v.as_num().copied())
-      .collect::<PidginResult<Vec<Num>>>()?;
+      .collect::<RuntimeResult<Vec<Num>>>()?;
     Ok(Number(nums.into_iter().fold(Int(0), |sum, n| sum + n)))
   },
   // Subtract

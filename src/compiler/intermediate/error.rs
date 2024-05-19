@@ -4,7 +4,7 @@ use crate::compiler::SSARegister;
 
 use super::InstructionTimestamp;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum IntermediateCompilationError {
   UsedBeforeCreation(SSARegister, InstructionTimestamp),
   OutputToExisting(
@@ -55,3 +55,5 @@ impl Display for IntermediateCompilationError {
   }
 }
 impl Error for IntermediateCompilationError {}
+pub(crate) type IntermediateCompilationResult<T> =
+  Result<T, IntermediateCompilationError>;

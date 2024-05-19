@@ -53,3 +53,4 @@ impl Display for ASTError {
   }
 }
 impl Error for ASTError {}
+pub(crate) type ASTResult<T> = Result<T, ASTError>;

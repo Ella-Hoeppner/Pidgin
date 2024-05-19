@@ -8,10 +8,9 @@ use crate::runtime::control::Block;
 
 use self::{
   cleanup::erase_unused_constants, core_inlining::inline_core_fn_calls,
-  lifetimes::track_register_lifetimes, register_allocation::allocate_registers,
+  error::IntermediateCompilationResult, lifetimes::track_register_lifetimes,
+  register_allocation::allocate_registers,
 };
-
-use error::IntermediateCompilationError;
 
 use super::{SSABlock, SSAInstruction, SSARegister};
 
@@ -39,7 +38,7 @@ fn get_max_ssa_register(
 
 pub(crate) fn raw_ir_to_bytecode(
   raw_ir: SSABlock<()>,
-) -> Result<Block, IntermediateCompilationError> {
+) -> IntermediateCompilationResult<Block> {
   allocate_registers(track_register_lifetimes(erase_unused_constants(
     inline_core_fn_calls(raw_ir)?,
   )?)?)

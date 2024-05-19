@@ -5,7 +5,10 @@ use crate::{
   compiler::{SSABlock, SSAInstruction, SSARegister},
 };
 
-use super::{error::IntermediateCompilationError, InstructionTimestamp};
+use super::{
+  error::{IntermediateCompilationError, IntermediateCompilationResult},
+  InstructionTimestamp,
+};
 
 #[derive(Clone, Debug)]
 pub struct RegisterLifetime {
@@ -54,7 +57,7 @@ pub(crate) type Lifetimes = HashMap<SSARegister, RegisterLifetime>;
 pub(crate) fn calculate_register_lifetimes(
   preallocated_registers: u8,
   instructions: &Vec<SSAInstruction>,
-) -> Result<Lifetimes, IntermediateCompilationError> {
+) -> IntermediateCompilationResult<Lifetimes> {
   let mut lifetimes: Lifetimes = Lifetimes::new();
   for preallocated_register in 0..preallocated_registers {
     lifetimes.insert(

@@ -20,7 +20,7 @@ use crate::{
 use super::{
   control::{CompositeFunction, PausedCoroutine},
   core_functions::CoreFnId,
-  error::{PidginError, PidginResult},
+  error::{RuntimeError, RuntimeResult},
   evaluation::SymbolIndex,
 };
 
@@ -94,7 +94,7 @@ impl Num {
       Float(f) => *f,
     }
   }
-  pub fn as_int_lossless(&self) -> PidginResult<i64> {
+  pub fn as_int_lossless(&self) -> RuntimeResult<i64> {
     match self {
       Int(i) => Ok(*i),
       Float(f) => {
@@ -102,7 +102,7 @@ impl Num {
         if i as f64 == **f {
           Ok(i)
         } else {
-          Err(PidginError::ArgumentNotInt)
+          Err(RuntimeError::ArgumentNotInt)
         }
       }
     }
@@ -306,7 +306,7 @@ pub enum GenericValue<I, O, R, M> {
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<Rc<dyn Any>>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
-  Error(Rc<PidginError>),
+  Error(Rc<RuntimeError>),
 }
 
 pub type Value = GenericValue<Register, Register, Register, Register>;
@@ -529,11 +529,11 @@ impl<I, O, R, M> Hash for GenericValue<I, O, R, M> {
 }
 
 impl Value {
-  pub fn as_num(&self) -> PidginResult<&Num> {
+  pub fn as_num(&self) -> RuntimeResult<&Num> {
     match self {
       Number(n) => Ok(n),
       Nil => Ok(&Int(0)),
-      _ => Err(PidginError::CantCastToNum),
+      _ => Err(RuntimeError::CantCastToNum),
     }
   }
   pub fn as_bool(&self) -> bool {
@@ -619,8 +619,8 @@ impl From<ExternalFunction> for Value {
     ExternalFn(Rc::new(f))
   }
 }
-impl From<PidginError> for Value {
-  fn from(e: PidginError) -> Self {
+impl From<RuntimeError> for Value {
+  fn from(e: RuntimeError) -> Self {
     Error(Rc::new(e))
   }
 }

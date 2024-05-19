@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
-pub enum PidginError {
+pub enum RuntimeError {
   ArgumentNotNum,
   ArgumentNotInt,
   ArgumentNotList,
@@ -17,7 +17,7 @@ pub enum PidginError {
   IsntCoroutine,
   ExternalError(Rc<dyn Error>),
 }
-impl PartialEq for PidginError {
+impl PartialEq for RuntimeError {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::ExternalError(l0), Self::ExternalError(r0)) => Rc::ptr_eq(l0, r0),
@@ -25,9 +25,9 @@ impl PartialEq for PidginError {
     }
   }
 }
-use PidginError::*;
+use RuntimeError::*;
 
-impl Display for PidginError {
+impl Display for RuntimeError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       ArgumentNotNum => write!(f, "argument is not a number"),
@@ -49,7 +49,7 @@ impl Display for PidginError {
     }
   }
 }
-impl Error for PidginError {
+impl Error for RuntimeError {
   fn source(&self) -> Option<&(dyn Error + 'static)> {
     match self {
       ExternalError(external_error) => Some(&**external_error),
@@ -57,9 +57,9 @@ impl Error for PidginError {
     }
   }
 }
-impl From<PidginError> for Rc<dyn Error> {
-  fn from(pidgin_error: PidginError) -> Self {
+impl From<RuntimeError> for Rc<dyn Error> {
+  fn from(pidgin_error: RuntimeError) -> Self {
     Rc::new(pidgin_error)
   }
 }
-pub type PidginResult<T> = std::result::Result<T, PidginError>;
+pub type RuntimeResult<T> = std::result::Result<T, RuntimeError>;

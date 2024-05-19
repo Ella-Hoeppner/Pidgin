@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
   super::{SSABlock, SSAInstruction, SSARegister, SSAValue},
-  error::ASTError,
+  error::{ASTError, ASTResult},
   expressions::Expression,
   token::SymbolLedger,
   tree::Tree,
@@ -34,7 +34,7 @@ pub fn build_expression_ir(
   taken_virtual_registers: &mut usize,
   instructions: &mut Vec<SSAInstruction>,
   constants: &mut Vec<SSAValue<()>>,
-) -> Result<SSARegister, ASTError> {
+) -> ASTResult<SSARegister> {
   match expression {
     Expression::Literal(value) => {
       if let Symbol(symbol_index) = value {
@@ -145,15 +145,17 @@ pub fn build_expression_ir(
   }
 }
 
-pub fn ast_to_ir(ast: Tree<String>) -> Result<SSABlock<()>, ASTError> {
+pub fn ast_to_ir(
+  ast: Tree<String>,
+  symbol_ledger: &mut SymbolLedger,
+) -> ASTResult<SSABlock<()>> {
   let mut taken_virtual_registers = 0;
   let mut instructions = vec![];
   let mut constants = vec![];
-  let mut symbol_ledger = SymbolLedger::default();
   let last_register = build_expression_ir(
-    Expression::from_token_tree(ast.try_into()?, &mut symbol_ledger)?,
+    Expression::from_token_tree(ast.try_into()?, symbol_ledger)?,
     &HashMap::new(),
-    &mut symbol_ledger,
+    symbol_ledger,
     &mut taken_virtual_registers,
     &mut instructions,
     &mut constants,

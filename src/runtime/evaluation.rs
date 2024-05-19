@@ -20,7 +20,7 @@ use crate::{
 use take_mut::take;
 
 use super::control::{Block, CompositeFunction, PausedCoroutine};
-use super::error::{PidginError, PidginResult};
+use super::error::{RuntimeError, RuntimeResult};
 
 pub type Register = u8;
 pub type StackIndex = u16;
@@ -367,13 +367,13 @@ impl EvaluationState {
       self.set_register(i as Register + arg_offset, arg_value);
     }
   }
-  pub fn evaluate(&mut self) -> PidginResult<Option<Value>> {
+  pub fn evaluate(&mut self) -> RuntimeResult<Option<Value>> {
     loop {
       if self.current_frame.instruction_index >= self.current_frame.block.len()
       {
         break;
       }
-      let instruction_result: PidginResult<Option<Value>> = 'instruction: {
+      let instruction_result: RuntimeResult<Option<Value>> = 'instruction: {
         match self.next_instruction() {
           DebugPrint(id) => {
             println!(
@@ -446,7 +446,7 @@ impl EvaluationState {
                 if let Some(coroutine_ref) = &*maybe_coroutine {
                   if let Some(coroutine) = coroutine_ref.replace(None) {
                     if !coroutine.args.can_accept(arg_count as usize) {
-                      break 'instruction Err(PidginError::InvalidArity);
+                      break 'instruction Err(RuntimeError::InvalidArity);
                     }
                     let args = self.take_args(arg_count);
                     let arg_offset = coroutine.arg_offset;
@@ -458,18 +458,18 @@ impl EvaluationState {
                     self.set_args(args, arg_offset);
                   } else {
                     break 'instruction Err(
-                      PidginError::CoroutineAlreadyRunning,
+                      RuntimeError::CoroutineAlreadyRunning,
                     );
                   }
                 } else {
-                  break 'instruction Err(PidginError::DeadCoroutine);
+                  break 'instruction Err(RuntimeError::DeadCoroutine);
                 }
               }
               List(list) => todo!(),
               Hashmap(map) => todo!(),
               Hashset(set) => todo!(),
               _ => {
-                break 'instruction Err(PidginError::CantApply);
+                break 'instruction Err(RuntimeError::CantApply);
               }
             }
           }
@@ -514,7 +514,7 @@ impl EvaluationState {
                 Hashset(set) => todo!(),
                 Coroutine(maybe_coroutine) => todo!(),
                 _ => {
-                  break 'instruction Err(PidginError::CantApply);
+                  break 'instruction Err(RuntimeError::CantApply);
                 }
               }
             } else {
@@ -583,7 +583,7 @@ impl EvaluationState {
                 Hashmap(map) => todo!(),
                 Hashset(set) => todo!(),
                 _ => {
-                  break 'instruction Err(PidginError::CantApply);
+                  break 'instruction Err(RuntimeError::CantApply);
                 }
               }
             } else {
@@ -666,7 +666,7 @@ impl EvaluationState {
             result,
             match (self.get_register(num_1), self.get_register(num_2)) {
               (Number(a), Number(b)) => a.numerical_equal(b),
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           IsZero(result, num) => self.set_register(
@@ -674,7 +674,7 @@ impl EvaluationState {
             match self.get_register(num) {
               Number(Float(f)) => *f == 0.,
               Number(Int(i)) => *i == 0,
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           IsNan(result, num) => self.set_register(
@@ -682,7 +682,7 @@ impl EvaluationState {
             match self.get_register(num) {
               Number(Float(f)) => f.is_nan(),
               Number(Int(_)) => false,
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           IsInf(result, num) => self.set_register(
@@ -690,7 +690,7 @@ impl EvaluationState {
             match self.get_register(num) {
               Number(Float(f)) => f.is_infinite(),
               Number(Int(_)) => false,
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           IsEven(result, num) => self.set_register(
@@ -700,7 +700,7 @@ impl EvaluationState {
                 Ok(i) => i % 2 == 0,
                 Err(error) => break 'instruction Err(error),
               },
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           IsOdd(result, num) => self.set_register(
@@ -710,7 +710,7 @@ impl EvaluationState {
                 Ok(i) => i % 2 == 1,
                 Err(error) => break 'instruction Err(error),
               },
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           IsPos(result, num) => self.set_register(
@@ -718,7 +718,7 @@ impl EvaluationState {
             match self.get_register(num) {
               Number(Float(f)) => **f > 0.,
               Number(Int(i)) => *i > 0,
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           IsNeg(result, num) => self.set_register(
@@ -726,7 +726,7 @@ impl EvaluationState {
             match self.get_register(num) {
               Number(Float(f)) => **f < 0.,
               Number(Int(i)) => *i < 0,
-              _ => break 'instruction Err(PidginError::ArgumentNotNum),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotNum),
             },
           ),
           Inc(result, num) => self.set_register(
@@ -875,7 +875,7 @@ impl EvaluationState {
               Hashset(set) => set.is_empty(),
               Hashmap(hashmap) => hashmap.is_empty(),
               Nil => true,
-              _ => break 'instruction Err(PidginError::ArgumentNotList),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotList),
             },
           ),
           First(result, collection) => self.set_register(
@@ -889,7 +889,7 @@ impl EvaluationState {
                 .map(|(key, value)| vec![key.clone(), value.clone()].into())
                 .unwrap_or(Nil),
               Nil => Nil,
-              _ => break 'instruction Err(PidginError::ArgumentNotList),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotList),
             },
           ),
           Count(result, collection) => todo!(),
@@ -933,7 +933,7 @@ impl EvaluationState {
               Hashmap(hashmap) => todo!(),
               Hashset(set) => todo!(),
               Nil => self.set_register(collection_and_result, Nil),
-              _ => break 'instruction Err(PidginError::ArgumentNotList),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotList),
             };
           }
           Sort(collection_and_result) => todo!(),
@@ -946,7 +946,7 @@ impl EvaluationState {
             match self.get_register(list) {
               List(list) => list.last().cloned().unwrap_or(Nil),
               Nil => Nil,
-              _ => break 'instruction Err(PidginError::ArgumentNotList),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotList),
             },
           ),
           Rest(list_and_result) => {
@@ -968,7 +968,7 @@ impl EvaluationState {
                 );
               }
               Nil => self.set_register(list_and_result, Nil),
-              _ => break 'instruction Err(PidginError::ArgumentNotList),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotList),
             };
           }
           ButLast(list_and_result) => {
@@ -988,7 +988,7 @@ impl EvaluationState {
                 );
               }
               Nil => self.set_register(list_and_result, Nil),
-              _ => break 'instruction Err(PidginError::ArgumentNotList),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotList),
             };
           }
           Nth(result, list, n) => {
@@ -1032,7 +1032,7 @@ impl EvaluationState {
               Hashmap(hashmap) => todo!(),
               Hashset(set) => todo!(),
               Nil => self.set_register(list_and_result, Nil),
-              _ => break 'instruction Err(PidginError::ArgumentNotList),
+              _ => break 'instruction Err(RuntimeError::ArgumentNotList),
             };
           }
           Concat(list_and_result, other_list) => todo!(),
@@ -1080,18 +1080,18 @@ impl EvaluationState {
                 Value::fn_coroutine(Rc::unwrap_or_clone(f)),
               ),
               ExternalFn(_) => {
-                break 'instruction Err(PidginError::CantCreateCoroutine(
+                break 'instruction Err(RuntimeError::CantCreateCoroutine(
                   "can't create a coroutine from an external function"
                     .to_string(),
                 ))
               }
               CoreFn(_) => {
-                break 'instruction Err(PidginError::CantCreateCoroutine(
+                break 'instruction Err(RuntimeError::CantCreateCoroutine(
                   "can't create a coroutine from a core function".to_string(),
                 ))
               }
               other => {
-                break 'instruction Err(PidginError::CantCreateCoroutine(
+                break 'instruction Err(RuntimeError::CantCreateCoroutine(
                   format!("can't create a coroutine from {}", other),
                 ))
               }
@@ -1101,7 +1101,7 @@ impl EvaluationState {
             if let Coroutine(maybe_coroutine) = self.get_register(coroutine) {
               self.set_register(result, (**maybe_coroutine).is_some());
             } else {
-              break 'instruction Err(PidginError::IsntCoroutine);
+              break 'instruction Err(RuntimeError::IsntCoroutine);
             }
           }
           Yield(value) => {

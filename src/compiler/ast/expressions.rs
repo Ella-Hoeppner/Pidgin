@@ -1,7 +1,7 @@
 use crate::{compiler::SSAValue, runtime::evaluation::SymbolIndex};
 
 use super::{
-  error::ASTError,
+  error::{ASTError, ASTResult},
   token::{SymbolLedger, Token, TokenTree},
   tree::Tree,
 };
@@ -23,7 +23,7 @@ impl LiteralTree {
   fn from_token_tree(
     token_tree: TokenTree,
     symbol_ledger: &mut SymbolLedger,
-  ) -> Result<Self, ASTError> {
+  ) -> ASTResult<Self> {
     match token_tree {
       Tree::Inner(subtrees) => {
         if subtrees.len() == 0 {
@@ -93,7 +93,7 @@ impl Expression {
     literal_tree: LiteralTree,
     symbol_ledger: &mut SymbolLedger,
     mut quote_stack: Vec<QuoteType>,
-  ) -> Result<Self, ASTError> {
+  ) -> ASTResult<Self> {
     match literal_tree {
       Tree::Leaf(literal) => Ok(Literal(literal)),
       Tree::Inner(subtrees) => {
@@ -192,7 +192,7 @@ impl Expression {
   pub(crate) fn from_token_tree(
     token_tree: TokenTree,
     symbol_ledger: &mut SymbolLedger,
-  ) -> Result<Self, ASTError> {
+  ) -> ASTResult<Self> {
     Self::from_literal_tree(
       LiteralTree::from_token_tree(token_tree, symbol_ledger)?,
       symbol_ledger,
@@ -298,7 +298,7 @@ impl Expression {
     self,
     parent_bindings: &Vec<SymbolIndex>,
     symbol_ledger: &mut SymbolLedger,
-  ) -> Result<Self, ASTError> {
+  ) -> ASTResult<Self> {
     Ok(match self {
       Literal(value) => Literal(value),
       Quoted(subexpression) => Quoted(subexpression),
