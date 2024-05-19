@@ -9,17 +9,6 @@ use crate::{
   },
 };
 
-/*
-
-<
-  I: PartialEq + Hash,
-  O: PartialEq + Hash,
-  R: PartialEq + Hash,
-  M: PartialEq + Hash,
->
-
-*/
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericBlock<I, O, R, M> {
   pub instructions: Rc<[GenericInstruction<I, O, R>]>,
@@ -53,7 +42,7 @@ impl<I, O, R, M> GenericBlock<I, O, R, M> {
 }
 
 impl<I: Clone, O: Clone, R: Clone, M: Clone> GenericBlock<I, O, R, M> {
-  fn translate_inner<
+  pub(crate) fn translate_inner<
     NewI: Clone,
     NewO: Clone,
     NewR: Clone,
@@ -70,34 +59,11 @@ impl<I: Clone, O: Clone, R: Clone, M: Clone> GenericBlock<I, O, R, M> {
     preallocated_registers: u8,
     translator: &F,
   ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E> {
-    let mut translated_constants = vec![];
-    for value in self.constants.into_iter() {
-      translated_constants.push(match value {
-        CompositeFn(f_ref) => {
-          CompositeFn(Rc::new(GenericCompositeFunction::new(
-            f_ref.args.clone(),
-            f_ref
-              .block
-              .clone()
-              .translate_inner(f_ref.args.register_count(), translator)?,
-          )))
-        }
-        Nil => Nil,
-        Bool(a) => Bool(*a),
-        Char(a) => Char(*a),
-        Number(a) => Number(*a),
-        Symbol(a) => Symbol(*a),
-        Str(a) => Str(a.clone()),
-        List(a) => List(a.clone()),
-        Hashmap(a) => Hashmap(a.clone()),
-        Hashset(a) => Hashset(a.clone()),
-        CoreFn(a) => CoreFn(a.clone()),
-        ExternalFn(a) => ExternalFn(a.clone()),
-        ExternalObject(a) => ExternalObject(a.clone()),
-        Coroutine(a) => Coroutine(a.clone()),
-        Error(a) => Error(a.clone()),
-      })
-    }
+    let translated_constants = (*self.constants)
+      .to_vec()
+      .into_iter()
+      .map(|value| value.translate(translator))
+      .collect::<Result<Vec<_>, E>>()?;
     translator(
       preallocated_registers,
       self.instructions.to_vec(),

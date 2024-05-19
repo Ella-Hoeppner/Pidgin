@@ -14,6 +14,7 @@ use crate::{
   blocks::GenericBlock,
   compiler::ast::token::SymbolLedger,
   runtime::{control::GenericCompositeFunction, vm::Register},
+  GenericInstruction,
 };
 
 use super::{
@@ -297,9 +298,9 @@ pub enum GenericValue<I, O, R, M> {
   Number(Num),
   Symbol(SymbolIndex),
   Str(Rc<String>),
-  List(Rc<Vec<Value>>),
-  Hashmap(Rc<HashMap<Value, Value>>),
-  Hashset(Rc<HashSet<Value>>),
+  List(Rc<Vec<GenericValue<I, O, R, M>>>),
+  Hashmap(Rc<HashMap<GenericValue<I, O, R, M>, GenericValue<I, O, R, M>>>),
+  Hashset(Rc<HashSet<GenericValue<I, O, R, M>>>),
   CoreFn(CoreFnId),
   CompositeFn(Rc<GenericCompositeFunction<I, O, R, M>>),
   ExternalFn(Rc<ExternalFunction>),
@@ -307,22 +308,14 @@ pub enum GenericValue<I, O, R, M> {
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(Rc<PidginError>),
 }
-impl<I, O, R, M> GenericValue<I, O, R, M> {
-  pub fn composite_fn<
-    A: Into<AritySpecifier>,
-    B: Into<GenericBlock<I, O, R, M>>,
-  >(
-    args: A,
-    instructions: B,
-  ) -> Self {
-    CompositeFn(Rc::new(GenericCompositeFunction::new(args, instructions)))
-  }
-}
 
 pub type Value = GenericValue<Register, Register, Register, Register>;
 use GenericValue::*;
 
-impl<I, O, R, M> PartialEq for GenericValue<I, O, R, M> {
+impl<I, O, R, M> PartialEq for GenericValue<I, O, R, M>
+where
+  GenericValue<I, O, R, M>: Hash,
+{
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::Nil, Self::Nil) => true,
@@ -344,9 +337,91 @@ impl<I, O, R, M> PartialEq for GenericValue<I, O, R, M> {
     }
   }
 }
-impl<I, O, R, M> Eq for GenericValue<I, O, R, M> {}
+impl<I, O, R, M> Eq for GenericValue<I, O, R, M> where
+  GenericValue<I, O, R, M>: Hash
+{
+}
+
+impl<I: Clone, O: Clone, R: Clone, M: Clone> GenericValue<I, O, R, M> {
+  pub fn translate<
+    NewI: Clone,
+    NewO: Clone,
+    NewR: Clone,
+    NewM: Clone,
+    E,
+    F: Fn(
+      u8,
+      Vec<GenericInstruction<I, O, R>>,
+      Vec<GenericValue<NewI, NewO, NewR, NewM>>,
+      M,
+    ) -> Result<GenericBlock<NewI, NewO, NewR, NewM>, E>,
+  >(
+    self,
+    translator: &F,
+  ) -> Result<GenericValue<NewI, NewO, NewR, NewM>, E> {
+    Ok(match self {
+      CompositeFn(f_ref) => {
+        CompositeFn(Rc::new(GenericCompositeFunction::new(
+          f_ref.args.clone(),
+          f_ref
+            .block
+            .clone()
+            .translate_inner(f_ref.args.register_count(), translator)?,
+        )))
+      }
+      Nil => Nil,
+      Bool(b) => Bool(b),
+      Char(c) => Char(c),
+      Number(n) => Number(n),
+      Symbol(s) => Symbol(s),
+      Str(s) => Str(s),
+      List(vec) => List(Rc::new(
+        Rc::unwrap_or_clone(vec)
+          .into_iter()
+          .map(|value| value.translate(translator))
+          .collect::<Result<Vec<_>, E>>()?,
+      )),
+      Hashmap(hashmap) => Hashmap(Rc::new(
+        Rc::unwrap_or_clone(hashmap)
+          .into_iter()
+          .map(
+            |(key, value)| -> Result<
+              (
+                GenericValue<NewI, NewO, NewR, NewM>,
+                GenericValue<NewI, NewO, NewR, NewM>,
+              ),
+              E,
+            > {
+              Ok((key.translate(translator)?, value.translate(translator)?))
+            },
+          )
+          .collect::<Result<HashMap<_, _>, E>>()?,
+      )),
+      Hashset(set) => Hashset(Rc::new(
+        Rc::unwrap_or_clone(set)
+          .into_iter()
+          .map(|value| value.translate(translator))
+          .collect::<Result<HashSet<_>, E>>()?,
+      )),
+      CoreFn(f) => CoreFn(f),
+      ExternalFn(f) => ExternalFn(f),
+      ExternalObject(o) => ExternalObject(o),
+      Coroutine(c) => Coroutine(c),
+      Error(e) => Error(e),
+    })
+  }
+}
 
 impl<I, O, R, M> GenericValue<I, O, R, M> {
+  pub fn composite_fn<
+    A: Into<AritySpecifier>,
+    B: Into<GenericBlock<I, O, R, M>>,
+  >(
+    args: A,
+    instructions: B,
+  ) -> Self {
+    CompositeFn(Rc::new(GenericCompositeFunction::new(args, instructions)))
+  }
   pub fn description(&self, symbol_ledger: Option<&SymbolLedger>) -> String {
     match self {
       Nil => "nil".to_string(),
@@ -447,7 +522,7 @@ impl<I, O, R, M> GenericValue<I, O, R, M> {
   }
 }
 
-impl Hash for Value {
+impl<I, O, R, M> Hash for GenericValue<I, O, R, M> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     todo!()
   }

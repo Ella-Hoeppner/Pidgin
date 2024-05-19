@@ -1090,11 +1090,64 @@ mod tests {
   }
 
   #[test]
+  fn double_quoted_number() {
+    let sexp = "(quote (quote 1))";
+    test_bytecode!(
+      sexp,
+      block![Const(0, vec![GenericValue::Symbol(0), 1.into()]), Return(0)]
+    );
+  }
+
+  #[test]
+  fn triple_quoted_number() {
+    let sexp = "(quote (quote (quote 1)))";
+    test_bytecode!(
+      sexp,
+      block![
+        Const(
+          0,
+          vec![
+            GenericValue::Symbol(0),
+            GenericValue::List(vec![GenericValue::Symbol(0), 1.into()].into())
+          ]
+        ),
+        Return(0)
+      ]
+    );
+  }
+
+  #[test]
   fn quoted_list() {
     let sexp = "(quote (1 2 3))";
     test_bytecode!(
       sexp,
       block![Const(0, vec![1.into(), 2.into(), 3.into()]), Return(0)]
+    );
+  }
+
+  #[test]
+  fn quoted_fn() {
+    let sexp = "(quote (fn (x) (+ x x)))";
+    test_bytecode!(
+      sexp,
+      block![
+        Const(
+          0,
+          vec![
+            GenericValue::Symbol(0),
+            GenericValue::List(vec![GenericValue::Symbol(1)].into()),
+            GenericValue::List(
+              vec![
+                GenericValue::Symbol(2),
+                GenericValue::Symbol(1),
+                GenericValue::Symbol(1)
+              ]
+              .into()
+            )
+          ]
+        ),
+        Return(0)
+      ]
     );
   }
 }

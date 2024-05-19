@@ -408,12 +408,24 @@ impl Expression {
       ),
     }
   }
-  pub(crate) fn to_value(self) -> SSAValue<()> {
+  pub(crate) fn as_quoted_value(self) -> SSAValue<()> {
     match self {
       Literal(value) => value,
-      Quoted(_) => todo!(),
-      List(_) => todo!(),
-      Function { arg_names, body } => todo!(),
+      List(values) => SSAValue::List(
+        values
+          .into_iter()
+          .map(|value| value.as_quoted_value())
+          .collect::<Vec<_>>()
+          .into(),
+      ),
+      Quoted(_) => panic!(
+        "Expression::Quoted encountered in as_quoted_value, this should never \
+        happen! This should have just been parsed as a List"
+      ),
+      Function { .. } => panic!(
+        "Expression::Function encountered in as_quoted_value, this should \
+        never happen! This should have just been parsed as a List"
+      ),
     }
   }
 }
