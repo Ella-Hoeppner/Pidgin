@@ -6,6 +6,69 @@ use super::{
   tree::Tree,
 };
 
+type LiteralValue = SSAValue<()>;
+impl LiteralValue {
+  fn from_token(token: Token, symbol_ledger: &mut SymbolLedger) -> Self {
+    match token {
+      Token::Nil => SSAValue::Nil,
+      Token::IntLiteral(i) => i.into(),
+      Token::FloatLiteral(f) => f.into(),
+      Token::StringLiteral(s) => s.into(),
+      Token::Symbol(s) => SSAValue::Symbol(symbol_ledger.symbol_index(s)),
+    }
+  }
+}
+pub(crate) type LiteralTree = Tree<LiteralValue>;
+impl LiteralTree {
+  fn from_token_tree(
+    token_tree: TokenTree,
+    symbol_ledger: &mut SymbolLedger,
+  ) -> Result<Self, ASTError> {
+    match token_tree {
+      Tree::Inner(subtrees) => {
+        if subtrees.len() == 0 {
+          Ok(Self::Leaf(SSAValue::List(vec![].into())))
+        } else {
+          Ok(Self::Inner(
+            subtrees
+              .into_iter()
+              .map(|subtree| Self::from_token_tree(subtree, symbol_ledger))
+              .collect::<Result<_, _>>()?,
+          ))
+        }
+      }
+      Tree::Leaf(token) => {
+        Ok(Self::Leaf(LiteralValue::from_token(token, symbol_ledger)))
+      }
+    }
+  }
+  pub(crate) fn to_string(&self, symbol_ledger: &SymbolLedger) -> String {
+    match self {
+      Self::Leaf(value) => value.description(Some(symbol_ledger)),
+      Self::Inner(values) => format!(
+        "({})",
+        values
+          .iter()
+          .map(|value| value.to_string(symbol_ledger))
+          .collect::<Vec<_>>()
+          .join(" ")
+      ),
+    }
+  }
+  pub(crate) fn as_literal(self) -> LiteralValue {
+    match self {
+      Tree::Leaf(value) => value,
+      Tree::Inner(values) => LiteralValue::List(
+        values
+          .into_iter()
+          .map(|value| value.as_literal())
+          .collect::<Vec<LiteralValue>>()
+          .into(),
+      ),
+    }
+  }
+}
+
 #[derive(PartialEq, Clone, Copy)]
 enum QuoteType {
   Normal,
@@ -15,7 +78,7 @@ enum QuoteType {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Expression {
   Literal(SSAValue<()>),
-  Quoted(Box<Expression>),
+  Quoted(LiteralTree),
   List(Vec<Expression>),
   Function {
     arg_names: Vec<SymbolIndex>,
@@ -26,157 +89,116 @@ use itertools::Itertools;
 use Expression::*;
 
 impl Expression {
-  fn from_token(token: Token, symbol_ledger: &mut SymbolLedger) -> Self {
-    Literal(match token {
-      Token::Nil => SSAValue::Nil,
-      Token::IntLiteral(i) => i.into(),
-      Token::FloatLiteral(f) => f.into(),
-      Token::StringLiteral(s) => s.into(),
-      Token::Symbol(s) => SSAValue::Symbol(symbol_ledger.symbol_index(s)),
-    })
-  }
-  fn from_token_tree_inner(
-    token_tree: TokenTree,
+  fn from_literal_tree(
+    literal_tree: LiteralTree,
     symbol_ledger: &mut SymbolLedger,
     mut quote_stack: Vec<QuoteType>,
   ) -> Result<Self, ASTError> {
-    match token_tree {
+    match literal_tree {
+      Tree::Leaf(literal) => Ok(Literal(literal)),
       Tree::Inner(subtrees) => {
-        if subtrees.len() == 0 {
-          Ok(Literal(SSAValue::List(vec![].into())))
-        } else {
-          if let TokenTree::Leaf(Token::Symbol(first_symbol)) = &subtrees[0] {
-            if quote_stack.is_empty() {
-              match first_symbol.as_str() {
-                "fn" => {
-                  let mut subtrees_iter = subtrees.into_iter().skip(1);
-                  let maybe_arg_names = subtrees_iter.next();
-                  return if let Some(TokenTree::Inner(arg_names)) =
-                    maybe_arg_names
-                  {
-                    Ok(Function {
-                      arg_names: arg_names
-                        .into_iter()
-                        .map(|arg_name_subtree| {
-                          let arg_name_expression =
-                            Expression::from_token_tree_inner(
-                              arg_name_subtree,
-                              symbol_ledger,
-                              quote_stack.clone(),
-                            )?;
-                          if let Literal(SSAValue::Symbol(
-                            arg_name_symbol_index,
-                          )) = arg_name_expression
-                          {
-                            Ok(arg_name_symbol_index)
-                          } else {
-                            Err(ASTError::InvalidFunctionDefintionArgumentName(
-                              arg_name_expression,
-                            ))
-                          }
-                        })
-                        .collect::<Result<_, _>>()?,
-                      body: subtrees_iter
-                        .map(|body_subtree| {
-                          Expression::from_token_tree_inner(
-                            body_subtree,
+        if let Tree::Leaf(LiteralValue::Symbol(first_symbol)) = &subtrees[0] {
+          if quote_stack.is_empty() {
+            match symbol_ledger
+              .symbol_name(first_symbol)
+              .expect(
+                "no symbol name found for symbol index encountered in \
+                Expression::from_literal_tree",
+              )
+              .as_str()
+            {
+              "fn" => {
+                let mut subtrees_iter = subtrees.into_iter().skip(1);
+                let maybe_arg_names = subtrees_iter.next();
+                return if let Some(Tree::Inner(arg_names)) = maybe_arg_names {
+                  Ok(Function {
+                    arg_names: arg_names
+                      .into_iter()
+                      .map(|arg_name_subtree| {
+                        let arg_name_expression =
+                          Expression::from_literal_tree(
+                            arg_name_subtree,
                             symbol_ledger,
                             quote_stack.clone(),
-                          )
-                        })
-                        .collect::<Result<_, _>>()?,
-                    })
-                  } else {
-                    Err(ASTError::InvalidFunctionDefintionArgumentNameList(
-                      maybe_arg_names,
-                    ))
-                  };
-                }
-                "quote" => {
-                  return if subtrees.len() == 2 {
-                    Ok(Quoted(
-                      Expression::from_token_tree_inner(
-                        subtrees.into_iter().skip(1).next().unwrap(),
-                        symbol_ledger,
+                          )?;
+                        if let Literal(SSAValue::Symbol(
+                          arg_name_symbol_index,
+                        )) = arg_name_expression
                         {
-                          quote_stack.push(QuoteType::Normal);
-                          quote_stack
-                        },
-                      )?
-                      .into(),
-                    ))
-                  } else {
-                    Err(ASTError::MultipleExpressionsInQuote)
-                  }
-                }
-                "hard-quote" => {
-                  return if subtrees.len() == 2 {
-                    Ok(Quoted(
-                      Expression::from_token_tree_inner(
-                        subtrees.into_iter().skip(1).next().unwrap(),
-                        symbol_ledger,
-                        {
-                          quote_stack.push(QuoteType::Hard);
-                          quote_stack
-                        },
-                      )?
-                      .into(),
-                    ))
-                  } else {
-                    Err(ASTError::MultipleExpressionsInHardQuote)
-                  }
-                }
-                "unquote" => {
-                  return if subtrees.len() == 2 {
-                    Ok(Quoted(
-                      Expression::from_token_tree_inner(
-                        subtrees.into_iter().skip(1).next().unwrap(),
-                        symbol_ledger,
-                        if quote_stack.is_empty() {
-                          todo!("top-level unquoting doesn't work yet!!")
+                          Ok(arg_name_symbol_index)
                         } else {
-                          if *quote_stack.last().unwrap() == QuoteType::Hard {
-                            quote_stack
-                          } else {
-                            quote_stack.pop();
-                            quote_stack
-                          }
-                        },
-                      )?
-                      .into(),
-                    ))
-                  } else {
-                    Err(ASTError::MultipleExpressionsInUnquote)
-                  }
-                }
-                _ => (),
+                          Err(ASTError::InvalidFunctionDefintionArgumentName(
+                            arg_name_expression,
+                          ))
+                        }
+                      })
+                      .collect::<Result<_, _>>()?,
+                    body: subtrees_iter
+                      .map(|body_subtree| {
+                        Expression::from_literal_tree(
+                          body_subtree,
+                          symbol_ledger,
+                          quote_stack.clone(),
+                        )
+                      })
+                      .collect::<Result<_, _>>()?,
+                  })
+                } else {
+                  Err(ASTError::InvalidFunctionDefintionArgumentNameList(
+                    maybe_arg_names,
+                  ))
+                };
               }
+              "quote" => {
+                return if subtrees.len() == 2 {
+                  Ok(Quoted(subtrees.into_iter().skip(1).next().unwrap()))
+                } else {
+                  Err(ASTError::MultipleExpressionsInQuote)
+                }
+              }
+              "hard-quote" => {
+                return if subtrees.len() == 2 {
+                  Ok(Quoted(subtrees.into_iter().skip(1).next().unwrap()))
+                } else {
+                  Err(ASTError::MultipleExpressionsInHardQuote)
+                }
+              }
+              "unquote" => {
+                return if subtrees.len() == 2 {
+                  todo!("unquoting isn't implemented yet!")
+                } else {
+                  Err(ASTError::MultipleExpressionsInUnquote)
+                }
+              }
+              _ => (),
             }
           }
-          Ok(List(
-            subtrees
-              .into_iter()
-              .map(|subtree| {
-                Expression::from_token_tree_inner(
-                  subtree,
-                  symbol_ledger,
-                  quote_stack.clone(),
-                )
-              })
-              .collect::<Result<_, _>>()?,
-          ))
         }
+        Ok(List(
+          subtrees
+            .into_iter()
+            .map(|subtree| {
+              Expression::from_literal_tree(
+                subtree,
+                symbol_ledger,
+                quote_stack.clone(),
+              )
+            })
+            .collect::<Result<_, _>>()?,
+        ))
       }
-      Tree::Leaf(token) => Ok(Self::from_token(token, symbol_ledger)),
     }
   }
   pub(crate) fn from_token_tree(
     token_tree: TokenTree,
     symbol_ledger: &mut SymbolLedger,
   ) -> Result<Self, ASTError> {
-    Self::from_token_tree_inner(token_tree, symbol_ledger, vec![])
+    Self::from_literal_tree(
+      LiteralTree::from_token_tree(token_tree, symbol_ledger)?,
+      symbol_ledger,
+      vec![],
+    )
   }
-
   fn unbound_internal_symbols(
     &self,
     bindings: &Vec<SymbolIndex>,
@@ -354,10 +376,9 @@ impl Expression {
             })
             .collect::<Result<Vec<_>, _>>()?;
           Expression::List(
-            std::iter::once(Expression::from_token(
-              Token::Symbol("partial".to_string()),
-              symbol_ledger,
-            ))
+            std::iter::once(Expression::Literal(LiteralValue::Symbol(
+              symbol_ledger.symbol_index("partial".to_string()),
+            )))
             .chain(std::iter::once(Expression::Function {
               arg_names: replacements
                 .iter()
@@ -405,26 +426,6 @@ impl Expression {
           .map(|body_expression| body_expression.to_string(symbol_ledger))
           .collect::<Vec<String>>()
           .join(" ")
-      ),
-    }
-  }
-  pub(crate) fn as_quoted_value(self) -> SSAValue<()> {
-    match self {
-      Literal(value) => value,
-      List(values) => SSAValue::List(
-        values
-          .into_iter()
-          .map(|value| value.as_quoted_value())
-          .collect::<Vec<_>>()
-          .into(),
-      ),
-      Quoted(_) => panic!(
-        "Expression::Quoted encountered in as_quoted_value, this should never \
-        happen! This should have just been parsed as a List"
-      ),
-      Function { .. } => panic!(
-        "Expression::Function encountered in as_quoted_value, this should \
-        never happen! This should have just been parsed as a List"
       ),
     }
   }

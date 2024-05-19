@@ -1,11 +1,11 @@
 use std::{error::Error, fmt::Display};
 
-use super::{expressions::Expression, token::TokenTree};
+use super::expressions::{Expression, LiteralTree};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ASTError {
   CantParseToken(String),
-  InvalidFunctionDefintionArgumentNameList(Option<TokenTree>),
+  InvalidFunctionDefintionArgumentNameList(Option<LiteralTree>),
   InvalidFunctionDefintionArgumentName(Expression),
   FunctionDefinitionMissingBody,
   UnboundSymbol(String),

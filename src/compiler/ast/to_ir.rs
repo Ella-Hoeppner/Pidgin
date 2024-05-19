@@ -61,7 +61,7 @@ pub fn build_expression_ir(
       }
     }
     Expression::Quoted(subexpression) => Ok(push_constant(
-      subexpression.as_quoted_value(),
+      subexpression.as_literal(),
       taken_virtual_registers,
       instructions,
       constants,

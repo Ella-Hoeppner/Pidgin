@@ -1068,7 +1068,7 @@ mod tests {
   #[test]
   fn quoted_symbol() {
     let sexp = "(quote hello!)";
-    test_bytecode!(sexp, block![Const(0, GenericValue::Symbol(0)), Return(0)]);
+    test_bytecode!(sexp, block![Const(0, GenericValue::Symbol(1)), Return(0)]);
   }
 
   #[test]
@@ -1134,13 +1134,13 @@ mod tests {
         Const(
           0,
           vec![
-            GenericValue::Symbol(0),
-            GenericValue::List(vec![GenericValue::Symbol(1)].into()),
+            GenericValue::Symbol(1),
+            GenericValue::List(vec![GenericValue::Symbol(2)].into()),
             GenericValue::List(
               vec![
+                GenericValue::Symbol(3),
                 GenericValue::Symbol(2),
-                GenericValue::Symbol(1),
-                GenericValue::Symbol(1)
+                GenericValue::Symbol(2)
               ]
               .into()
             )
