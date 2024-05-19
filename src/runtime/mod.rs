@@ -6,7 +6,7 @@ pub mod evaluation;
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
+  use std::{collections::HashMap, rc::Rc};
 
   use crate::{
     instructions::GenericInstruction::*,
@@ -32,7 +32,7 @@ mod tests {
   macro_rules! run_and_check_registers {
     ($program:expr, $(($register:expr, $value:expr)),*$(,)?) => {
       let mut state = EvaluationState::new($program);
-      state.evaluate().unwrap();
+      state.evaluate(&HashMap::new()).unwrap();
       $(assert_register!(state, $register, $value);)*
     };
   }
@@ -84,8 +84,9 @@ mod tests {
   #[test]
   fn environment_lookup() {
     let mut state = EvaluationState::new(block![Lookup(0, 0)]);
-    state.bind_symbol(0, "test!");
-    state.evaluate().unwrap();
+    let mut bindings = HashMap::new();
+    bindings.insert(0, "test!".into());
+    state.evaluate(&bindings).unwrap();
     assert_register!(state, 0, "test!");
   }
 

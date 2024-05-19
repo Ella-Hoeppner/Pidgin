@@ -62,6 +62,7 @@ mod tests {
     let mut constants = vec![];
     let last_register = build_expression_ir(
       Expression::from_token_tree(ast.try_into()?, symbol_ledger)?,
+      &|_| false,
       &HashMap::new(),
       symbol_ledger,
       &mut 0,
@@ -102,7 +103,9 @@ mod tests {
       let raw_ir =
         ast_to_ir(parse_sexp($sexp), &mut SymbolLedger::default()).unwrap();
       let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
-      let output = EvaluationState::new(bytecode).evaluate().unwrap();
+      let output = EvaluationState::new(bytecode)
+        .evaluate(&HashMap::new())
+        .unwrap();
       assert_eq!(
         debug_string(&output),
         debug_string(&Some(Value::from($expected_output))),

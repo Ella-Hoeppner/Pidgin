@@ -29,7 +29,8 @@ pub fn push_constant(
 
 pub fn build_expression_ir(
   expression: Expression,
-  bindings: &HashMap<SymbolIndex, u8>,
+  global_binding_checker: &impl Fn(SymbolIndex) -> bool,
+  local_bindings: &HashMap<SymbolIndex, u8>,
   symbol_ledger: &mut SymbolLedger,
   taken_virtual_registers: &mut usize,
   instructions: &mut Vec<SSAInstruction>,
@@ -38,7 +39,7 @@ pub fn build_expression_ir(
   match expression {
     Expression::Literal(value) => {
       if let Symbol(symbol_index) = value {
-        if let Some(binding_index) = bindings.get(&symbol_index) {
+        if let Some(binding_index) = local_bindings.get(&symbol_index) {
           Ok(*binding_index as SSARegister)
         } else {
           let symbol_name = symbol_ledger.symbol_name(&symbol_index).unwrap();
@@ -49,6 +50,10 @@ pub fn build_expression_ir(
               instructions,
               constants,
             ))
+          } else if global_binding_checker(symbol_index) {
+            instructions.push(Lookup(*taken_virtual_registers, symbol_index));
+            *taken_virtual_registers += 1;
+            Ok(*taken_virtual_registers - 1)
           } else {
             Err(ASTError::UnboundSymbol(symbol_name.clone()))
           }
@@ -79,7 +84,8 @@ pub fn build_expression_ir(
         .map(|arg| {
           build_expression_ir(
             arg,
-            bindings,
+            global_binding_checker,
+            local_bindings,
             symbol_ledger,
             taken_virtual_registers,
             instructions,
@@ -89,7 +95,8 @@ pub fn build_expression_ir(
         .collect::<Result<Vec<SSARegister>, _>>()?;
       let f_register = build_expression_ir(
         first_subexpression,
-        bindings,
+        global_binding_checker,
+        local_bindings,
         symbol_ledger,
         taken_virtual_registers,
         instructions,
@@ -107,7 +114,7 @@ pub fn build_expression_ir(
       Ok(*taken_virtual_registers - 1)
     }
     Expression::Function { arg_names, body } => {
-      let mut new_bindings = bindings.clone();
+      let mut new_bindings = local_bindings.clone();
       let arg_count = arg_names.len() as u8;
       for arg_name in arg_names {
         new_bindings.insert(arg_name, new_bindings.len() as u8);
@@ -119,6 +126,7 @@ pub fn build_expression_ir(
           let mut function_constants = vec![];
           let function_return_register = build_expression_ir(
             body.into_iter().next().unwrap(),
+            global_binding_checker,
             &new_bindings,
             symbol_ledger,
             &mut (arg_count.clone() as SSARegister),

@@ -160,6 +160,9 @@ Compiler stuff
   * I guess rather than technically having a different kind of constant, which I guess would mean having a separate `single_use_constants` field in `Program`, there could just be a `StealConst` instruction in addition to the normal `Const` function
 * Have special types for lists (and hashmaps and hashsets, presumably) that aren't stored in `Rc`s and are just directly mutable, for values that can be determined at compile-time to be single-use.
   * This should save some overhead for calling `get_mut` on the `Rc`s and deallocating the extra data associated with an `Rc`. This would also remove some indirection, if I can't figure out how to make the `RcVec` thing work
+* Have a compilation mode that doesn't use a global environment for functions, and instead inlines/lifts references to `def`'d values
+  * once there's a module system, there should be an optional way of importing specific files in this way, i.e. inlining every non-public `def` in the file to the public `def` values
+  * this will mean that you can't really redefine values in the namespace during interactive development, but it should allow for some more efficiency
 * Consider implementing specialized subtypes of `List` that handle certain operations in a more efficient way.
   * For instance, there could be a `SubList` that consists of an `Rc` to a normal list along with a start and end index, and operations like `get` or `count` could have special implementations for these types
     * Things like this could help avoid cloning data in a lot of cases

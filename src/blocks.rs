@@ -1,13 +1,6 @@
-use std::hash::Hash;
 use std::{ops::Index, rc::Rc};
 
-use crate::{
-  instructions::GenericInstruction,
-  runtime::{
-    control::GenericCompositeFunction,
-    data::GenericValue::{self, *},
-  },
-};
+use crate::{instructions::GenericInstruction, runtime::data::GenericValue};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericBlock<I, O, R, M> {

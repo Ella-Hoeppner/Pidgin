@@ -32,7 +32,6 @@ pub struct EvaluationState {
   current_frame: StackFrame,
   current_coroutine: CoroutineState,
   parent_coroutine_stack: Vec<(StackIndex, PausedCoroutine)>,
-  environment: HashMap<SymbolIndex, Value>,
 }
 
 impl EvaluationState {
@@ -41,7 +40,6 @@ impl EvaluationState {
       current_frame: StackFrame::root(block),
       current_coroutine: CoroutineState::new(),
       parent_coroutine_stack: vec![],
-      environment: HashMap::new(),
     }
   }
   fn describe_stack(&self) -> String {
@@ -88,24 +86,6 @@ impl EvaluationState {
       })
       .collect::<Vec<String>>()
       .join("\n")
-  }
-  fn describe_environment(&self) -> String {
-    let mut bindings: Vec<_> = self.environment.iter().collect();
-    bindings.sort_by_key(|(symbol_index, _value_pointer)| **symbol_index);
-    bindings
-      .into_iter()
-      .map(|(symbol_index, value)| {
-        format!("{}: {}", symbol_index, value.description(None))
-      })
-      .collect::<Vec<String>>()
-      .join("\n")
-  }
-  pub(crate) fn bind_symbol<T: Into<Value>>(
-    &mut self,
-    symbol_index: StackIndex,
-    value: T,
-  ) {
-    self.environment.insert(symbol_index, value.into());
   }
   fn push_frame(&mut self, mut frame: StackFrame) {
     std::mem::swap(&mut self.current_frame, &mut frame);
@@ -367,7 +347,10 @@ impl EvaluationState {
       self.set_register(i as Register + arg_offset, arg_value);
     }
   }
-  pub fn evaluate(&mut self) -> RuntimeResult<Option<Value>> {
+  pub fn evaluate(
+    &mut self,
+    global_bindings: &HashMap<SymbolIndex, Value>,
+  ) -> RuntimeResult<Option<Value>> {
     loop {
       if self.current_frame.instruction_index >= self.current_frame.block.len()
       {
@@ -380,12 +363,10 @@ impl EvaluationState {
               "{}\n\
               paused coroutinees: {}\n\
               stack:\n{}\n\n\n\
-              environment:\n{}\n\
               ----------------------------------------\n\n\n",
               pad(40, '-', format!("DEBUG {} ", id)),
               self.parent_coroutine_stack.len(),
               self.describe_stack(),
-              indent_lines(2, self.describe_environment())
             );
           }
           Clear(register) => self.set_register(register, Nil),
@@ -614,8 +595,7 @@ impl EvaluationState {
           }
           ApplySelfAndReturn(args) => todo!(),
           Lookup(register, symbol_index) => {
-            self
-              .set_register(register, self.environment[&symbol_index].clone());
+            self.set_register(register, global_bindings[&symbol_index].clone());
           }
           CallingFunction(result) => {
             // This instruction puts a reference to the current calling function

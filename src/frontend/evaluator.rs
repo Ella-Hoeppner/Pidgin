@@ -46,6 +46,7 @@ impl Evaluator {
     let mut constants = vec![];
     let last_register = build_expression_ir(
       expression,
+      &|symbol| self.global_environment.contains_key(&symbol),
       &HashMap::new(),
       &mut self.symbol_ledger,
       &mut 0,
@@ -62,7 +63,7 @@ impl Evaluator {
     Ok(raw_ir_to_bytecode(ir)?)
   }
   fn eval_bytecode(&self, block: Block) -> RuntimeResult<Option<Value>> {
-    EvaluationState::new(block).evaluate()
+    EvaluationState::new(block).evaluate(&self.global_environment)
   }
   pub fn get_binding(&mut self, name: &str) -> Option<&Value> {
     let symbol_index = self.symbol_ledger.symbol_index(name.to_string());
