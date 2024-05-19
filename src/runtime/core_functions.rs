@@ -11,7 +11,7 @@ use crate::runtime::{
 use enum_map::{Enum, EnumMap};
 
 #[derive(Debug, Enum, PartialEq, Eq, Hash, Clone, Copy)]
-pub(crate) enum CoreFnId {
+pub enum CoreFnId {
   Print,
   Apply,
   When,

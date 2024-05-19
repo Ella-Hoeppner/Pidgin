@@ -305,7 +305,7 @@ pub enum GenericValue<I, O, R, M> {
   ExternalFn(Rc<ExternalFunction>),
   ExternalObject(Rc<Rc<dyn Any>>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
-  Error(Box<PidginError>),
+  Error(Rc<PidginError>),
 }
 impl<I, O, R, M> GenericValue<I, O, R, M> {
   pub fn composite_fn<
@@ -546,6 +546,6 @@ impl From<ExternalFunction> for Value {
 }
 impl From<PidginError> for Value {
   fn from(e: PidginError) -> Self {
-    Error(Box::new(e))
+    Error(Rc::new(e))
   }
 }

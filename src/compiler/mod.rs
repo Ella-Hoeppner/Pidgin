@@ -1064,4 +1064,37 @@ mod tests {
     );
     test_output!(sexp, 16);
   }
+
+  #[test]
+  fn quoted_symbol() {
+    let sexp = "(quote hello!)";
+    test_bytecode!(sexp, block![Const(0, GenericValue::Symbol(0)), Return(0)]);
+  }
+
+  #[test]
+  fn quoted_string() {
+    let sexp = "(quote \"hello!\")";
+    test_bytecode!(
+      sexp,
+      block![
+        Const(0, GenericValue::Str("hello!".to_string().into())),
+        Return(0)
+      ]
+    );
+  }
+
+  #[test]
+  fn quoted_number() {
+    let sexp = "(quote 1)";
+    test_bytecode!(sexp, block![Const(0, 1), Return(0)]);
+  }
+
+  #[test]
+  fn quoted_list() {
+    let sexp = "(quote (1 2 3))";
+    test_bytecode!(
+      sexp,
+      block![Const(0, vec![1.into(), 2.into(), 3.into()]), Return(0)]
+    );
+  }
 }

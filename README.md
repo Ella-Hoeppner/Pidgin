@@ -67,15 +67,24 @@ Compiler stuff
 * Make sure shadowing isn't allowed.
   * Basically just check that arg names of functions aren't core fn names or bound in any enclosing unctions
   * later there will be special syntax for allowing shadowing, but we can worry about that once GSE is in place, for now we can just entirely disallow it
-* support quoting
-  * `Expression` should have a special variant case for this
-    * lift_lambdas needs to avoid replacing quoted forms
+* support successive evaluation of multiple top-level forms, including a `def` special form
+  * once this is done we can actually implement a repl! :D
+* support unquoting
+  * I'm acutally not really sure how other lisps handle this internally. The most obvious solution to me seems to just be building the whole quoted tree with `nil`s in place of the unquoted values, then wrapping the quoted form with `(set-in <quoted form> <path to unquoted form> <unquoted value>)`.
+    * iirc this is basically what I did in kudzu
+    * this seems like the most efficient thing to do? technically the whole thing could also be broken down into a bunch of nested calls to list (and hashmap, hashset) constructors, but that seems less efficient than just letting the whole quoted thing be pulled from the constant table and having the single call to `set-in`, especially since in that case it should always benefit from the RC=1 optimization
+    * eventually this will need special logic for hashmap constructors
+* support macros
+* support recursive functions
+  * will need to generalize the `fn` special form to allow the first subexpression to be a symbol and interpret the second subexpression as the arg list
+  * I think the way this will have to work is that named functions that can call themselves will emit a `CallingFunction` instruction at the start of the block, targetting the first instruction after their register. The lambda lifting logic will need to basically treat the function name as another binding introduced by the function header
 * support compiling if statements
   * Maybe it would make sense have a new `EagerIf` instruction that takes 2 registers and just returns the value of one or the other based on a boolean register (which will also just be used as the return register). This wouldn't do a short-circuiting optimization. The compiler could then just emit, for an `(if ...)` statement, 2 thunks (which could later be lambda-lifted) for each side of the if, and use `EagerIf` to put one of the two into a register, then `Call` that function.
     * There could be an optimization pass that transforms this pattern into the more optimized `If` `Else` `End` instructions, but that pass can come relatively late in the compilation pipeline, so other passes don't have to worry about being the existence of `If`s or `Jump`s
       * However, this pass does need to be followed by a function inlining pass, as it would just intersperse `Call`s of the thunks between the `If` `Else` and `End` instructions, so it wouldn't be optimally efficient without a later function inlining step.
     * I guess this needs to happen at the AST level, since it will come before lambda-lifting. I guess `if` could just be a macro that transforms `(if <cond> <a> <B>)` into `((if-eager <cond> (fn () <a>) (fn () <b>)))`.
 * IR-level optimization passess:
+  * Function inlining
   * When a value is going to be passed into a `Call` at the end of its lifetime, use `StealArgument` rather than `CopyArgument`
   * [`Call`, `Return`] -> `CallAndReturn`
   * [`CallSelf`, `Return`] -> `CallSelfAndReturn`
@@ -89,7 +98,6 @@ Compiler stuff
   * [`EmptyList`, `Const`, `Push` ... `Const`, `Push`] -> [`Const(Full List)`]
     * Maybe even - if some elements are constant and some aren't, replace the `EmptyList .. Push` chain with a `Const(List)` with the size of the full list and all the constant values inlined, followed by `Set` instructions to add in the non-constant values
   * translate `Map` over constant lists can to a sequence of individual function applications
-  * Function inlining
   * Functions ending with `CallSelfAndReturn` that can put their return values back into the corresponding input registers can just `Jump` back to the start of the function
   * When a value reaches the end of its lifetime without being replaced, insert a `Clear` instruction
     * remember to shift the `RegisterLifetime` values around when doing this, timestamps beyond the point where this happens need to be incremented to account for the new instruction
@@ -99,7 +107,6 @@ Compiler stuff
         * It should be possible to have certain instructions that are known to always produce non-collection values (arithmetic ops, boolean ops, etc...) tag their output registers with metadata that lets the compiler know it can skip the `Clear` at the end of the lifetime
           * but many things will often produce non-collection values, e.g. `First` and user-defined functions, in a way that the compiler can't know about because the language doesn't have static typing. So this will probably only help in a small fraction of cases
       * Alternatively, what about making `Clear` not actually zero out the memory, but just like, decrement the strong count of the associated `Rc` (if any, i.e. if the value is a collection) and then use `std::mem::forget`? This would avoid zeroing out the memory. Though it would still mean processing an extra instruction.
-* do real error handling for `allocate_registers` rather than `expect`ing everywhere
 * Use GSE for parsing, once it's ready
 
 # planned language features (once the IR and VM are usable and a basic AST)
