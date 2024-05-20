@@ -702,7 +702,10 @@ mod tests {
       DebugPrint(0),
       IsCoroutineAlive(5, 0)
     ],
-    (3, RuntimeError::CantCastToNum),
+    (
+      3,
+      RuntimeError::CantCastToNum("this isn't a number!!!".into())
+    ),
     (4, true),
     (5, false)
   );

@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::{
   instructions::GenericInstruction::*,
   runtime::{
-    core_functions::CoreFnId, data::GenericValue::*, evaluation::SymbolIndex,
+    core_functions::CoreFnId,
+    data::GenericValue::*,
+    evaluation::{Register, SymbolIndex},
   },
 };
 
@@ -12,7 +14,6 @@ use super::{
   error::{ASTError, ASTResult},
   expressions::Expression,
   token::SymbolLedger,
-  tree::Tree,
 };
 
 pub fn push_constant(
@@ -30,7 +31,7 @@ pub fn push_constant(
 pub fn build_expression_ir(
   expression: Expression,
   global_binding_checker: &impl Fn(SymbolIndex) -> bool,
-  local_bindings: &HashMap<SymbolIndex, u8>,
+  local_bindings: &HashMap<SymbolIndex, Register>,
   symbol_ledger: &mut SymbolLedger,
   taken_virtual_registers: &mut usize,
   instructions: &mut Vec<SSAInstruction>,
@@ -73,10 +74,10 @@ pub fn build_expression_ir(
       instructions,
       constants,
     )),
-    Expression::List(subexpressions) => {
+    Expression::Application(subexpressions) => {
       let mut subexpressions_iter = subexpressions.into_iter();
       let first_subexpression = subexpressions_iter.next().expect(
-        "Encountered Expression::List with no inner subexpressions \
+        "Encountered Expression::Application with no inner subexpressions \
         (this should never happen, as empty forms should become empty
         list literals)",
       );
@@ -105,7 +106,7 @@ pub fn build_expression_ir(
       instructions.push(Call(
         *taken_virtual_registers,
         f_register,
-        arg_registers.len() as u8,
+        arg_registers.len() as Register,
       ));
       for arg_register in arg_registers {
         instructions.push(CopyArgument(arg_register))
@@ -114,11 +115,12 @@ pub fn build_expression_ir(
       Ok(*taken_virtual_registers - 1)
     }
     Expression::Function { arg_names, body } => {
-      let mut new_bindings = local_bindings.clone();
-      let arg_count = arg_names.len() as u8;
-      for arg_name in arg_names {
-        new_bindings.insert(arg_name, new_bindings.len() as u8);
-      }
+      let arg_count = arg_names.len() as Register;
+      let new_bindings: HashMap<SymbolIndex, Register> = arg_names
+        .into_iter()
+        .enumerate()
+        .map(|(i, arg_name)| (arg_name, i as Register))
+        .collect();
       match body.len() {
         0 => Err(ASTError::FunctionDefinitionMissingBody),
         1 => {

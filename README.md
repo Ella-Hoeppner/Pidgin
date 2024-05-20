@@ -43,14 +43,13 @@ Runtime stuff:
     * this should consist of a vec of realized values and a "realizer" (a rust iterator?) that can be used to generate the rest of the values
       * a rust iterator would work for the realizers of built-in functions, but I want there to be a function to turn a coroutine into a lazy list, and I'm not sure a rust iter could capture that...
         * I guess there could be a `Realizer` enum type with `Iterator` and `Coroutine` variants?
-* add string manipulation instructions
-* implement remaining instructions, and write tests
 * add an ability to overload certain core functions like `=` and `+` for specific `ExternalObject` types
   * for `=`, for example, this would work by having a function like `EvaluationState::add_external_eq_type<T: PartialEq>` that adds the `TypeId` of the provided type to a `HashMap` mapping to a function that uses the type's `PartialEq` to do the comparison
     * the same approach should work for pretty much anything else you'd want to overload, e.g. `Add` for `+`, `IntoIterator + FromIterator` to be callable with `map` and `filter`, etc.
     * this function won't need to take any arguments, as the function definition is the same for every type
     * example here: https://www.reddit.com/r/rust/comments/1ckgqrg/comment/l2nh7w5/
 * implement core fns
+* implement remaining instructions, and write tests
 * think about how to support parallelism
   * I guess it might be simple to just piggyback on rusts threads... maybe passing a coroutine or function into a `Spawn` instruction and having a `Await` instruction to join?
   * I don't wanna have to use `Arc`s everywhere...
@@ -66,7 +65,7 @@ Compiler stuff
 * support compiling type checkers, converters
   * nil?, bool?, char?, num?, int?, float?, symbol?, str?, list?, map?, set?, collection?, fn?, error?, bool, char, num, int, float, symbol, to-list, to-map, to-set, error
 * Make sure shadowing isn't allowed.
-  * Basically just check that arg names of functions aren't core fn names or bound in any enclosing unctions
+  * Basically just check that arg names of functions aren't core fn names, aren't bound globally, and aren't bound in any enclosing functions
   * later there will be special syntax for allowing shadowing, but we can worry about that once GSE is in place, for now we can just entirely disallow it
 * support unquoting
   * I'm acutally not really sure how other lisps handle this internally. The most obvious solution to me seems to just be building the whole quoted tree with `nil`s in place of the unquoted values, then wrapping the quoted form with `(set-in <quoted form> <path to unquoted form> <unquoted value>)`.

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::result;
 
 use crate::runtime::core_functions::CORE_FUNCTIONS;
 use crate::string_utils::pad;
@@ -347,6 +348,54 @@ impl EvaluationState {
       self.set_register(i as Register + arg_offset, arg_value);
     }
   }
+  fn apply(
+    &mut self,
+    result_register: Register,
+    f: &Value,
+    args: Vec<Value>,
+  ) -> RuntimeResult<()> {
+    match f {
+      CompositeFn(composite_fn) => {
+        self.start_fn_stack_frame(
+          composite_fn.clone(),
+          self.register_stack_index(result_register),
+        );
+        let provided_arg_count = args.len();
+        #[cfg(debug_assertions)]
+        if !composite_fn.args.can_accept(provided_arg_count) {
+          panic!(
+            "Apply called on CompositeFn that expects {} arguments, \
+            {} arguments provided",
+            composite_fn.args, provided_arg_count
+          )
+        }
+        self.set_args(args, 0);
+      }
+      CoreFn(core_fn_id) => match CORE_FUNCTIONS[*core_fn_id](args) {
+        Ok(value) => self.set_register(result_register, value),
+        Err(error) => return Err(error),
+      },
+      ExternalFn(external_fn) => {
+        let f = (*external_fn).f;
+        self.set_register(
+          result_register,
+          f(args).expect(
+            "external_fn returned an error, and we don't have error \
+            handling yet :(",
+          ),
+        );
+      }
+      PartialApplication(f_and_args) => todo!(),
+      List(list) => todo!(),
+      Hashmap(map) => todo!(),
+      Hashset(set) => todo!(),
+      Coroutine(maybe_coroutine) => todo!(),
+      value => {
+        return Err(RuntimeError::CantApply(value.clone()));
+      }
+    }
+    Ok(())
+  }
   pub fn evaluate(
     &mut self,
     global_bindings: &HashMap<SymbolIndex, Value>,
@@ -423,6 +472,22 @@ impl EvaluationState {
                   ),
                 );
               }
+              PartialApplication(f_and_args) => {
+                let (partial_f, partial_args) = &*f_and_args;
+                let args = self.take_args(arg_count);
+                println!("partial application!\n{partial_f:?}\n{partial_args:?}\n{args:?}\n");
+                if let Err(err) = self.apply(
+                  target,
+                  partial_f,
+                  partial_args
+                    .iter()
+                    .cloned()
+                    .chain(args.into_iter())
+                    .collect(),
+                ) {
+                  break 'instruction Err(err);
+                }
+              }
               Coroutine(maybe_coroutine) => {
                 if let Some(coroutine_ref) = &*maybe_coroutine {
                   if let Some(coroutine) = coroutine_ref.replace(None) {
@@ -449,54 +514,20 @@ impl EvaluationState {
               List(list) => todo!(),
               Hashmap(map) => todo!(),
               Hashset(set) => todo!(),
-              _ => {
-                break 'instruction Err(RuntimeError::CantApply);
+              value => {
+                break 'instruction Err(RuntimeError::CantApply(value));
               }
             }
           }
           Apply(args_and_result, f) => {
             let f_value = self.get_register(f).clone();
             if let List(arg_list) = self.steal_register(args_and_result) {
-              match f_value {
-                CompositeFn(composite_fn) => {
-                  self.start_fn_stack_frame(
-                    composite_fn.clone(),
-                    self.register_stack_index(args_and_result),
-                  );
-                  let provided_arg_count = arg_list.len();
-                  #[cfg(debug_assertions)]
-                  if !composite_fn.args.can_accept(provided_arg_count) {
-                    panic!(
-                      "Apply called on CompositeFn that expects {} arguments, \
-                      {} arguments provided",
-                      composite_fn.args, provided_arg_count
-                    )
-                  }
-                  self.set_args(Rc::unwrap_or_clone(arg_list), 0)
-                }
-                CoreFn(core_fn_id) => match CORE_FUNCTIONS[core_fn_id](
-                  Rc::unwrap_or_clone(arg_list),
-                ) {
-                  Ok(value) => self.set_register(args_and_result, value),
-                  Err(error) => break 'instruction Err(error),
-                },
-                ExternalFn(external_fn) => {
-                  let f = (*external_fn).f;
-                  self.set_register(
-                    args_and_result,
-                    f(Rc::unwrap_or_clone(arg_list)).expect(
-                      "external_fn returned an error, and we don't have error \
-                      handling yet :(",
-                    ),
-                  );
-                }
-                List(list) => todo!(),
-                Hashmap(map) => todo!(),
-                Hashset(set) => todo!(),
-                Coroutine(maybe_coroutine) => todo!(),
-                _ => {
-                  break 'instruction Err(RuntimeError::CantApply);
-                }
+              if let Err(err) = self.apply(
+                args_and_result,
+                &f_value,
+                Rc::unwrap_or_clone(arg_list),
+              ) {
+                break 'instruction Err(err);
               }
             } else {
               panic!("Apply called with non-List value");
@@ -559,12 +590,13 @@ impl EvaluationState {
                   should never happen"
                   )
                 }
+                PartialApplication(f_and_args) => todo!(),
                 Coroutine(maybe_coroutine) => todo!(),
                 List(list) => todo!(),
                 Hashmap(map) => todo!(),
                 Hashset(set) => todo!(),
-                _ => {
-                  break 'instruction Err(RuntimeError::CantApply);
+                value => {
+                  break 'instruction Err(RuntimeError::CantApply(value));
                 }
               }
             } else {

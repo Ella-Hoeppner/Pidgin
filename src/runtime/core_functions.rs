@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::runtime::{
   data::{
@@ -6,7 +6,7 @@ use crate::runtime::{
     Num::{self, *},
     Value,
   },
-  error::RuntimeResult,
+  error::{RuntimeError, RuntimeResult},
 };
 use enum_map::{Enum, EnumMap};
 
@@ -423,7 +423,17 @@ pub(crate) const CORE_FUNCTIONS: EnumMap<
   // If
   |_args: Vec<Value>| todo!(),
   // Partial
-  |_args: Vec<Value>| todo!(),
+  |args: Vec<Value>| {
+    if args.is_empty() {
+      Err(RuntimeError::InvalidArity)
+    } else {
+      let mut args_iter = args.into_iter();
+      Ok(Value::PartialApplication(Rc::new((
+        args_iter.next().unwrap(),
+        args_iter.collect(),
+      ))))
+    }
+  },
   // Compose
   |_args: Vec<Value>| todo!(),
   // FindSome
@@ -481,7 +491,15 @@ pub(crate) const CORE_FUNCTIONS: EnumMap<
   // Subtract
   |_args: Vec<Value>| todo!(),
   // Multiply
-  |_args: Vec<Value>| todo!(),
+  |args: Vec<Value>| {
+    let nums = args
+      .iter()
+      .map(|v| v.as_num().copied())
+      .collect::<RuntimeResult<Vec<Num>>>()?;
+    Ok(Number(
+      nums.into_iter().fold(Int(0), |product, n| product * n),
+    ))
+  },
   // Divide
   |_args: Vec<Value>| todo!(),
   // Pow

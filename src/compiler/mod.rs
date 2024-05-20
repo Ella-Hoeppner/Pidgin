@@ -54,14 +54,16 @@ mod tests {
     format!("{:?}", x)
   }
 
-  fn ast_to_ir(
-    ast: Tree<String>,
+  fn sexp_to_ir(
+    sexp: &str,
     symbol_ledger: &mut SymbolLedger,
   ) -> ASTResult<SSABlock<()>> {
+    let ast = parse_sexp(sexp);
     let mut instructions = vec![];
     let mut constants = vec![];
     let last_register = build_expression_ir(
-      Expression::from_token_tree(ast.try_into()?, symbol_ledger)?,
+      Expression::from_token_tree(ast.try_into()?, symbol_ledger)?
+        .lift_lambdas(&vec![], symbol_ledger)?,
       &|_| false,
       &HashMap::new(),
       symbol_ledger,
@@ -75,8 +77,7 @@ mod tests {
 
   macro_rules! test_raw_ir {
     ($sexp:expr, $expected_ir:expr) => {
-      let raw_ir =
-        ast_to_ir(parse_sexp($sexp), &mut SymbolLedger::default()).unwrap();
+      let raw_ir = sexp_to_ir($sexp, &mut SymbolLedger::default()).unwrap();
       assert_eq!(
         debug_string(&raw_ir),
         debug_string(&$expected_ir),
@@ -87,8 +88,7 @@ mod tests {
 
   macro_rules! test_bytecode {
     ($sexp:expr, $expected_bytecode:expr) => {
-      let raw_ir =
-        ast_to_ir(parse_sexp($sexp), &mut SymbolLedger::default()).unwrap();
+      let raw_ir = sexp_to_ir($sexp, &mut SymbolLedger::default()).unwrap();
       let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
       assert_eq!(
         debug_string(&bytecode),
@@ -100,8 +100,7 @@ mod tests {
 
   macro_rules! test_output {
     ($sexp:expr, $expected_output:expr) => {
-      let raw_ir =
-        ast_to_ir(parse_sexp($sexp), &mut SymbolLedger::default()).unwrap();
+      let raw_ir = sexp_to_ir($sexp, &mut SymbolLedger::default()).unwrap();
       let bytecode = raw_ir_to_bytecode(raw_ir).unwrap();
       let output = EvaluationState::new(bytecode)
         .evaluate(&HashMap::new())
@@ -1174,6 +1173,67 @@ mod tests {
               .into()
             )
           ]
+        ),
+        Return(0)
+      ]
+    );
+  }
+
+  #[test]
+  fn two_arg_fn_compilation() {
+    let sexp = "(fn (x y) (* x y))";
+    test_raw_ir!(
+      sexp,
+      ssa_block![
+        Const(
+          0,
+          GenericValue::composite_fn(
+            2,
+            ssa_block![
+              Const(2, CoreFn(CoreFnId::Multiply)),
+              Call(3, 2, 2),
+              CopyArgument(0),
+              CopyArgument(1),
+              Return(3)
+            ]
+          )
+        ),
+        Return(0)
+      ]
+    );
+  }
+
+  #[test]
+  fn lifted_lambda_compilation() {
+    let sexp = "(fn (x) (fn (y) (* x y)))";
+    test_raw_ir!(
+      sexp,
+      ssa_block![
+        Const(
+          0,
+          GenericValue::composite_fn(
+            1,
+            ssa_block![
+              Const(
+                1,
+                GenericValue::composite_fn(
+                  2,
+                  ssa_block![
+                    Const(2, CoreFn(CoreFnId::Multiply)),
+                    Call(3, 2, 2),
+                    CopyArgument(0),
+                    CopyArgument(1),
+                    Return(3)
+                  ]
+                )
+              ),
+              Const(2, CoreFn(CoreFnId::Partial)),
+              Call(3, 2, 2),
+              CopyArgument(1),
+              CopyArgument(0),
+              Return(3)
+            ]
+          )
         ),
         Return(0)
       ]

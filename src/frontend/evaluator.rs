@@ -72,7 +72,9 @@ impl Evaluator {
     self.global_environment.get(&symbol_index)
   }
   pub fn eval(&mut self, expression_string: &str) -> PidginResult<Value> {
-    let expression = self.parse(expression_string)?;
+    let expression = self
+      .parse(expression_string)?
+      .lift_lambdas(&vec![], &mut self.symbol_ledger)?;
     if let Some((name, value_expression)) =
       expression.as_definition(&self.symbol_ledger)?
     {

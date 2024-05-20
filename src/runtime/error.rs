@@ -8,8 +8,8 @@ pub enum RuntimeError {
   ArgumentNotInt,
   ArgumentNotList,
   NotYetImplemented,
-  CantCastToNum,
-  CantApply,
+  CantCastToNum(Value),
+  CantApply(Value),
   InvalidArity,
   CantCreateCoroutine(String),
   DeadCoroutine,
@@ -27,6 +27,8 @@ impl PartialEq for RuntimeError {
 }
 use RuntimeError::*;
 
+use super::data::Value;
+
 impl Display for RuntimeError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
@@ -34,8 +36,8 @@ impl Display for RuntimeError {
       ArgumentNotInt => write!(f, "argument is not an integer"),
       ArgumentNotList => write!(f, "argument is not a list"),
       NotYetImplemented => write!(f, "not yet implemented"),
-      CantCastToNum => write!(f, "can't cast to number"),
-      CantApply => write!(f, "can't apply"),
+      CantCastToNum(value) => write!(f, "can't cast value {value} to number"),
+      CantApply(value) => write!(f, "can't apply value {value}"),
       InvalidArity => write!(f, "invalid arity"),
       CantCreateCoroutine(s) => write!(f, "{}", s),
       CoroutineAlreadyRunning => {

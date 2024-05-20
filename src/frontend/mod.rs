@@ -40,4 +40,13 @@ mod tests {
     evaluator.eval("(def x 5)").unwrap();
     assert_eq!(evaluator.eval("x"), Ok(5.into()))
   }
+
+  #[test]
+  fn evaluate_nested_fn() {
+    let mut evaluator = Evaluator::default();
+    assert_eq!(
+      evaluator.eval("(((fn (x) (fn (y) (* x y))) 5) 10)"),
+      Ok(50.into())
+    )
+  }
 }

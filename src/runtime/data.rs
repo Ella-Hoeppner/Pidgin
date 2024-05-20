@@ -304,6 +304,9 @@ pub enum GenericValue<I, O, R, M> {
   CoreFn(CoreFnId),
   CompositeFn(Rc<GenericCompositeFunction<I, O, R, M>>),
   ExternalFn(Rc<ExternalFunction>),
+  PartialApplication(
+    Rc<(GenericValue<I, O, R, M>, Vec<GenericValue<I, O, R, M>>)>,
+  ),
   ExternalObject(Rc<Rc<dyn Any>>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(Rc<RuntimeError>),
@@ -405,6 +408,16 @@ impl<I: Clone, O: Clone, R: Clone, M: Clone> GenericValue<I, O, R, M> {
       )),
       CoreFn(f) => CoreFn(f),
       ExternalFn(f) => ExternalFn(f),
+      PartialApplication(f_and_values) => {
+        let (f, args) = Rc::unwrap_or_clone(f_and_values);
+        PartialApplication(Rc::new((
+          f.translate(translator)?,
+          args
+            .into_iter()
+            .map(|arg| arg.translate(translator))
+            .collect::<Result<_, _>>()?,
+        )))
+      }
       ExternalObject(o) => ExternalObject(o),
       Coroutine(c) => Coroutine(c),
       Error(e) => Error(e),
@@ -413,7 +426,7 @@ impl<I: Clone, O: Clone, R: Clone, M: Clone> GenericValue<I, O, R, M> {
 }
 
 impl<I, O, R, M> GenericValue<I, O, R, M> {
-  pub fn composite_fn<
+  pub(crate) fn composite_fn<
     A: Into<AritySpecifier>,
     B: Into<GenericBlock<I, O, R, M>>,
   >(
@@ -422,7 +435,10 @@ impl<I, O, R, M> GenericValue<I, O, R, M> {
   ) -> Self {
     CompositeFn(Rc::new(GenericCompositeFunction::new(args, instructions)))
   }
-  pub fn description(&self, symbol_ledger: Option<&SymbolLedger>) -> String {
+  pub(crate) fn description(
+    &self,
+    symbol_ledger: Option<&SymbolLedger>,
+  ) -> String {
     match self {
       Nil => "nil".to_string(),
       Bool(b) => b.to_string(),
@@ -478,7 +494,7 @@ impl<I, O, R, M> GenericValue<I, O, R, M> {
       Str(s) => format!("\"{}\"", s),
       CompositeFn(composite_fn) => {
         format!(
-          "fn( {} args, {} instructions )",
+          "fn( {} args, {} instructions )\n",
           composite_fn.args.count,
           composite_fn.block.len()
         )
@@ -494,6 +510,18 @@ impl<I, O, R, M> GenericValue<I, O, R, M> {
           } else {
             "<unnamed>"
           }
+        )
+      }
+      PartialApplication(f_and_values) => {
+        let (f, args) = &**f_and_values;
+        format!(
+          "partial application: f = {}, args = [{}]",
+          f.description(symbol_ledger),
+          args
+            .iter()
+            .map(|arg| arg.description(symbol_ledger))
+            .collect::<Vec<_>>()
+            .join(", ")
         )
       }
       Coroutine(x) => format!(
@@ -533,7 +561,7 @@ impl Value {
     match self {
       Number(n) => Ok(n),
       Nil => Ok(&Int(0)),
-      _ => Err(RuntimeError::CantCastToNum),
+      _ => Err(RuntimeError::CantCastToNum(self.clone())),
     }
   }
   pub fn as_bool(&self) -> bool {

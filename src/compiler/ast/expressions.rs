@@ -73,7 +73,7 @@ impl LiteralTree {
 pub(crate) enum Expression {
   Literal(SSAValue<()>),
   Quoted(LiteralTree),
-  List(Vec<Expression>),
+  Application(Vec<Expression>),
   Function {
     arg_names: Vec<SymbolIndex>,
     body: Vec<Expression>,
@@ -158,7 +158,7 @@ impl Expression {
             _ => (),
           }
         }
-        Ok(List(
+        Ok(Application(
           subtrees
             .into_iter()
             .map(|subtree| {
@@ -195,7 +195,7 @@ impl Expression {
         }
       }
       Quoted(_subexpression) => vec![],
-      List(subexpressions) => subexpressions
+      Application(subexpressions) => subexpressions
         .iter()
         .flat_map(|subexpression| {
           subexpression.unbound_internal_symbols(bindings)
@@ -245,7 +245,7 @@ impl Expression {
         }
       }
       Quoted(subexpression) => Quoted(subexpression),
-      List(subexpressions) => List(
+      Application(subexpressions) => Application(
         subexpressions
           .into_iter()
           .map(|subexpression| {
@@ -281,7 +281,7 @@ impl Expression {
     Ok(match self {
       Literal(value) => Literal(value),
       Quoted(subexpression) => Quoted(subexpression),
-      List(subexpressions) => List(
+      Application(subexpressions) => Application(
         subexpressions
           .into_iter()
           .map(|subexpression| {
@@ -354,7 +354,7 @@ impl Expression {
               replaced_expression.lift_lambdas(&new_bindings, symbol_ledger)
             })
             .collect::<Result<Vec<_>, _>>()?;
-          Expression::List(
+          Expression::Application(
             std::iter::once(Expression::Literal(LiteralValue::Symbol(
               symbol_ledger.symbol_index("partial".to_string()),
             )))
@@ -382,7 +382,7 @@ impl Expression {
       Quoted(subexpression) => {
         format!("(quote {})", subexpression.to_string(symbol_ledger))
       }
-      List(subexpressions) => format!(
+      Application(subexpressions) => format!(
         "({})",
         subexpressions
           .iter()
@@ -413,7 +413,7 @@ impl Expression {
     &self,
     symbol_ledger: &SymbolLedger,
   ) -> ASTResult<Option<(SymbolIndex, Expression)>> {
-    if let Expression::List(subexpressions) = self {
+    if let Expression::Application(subexpressions) = self {
       if let Literal(SSAValue::Symbol(symbol_index)) = subexpressions[0] {
         if symbol_ledger.symbol_name(&symbol_index).expect(
           "unregistered symbol encountered in Expression::as_definition",
