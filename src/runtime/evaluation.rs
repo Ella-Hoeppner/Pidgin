@@ -386,6 +386,7 @@ impl EvaluationState {
         );
       }
       PartialApplication(f_and_args) => todo!(),
+      Composition(fs) => todo!(),
       List(list) => todo!(),
       Hashmap(map) => todo!(),
       Hashset(set) => todo!(),
@@ -475,7 +476,6 @@ impl EvaluationState {
               PartialApplication(f_and_args) => {
                 let (partial_f, partial_args) = &*f_and_args;
                 let args = self.take_args(arg_count);
-                println!("partial application!\n{partial_f:?}\n{partial_args:?}\n{args:?}\n");
                 if let Err(err) = self.apply(
                   target,
                   partial_f,
@@ -486,6 +486,22 @@ impl EvaluationState {
                     .collect(),
                 ) {
                   break 'instruction Err(err);
+                }
+              }
+              Composition(fs) => {
+                let args = self.take_args(arg_count);
+                let mut f_iter = fs.iter();
+                if let Some(first_f) = f_iter.next() {
+                  self.apply(target, first_f, args)?;
+                  for next_f in f_iter {
+                    let value = self.steal_register(target);
+                    self.apply(target, next_f, vec![value])?;
+                  }
+                } else {
+                  self.set_register(
+                    target,
+                    args.into_iter().next().unwrap_or(Nil),
+                  );
                 }
               }
               Coroutine(maybe_coroutine) => {
@@ -600,7 +616,13 @@ impl EvaluationState {
           ElseIf(condition) => self.skip_to_endif(),
           EndIf => {}
           Partial(result, f, arg) => todo!(),
-          Compose(result, f_1, f_2) => todo!(),
+          Compose(result, f_1, f_2) => self.set_register(
+            result,
+            Composition(Rc::new(vec![
+              self.get_register(f_1).clone(),
+              self.get_register(f_2).clone(),
+            ])),
+          ),
           FindSome(result, f, collection) => todo!(),
           ReduceWithoutInitialValue(collection_and_result, f) => todo!(),
           ReduceWithInitialValue(collection_and_result, f, initial_value) => {

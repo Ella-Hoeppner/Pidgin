@@ -307,6 +307,7 @@ pub enum GenericValue<I, O, R, M> {
   PartialApplication(
     Rc<(GenericValue<I, O, R, M>, Vec<GenericValue<I, O, R, M>>)>,
   ),
+  Composition(Rc<Vec<GenericValue<I, O, R, M>>>),
   ExternalObject(Rc<Rc<dyn Any>>),
   Coroutine(Rc<Option<RefCell<Option<PausedCoroutine>>>>),
   Error(Rc<RuntimeError>),
@@ -418,6 +419,12 @@ impl<I: Clone, O: Clone, R: Clone, M: Clone> GenericValue<I, O, R, M> {
             .collect::<Result<_, _>>()?,
         )))
       }
+      Composition(fs) => Composition(Rc::new(
+        Rc::unwrap_or_clone(fs)
+          .into_iter()
+          .map(|f| f.translate(translator))
+          .collect::<Result<_, _>>()?,
+      )),
       ExternalObject(o) => ExternalObject(o),
       Coroutine(c) => Coroutine(c),
       Error(e) => Error(e),
@@ -520,6 +527,15 @@ impl<I, O, R, M> GenericValue<I, O, R, M> {
           args
             .iter()
             .map(|arg| arg.description(symbol_ledger))
+            .collect::<Vec<_>>()
+            .join(", ")
+        )
+      }
+      Composition(fs) => {
+        format!(
+          "composition: [{}]",
+          fs.iter()
+            .map(|f| f.description(symbol_ledger))
             .collect::<Vec<_>>()
             .join(", ")
         )

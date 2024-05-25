@@ -49,4 +49,10 @@ mod tests {
       Ok(50.into())
     )
   }
+
+  #[test]
+  fn evaluate_composition() {
+    let mut evaluator = Evaluator::default();
+    assert_eq!(evaluator.eval("((compose inc inc inc) 0)"), Ok(3.into()))
+  }
 }

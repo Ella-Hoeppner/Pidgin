@@ -3,8 +3,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 # to-do
 ### High-priority, necessary for the language to be usable:
 * Finish GSE (maybe rename to SSE for Sugared S-Expressions rather than Generalized)
-* support `Compose`
-  * this will probably need it's own vm-level machinery, so it's worth stabalizing early
 * make coroutines immutable
   * When invoked, they shouldn't modify the continuation referenced by the original coroutine object. Instead, they should clone that continuation, and only modify the clone. When a corutine yields, the it will always return a list of 2 values to the site that called it:
     1. a new coroutine, with a continuation from where the yield happened

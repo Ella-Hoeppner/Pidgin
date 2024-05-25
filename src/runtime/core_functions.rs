@@ -435,7 +435,7 @@ pub(crate) const CORE_FUNCTIONS: EnumMap<
     }
   },
   // Compose
-  |_args: Vec<Value>| todo!(),
+  |args: Vec<Value>| Ok(Composition(Rc::new(args))),
   // FindSome
   |_args: Vec<Value>| todo!(),
   // Reduce
@@ -461,7 +461,14 @@ pub(crate) const CORE_FUNCTIONS: EnumMap<
   // IsNeg
   |_args: Vec<Value>| todo!(),
   // Inc
-  |_args: Vec<Value>| todo!(),
+  |args: Vec<Value>| {
+    if args.len() == 1 {
+      let arg = args.into_iter().next().unwrap();
+      Ok(Number(arg.as_num()?.inc()))
+    } else {
+      Err(RuntimeError::InvalidArity)
+    }
+  },
   // Dec
   |_args: Vec<Value>| todo!(),
   // Abs
