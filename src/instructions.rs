@@ -18,13 +18,8 @@ pub enum GenericInstruction<I, O, R> {
   StealArgument(I),
   Call(O, I, u8),
   Apply(R, I),
-  CallSelf(O, u8),
-  ApplySelf(R),
   CallAndReturn(I, u8),
   ApplyAndReturn(I, I),
-  CallSelfAndReturn(u8),
-  ApplySelfAndReturn(I),
-  CallingFunction(O),
   Jump(u16),
 
   // Environment manipulation
@@ -231,13 +226,8 @@ impl<I: Clone, O: Clone, R: Clone> GenericInstruction<I, O, R> {
       StealArgument(from) => (vec![from], vec![], vec![]),
       Call(to, from, _) => (vec![from], vec![to], vec![]),
       Apply(from_and_to, f) => (vec![f], vec![], vec![from_and_to]),
-      CallSelf(to, _) => (vec![], vec![to], vec![]),
-      ApplySelf(from_and_to) => (vec![], vec![], vec![from_and_to]),
       CallAndReturn(f, _) => (vec![f], vec![], vec![]),
       ApplyAndReturn(from, _) => (vec![from], vec![], vec![]),
-      CallSelfAndReturn(_) => (vec![], vec![], vec![]),
-      ApplySelfAndReturn(from) => (vec![from], vec![], vec![]),
-      CallingFunction(to) => (vec![], vec![to], vec![]),
       Jump(_) => (vec![], vec![], vec![]),
       Lookup(to, _) => (vec![], vec![to], vec![]),
       If(from) => (vec![from], vec![], vec![]),
@@ -432,15 +422,10 @@ impl<I, O, R> GenericInstruction<I, O, R> {
       StealArgument(a) => StealArgument(input_translator(a)),
       Call(a, b, c) => Call(output_translator(a), input_translator(b), c),
       Apply(a, b) => Apply(replacement_translator(a), input_translator(b)),
-      CallSelf(a, b) => CallSelf(output_translator(a), b),
-      ApplySelf(a) => ApplySelf(replacement_translator(a)),
       CallAndReturn(a, b) => CallAndReturn(input_translator(a), b),
       ApplyAndReturn(a, b) => {
         ApplyAndReturn(input_translator(a), input_translator(b))
       }
-      CallSelfAndReturn(a) => CallSelfAndReturn(a),
-      ApplySelfAndReturn(a) => ApplySelfAndReturn(input_translator(a)),
-      CallingFunction(a) => CallingFunction(output_translator(a)),
       Jump(a) => Jump(a),
       Lookup(a, b) => Lookup(output_translator(a), b),
       If(a) => If(input_translator(a)),

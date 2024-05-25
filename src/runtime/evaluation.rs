@@ -533,39 +533,6 @@ impl EvaluationState {
               panic!("Apply called with non-List value");
             }
           }
-          CallSelf(target, arg_count) => {
-            let new_frame = self.create_fn_stack_frame(
-              self.current_frame.calling_function.clone().unwrap(),
-              self.register_stack_index(target),
-            );
-            self.move_args(arg_count, new_frame.beginning);
-            self.push_frame(new_frame);
-          }
-          ApplySelf(args_and_result) => {
-            if let List(arg_list) = self.steal_register(args_and_result) {
-              let composite_fn =
-                self.current_frame.calling_function.clone().unwrap();
-              self.start_fn_stack_frame(
-                composite_fn.clone(),
-                self.register_stack_index(args_and_result),
-              );
-              let provided_arg_count = arg_list.len();
-              #[cfg(debug_assertions)]
-              if composite_fn.args.can_accept(provided_arg_count) {
-                panic!(
-                  "ApplySelf called on CompositeFn that expects {} arguments, \
-                  {} arguments provided",
-                  composite_fn.args, provided_arg_count
-                )
-              }
-              let x = Rc::unwrap_or_clone(arg_list);
-              for (i, arg_value) in x.into_iter().enumerate() {
-                self.set_register(i as Register, arg_value);
-              }
-            } else {
-              panic!("Apply called with non-List value");
-            }
-          }
           CallAndReturn(f, arg_count) => {
             let f_value = self.get_register(f).clone();
             if let Some(mut completed_frame) = self.complete_frame() {
@@ -606,41 +573,8 @@ impl EvaluationState {
           ApplyAndReturn(args, f) => {
             todo!()
           }
-          CallSelfAndReturn(arg_count) => {
-            let composite_fn =
-              self.current_frame.calling_function.clone().unwrap();
-            if let Some(mut completed_frame) = self.complete_frame() {
-              let new_frame = StackFrame::for_fn(
-                composite_fn,
-                completed_frame.beginning,
-                completed_frame.return_stack_index,
-              );
-              self.move_args_from(
-                arg_count,
-                new_frame.beginning,
-                &mut completed_frame,
-              );
-              self.push_frame(new_frame);
-            } else {
-              panic!("CallSelfAndReturn failed to complete the current frame")
-            }
-          }
-          ApplySelfAndReturn(args) => todo!(),
           Lookup(register, symbol_index) => {
             self.set_register(register, global_bindings[&symbol_index].clone());
-          }
-          CallingFunction(result) => {
-            // This instruction puts a reference to the current calling function
-            // in a register, which is necessary to support recursion.
-            if let Some(calling_function) =
-              self.current_frame.calling_function.clone()
-            {
-              self.set_register(result, CompositeFn(calling_function));
-            } else {
-              panic!(
-              "CallingFunction invoked with no calling_function in StackFrame"
-            )
-            }
           }
           Jump(instruction_index) => {
             self.current_frame.instruction_index = instruction_index as usize;

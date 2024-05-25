@@ -5,6 +5,15 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
 * Finish GSE (maybe rename to SSE for Sugared S-Expressions rather than Generalized)
 * support `Compose`
   * this will probably need it's own vm-level machinery, so it's worth stabalizing early
+* make coroutines immutable
+  * When invoked, they shouldn't modify the continuation referenced by the original coroutine object. Instead, they should clone that continuation, and only modify the clone. When a corutine yields, the it will always return a list of 2 values to the site that called it:
+    1. a new coroutine, with a continuation from where the yield happened
+    2. the value passed to the `yield` from inside the coroutine
+  * This way, coroutines will be immutable objects, and if you want to continue from the place where they left off, you'll just use the new coroutine returned from the invocation of the last one. This will also mean that coroutines are multi-shot.
+  * This can use the "steal rather than clone when RC=1" optimization on the continuations to avoid a big slowdown from unnecessarily cloning coroutines that are used as single-shot, while still fully supporting multi-shot coroutines
+    * oof, I think this means that `Call` needs to be refactored to use a replacable register, used for both the thing being called and the return value...
+      * that'll touch a lot of stuff... definitely doable though
+      * I guess this same change will be necessary to do the "steal rather than clone when RC=1" optimization on the constant tables of function blocks, so this is worth doing anyways
 * Disallow shadowing
   * Basically just check that arg names of functions aren't core fn names, aren't bound globally, and aren't bound in any enclosing functions
   * later there will be special syntax for allowing shadowing, but we can worry about that once GSE is in place, for now we can just entirely disallow it
@@ -31,15 +40,6 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
     * `cond` will transform into a sequences of nested `if`s
 * destructuring
   * this should work for `def` as well as, unlike >:( Clojure >:(
-* make coroutines immutable
-  * When invoked, they shouldn't modify the continuation referenced by the original coroutine object. Instead, they should clone that continuation, and only modify the clone. When a corutine yields, the it will always return a list of 2 values to the site that called it:
-    1. a new coroutine, with a continuation from where the yield happened
-    2. the value passed to the `yield` from inside the coroutine
-  * This way, coroutines will be immutable objects, and if you want to continue from the place where they left off, you'll just use the new coroutine returned from the invocation of the last one. This will also mean that coroutines are multi-shot.
-  * This can use the "steal rather than clone when RC=1" optimization on the continuations to avoid a big slowdown from unnecessarily cloning coroutines that are used as single-shot, while still fully supporting multi-shot coroutines
-    * oof, I think this means that `Call` needs to be refactored to use a replacable register, used for both the thing being called and the return value...
-      * that'll touch a lot of stuff... definitely doable though
-      * I guess this same change will be necessary to do the "steal rather than clone when RC=1" optimization on the constant tables of function blocks, so this is worth doing anyways
 * add effect handlers
   * get rid of cells I guess? You can just emulate them with a "state" handler
     * A state handler probably wouldn't be quite as efficient as cells... but on the other hand, this would make the language purely functional. Seems worth it I think?
