@@ -1,4 +1,9 @@
-use crate::{compiler::SSAValue, runtime::evaluation::SymbolIndex};
+use std::collections::HashSet;
+
+use crate::{
+  compiler::SSAValue,
+  runtime::{core_functions::CoreFnId, evaluation::SymbolIndex},
+};
 
 use super::{
   error::{ASTError, ASTResult},
@@ -211,7 +216,6 @@ impl Expression {
         .collect(),
     }
   }
-
   fn replace_symbols(
     self,
     to_replace: &Vec<SymbolIndex>,
@@ -275,7 +279,7 @@ impl Expression {
 
   pub(crate) fn lift_lambdas(
     self,
-    parent_bindings: &Vec<SymbolIndex>,
+    parent_bindings: &HashSet<SymbolIndex>,
     symbol_ledger: &mut SymbolLedger,
   ) -> ASTResult<Self> {
     Ok(match self {
@@ -290,6 +294,22 @@ impl Expression {
           .collect::<Result<_, _>>()?,
       ),
       Function { arg_names, body } => {
+        for arg_name in arg_names.iter() {
+          if parent_bindings.contains(arg_name)
+            || symbol_ledger
+              .symbol_name(arg_name)
+              .map(|name| CoreFnId::from_name(name))
+              .flatten()
+              .is_some()
+          {
+            return Err(ASTError::ShadowedBinding(
+              symbol_ledger
+                .symbol_name(&arg_name)
+                .cloned()
+                .unwrap_or("<unknown symbol>".to_string()),
+            ));
+          }
+        }
         let unbound_body_symbols: Vec<SymbolIndex> = body
           .iter()
           .flat_map(|body_expression| {
@@ -313,7 +333,7 @@ impl Expression {
             body: body
               .into_iter()
               .map(|expression| {
-                let new_bindings: Vec<SymbolIndex> = parent_bindings
+                let new_bindings: HashSet<SymbolIndex> = parent_bindings
                   .iter()
                   .chain(arg_names.iter())
                   .cloned()
@@ -333,7 +353,7 @@ impl Expression {
                 symbol_ledger,
                 &mut replacements,
               );
-              let new_bindings: Vec<SymbolIndex> = parent_bindings
+              let new_bindings: HashSet<SymbolIndex> = parent_bindings
                 .iter()
                 .map(|parent_binding| {
                   if let Some(replacement_binding) = replacements
@@ -446,6 +466,8 @@ impl Expression {
 
 #[cfg(test)]
 mod tests {
+  use std::collections::HashSet;
+
   use super::Expression;
   use crate::compiler::ast::{parse::parse_sexp, token::SymbolLedger};
 
@@ -486,7 +508,7 @@ mod tests {
       &mut symbol_ledger,
     )
     .unwrap()
-    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .lift_lambdas(&HashSet::new(), &mut symbol_ledger)
     .unwrap();
     assert_eq!(
       lifted_expression.to_string(&symbol_ledger),
@@ -502,7 +524,7 @@ mod tests {
       &mut symbol_ledger,
     )
     .unwrap()
-    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .lift_lambdas(&HashSet::new(), &mut symbol_ledger)
     .unwrap();
     assert_eq!(
       lifted_expression.to_string(&symbol_ledger),
@@ -520,7 +542,7 @@ mod tests {
       &mut symbol_ledger,
     )
     .unwrap()
-    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .lift_lambdas(&HashSet::new(), &mut symbol_ledger)
     .unwrap();
     assert_eq!(
       lifted_expression.to_string(&symbol_ledger),
@@ -544,7 +566,7 @@ mod tests {
       &mut symbol_ledger,
     )
     .unwrap()
-    .lift_lambdas(&vec![], &mut symbol_ledger)
+    .lift_lambdas(&HashSet::new(), &mut symbol_ledger)
     .unwrap();
     assert_eq!(
       lifted_expression.to_string(&symbol_ledger),

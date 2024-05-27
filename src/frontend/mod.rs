@@ -3,7 +3,11 @@ pub mod evaluator;
 
 #[cfg(test)]
 mod tests {
-  use crate::runtime::data::Value;
+  use crate::{
+    compiler::ast::error::ASTError,
+    frontend::error::PidginError,
+    runtime::{data::Value, evaluation},
+  };
 
   use super::evaluator::Evaluator;
 
@@ -54,5 +58,25 @@ mod tests {
   fn evaluate_composition() {
     let mut evaluator = Evaluator::default();
     assert_eq!(evaluator.eval("((compose inc inc inc) 0)"), Ok(3.into()))
+  }
+
+  #[test]
+  fn shadowing_local_causes_error() {
+    let mut evaluator = Evaluator::default();
+    assert_eq!(
+      evaluator.eval("(((fn (x) (fn (x) (* x 2))) 5) 2)"),
+      Err(PidginError::AST(ASTError::ShadowedBinding("x".to_string())))
+    )
+  }
+
+  #[test]
+  fn shadowing_builtin_causes_error() {
+    let mut evaluator = Evaluator::default();
+    assert_eq!(
+      evaluator.eval("((fn (reduce) (* reduce 2)) 5)"),
+      Err(PidginError::AST(ASTError::ShadowedBinding(
+        "reduce".to_string()
+      )))
+    )
   }
 }

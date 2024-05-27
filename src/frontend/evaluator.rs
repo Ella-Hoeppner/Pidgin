@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
   compiler::{
@@ -9,7 +9,7 @@ use crate::{
       token::{SymbolLedger, TokenTree},
     },
     intermediate::raw_ir_to_bytecode,
-    SSABlock, SSAValue,
+    SSABlock,
   },
   instructions::GenericInstruction,
   runtime::{
@@ -74,7 +74,7 @@ impl Evaluator {
   pub fn eval(&mut self, expression_string: &str) -> PidginResult<Value> {
     let expression = self
       .parse(expression_string)?
-      .lift_lambdas(&vec![], &mut self.symbol_ledger)?;
+      .lift_lambdas(&HashSet::new(), &mut self.symbol_ledger)?;
     if let Some((name, value_expression)) =
       expression.as_definition(&self.symbol_ledger)?
     {

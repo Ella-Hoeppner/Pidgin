@@ -12,15 +12,14 @@ Early WIP programming language. Intended to be a Clojure-like Lisp with a more p
     * oof, I think this means that `Call` needs to be refactored to use a replacable register, used for both the thing being called and the return value...
       * that'll touch a lot of stuff... definitely doable though
       * I guess this same change will be necessary to do the "steal rather than clone when RC=1" optimization on the constant tables of function blocks, so this is worth doing anyways
-* Disallow shadowing
-  * Basically just check that arg names of functions aren't core fn names, aren't bound globally, and aren't bound in any enclosing functions
-  * later there will be special syntax for allowing shadowing, but we can worry about that once GSE is in place, for now we can just entirely disallow it
 * support compiling if statements
   * Add a new `EagerIf` instruction that takes 2 registers and just returns the value of one or the other based on a boolean register (which will also just be used as the return register). This wouldn't do a short-circuiting optimization. The compiler could then just emit, for an `(if ...)` statement, 2 thunks (which could later be lambda-lifted) for each side of the if, and use `EagerIf` to put one of the two into a register, then `Call` that function.
 * support compiling short-circuiting `and` and `or` statements
   * Not quite sure the best way to do this... I guess this can turn into like, a sequence of nested `if` statements? To piggyback on the short-circuiting behavior of `if`?
 * support multi-arity composite functions
   * I guess this could be a vec of `(AritySpecifier, CompositeFunction)`, where `AritySpecifier` can describe a fixed num, a fixed range, or a n-to-infinity range
+* ensure execution of multi-form function bodies works
+  * i.e. the side effects happen as expected
 * support unquoting
   * I'm acutally not really sure how other lisps handle this internally. The most obvious solution to me seems to just be building the whole quoted tree with `nil`s in place of the unquoted values, then wrapping the quoted form with `(set-in <quoted form> <path to unquoted form> <unquoted value>)`.
     * iirc this is basically what I did in kudzu

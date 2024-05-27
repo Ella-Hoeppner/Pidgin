@@ -29,7 +29,10 @@ impl SSABlock<()> {
 #[cfg(test)]
 mod tests {
   use block_macros::{block, ssa_block};
-  use std::{collections::HashMap, fmt::Debug};
+  use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+  };
 
   use crate::{
     compiler::{
@@ -63,7 +66,7 @@ mod tests {
     let mut constants = vec![];
     let last_register = build_expression_ir(
       Expression::from_token_tree(ast.try_into()?, symbol_ledger)?
-        .lift_lambdas(&vec![], symbol_ledger)?,
+        .lift_lambdas(&HashSet::new(), symbol_ledger)?,
       &|_| false,
       &HashMap::new(),
       symbol_ledger,

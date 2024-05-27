@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display};
 use super::expressions::{Expression, LiteralTree};
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ASTError {
+pub enum ASTError {
   CantParseToken(String),
   InvalidFunctionDefintionArgumentNameList(Option<LiteralTree>),
   InvalidFunctionDefintionArgumentName(Expression),
@@ -13,6 +13,7 @@ pub(crate) enum ASTError {
   MultipleExpressionsInQuote,
   MultipleExpressionsInHardQuote,
   MultipleExpressionsInUnquote,
+  ShadowedBinding(String),
 }
 impl Display for ASTError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -52,6 +53,9 @@ impl Display for ASTError {
       }
       MultipleExpressionsInUnquote => {
         write!(f, "multiple subexpressions found in (unquote ...) form")
+      }
+      ShadowedBinding(symbol_name) => {
+        write!(f, "attempted to shadow symbol {symbol_name}")
       }
     }
   }
